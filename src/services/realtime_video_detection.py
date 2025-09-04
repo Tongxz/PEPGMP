@@ -513,8 +513,13 @@ class RealtimeVideoDetector:
                     elif key == ord('p'):  # 暂停
                         cv2.waitKey(0)
                     elif key == ord('s'):  # 保存当前帧
-                        cv2.imwrite(f'frame_{self.frame_count}.jpg', vis_frame)
-                        self.logger.info(f"保存帧: frame_{self.frame_count}.jpg")
+                        import os
+                        from pathlib import Path
+                        save_dir = Path(os.getenv('HBD_SAVE_DIR', 'output/screenshots'))
+                        save_dir.mkdir(parents=True, exist_ok=True)
+                        filename = save_dir / f'frame_{self.frame_count}.jpg'
+                        cv2.imwrite(str(filename), vis_frame)
+                        self.logger.info(f"保存帧: {filename}")
                         
                 # 进度显示
                 if self.frame_count % 100 == 0:
@@ -586,9 +591,13 @@ class RealtimeVideoDetector:
                 if key == ord('q'):  # 退出
                     break
                 elif key == ord('s'):  # 保存当前帧
+                    import os
+                    from pathlib import Path
+                    save_dir = Path(os.getenv('HBD_SAVE_DIR', 'output/screenshots'))
+                    save_dir.mkdir(parents=True, exist_ok=True)
                     timestamp = int(time.time())
-                    filename = f'camera_frame_{timestamp}.jpg'
-                    cv2.imwrite(filename, vis_frame)
+                    filename = save_dir / f'camera_frame_{timestamp}.jpg'
+                    cv2.imwrite(str(filename), vis_frame)
                     self.logger.info(f"保存帧: {filename}")
                 elif key == ord('r'):  # 重置统计
                     self._reset_statistics()

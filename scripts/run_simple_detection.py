@@ -258,8 +258,12 @@ class SimpleDetectionTest:
                 break
             elif key == ord('s'):
                 # 保存当前帧
-                save_path = f"frame_{frame_count:04d}.jpg"
-                cv2.imwrite(save_path, frame)
+                import os
+                from pathlib import Path
+                save_dir = Path(os.getenv('HBD_SAVE_DIR', 'output/screenshots'))
+                save_dir.mkdir(parents=True, exist_ok=True)
+                save_path = save_dir / f"frame_{frame_count:04d}.jpg"
+                cv2.imwrite(str(save_path), frame)
                 print(f"保存帧: {save_path}")
             
             # 每50帧输出一次统计信息

@@ -5,10 +5,16 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
+import os
+try:
+    import joblib  # type: ignore
+except Exception:
+    joblib = None
+
+from .motion_analyzer import MotionAnalyzer
 
 # 导入pose_detector模块以使用统一的GPU配置策略
-from .pose_detector import PoseDetectorFactory, MEDIAPIPE_AVAILABLE, _gpu_enabled
-from .motion_analyzer import MotionAnalyzer
+from .pose_detector import MEDIAPIPE_AVAILABLE, PoseDetectorFactory, _gpu_enabled
 
 # 使用pose_detector中配置好的MediaPipe
 if MEDIAPIPE_AVAILABLE:
@@ -106,6 +112,25 @@ class BehaviorRecognizer:
         )
         self.active_behaviors = {}
 
+        # 可选：手部关键点时序ML分类器
+        self.use_ml_classifier: bool = getattr(self.params, "use_ml_classifier", False)
+        self.ml_fusion_alpha: float = float(getattr(self.params, "ml_fusion_alpha", 0.7))
+        self.ml_window: int = int(getattr(self.params, "ml_window", 30))
+        self.ml_model_path: str = str(getattr(self.params, "ml_model_path", "models/handwash_xgb.joblib"))
+        self.ml_model = None
+        self.ml_seq_buffers: Dict[int, deque] = defaultdict(lambda: deque(maxlen=self.ml_window))
+        if self.use_ml_classifier:
+            try:
+                if joblib is not None and os.path.exists(self.ml_model_path):
+                    self.ml_model = joblib.load(self.ml_model_path)
+                    logger.info(f"Loaded ML handwash classifier: {self.ml_model_path}")
+                else:
+                    logger.warning("ML classifier enabled but joblib missing or model file not found; disabling ML fusion")
+                    self.use_ml_classifier = False
+            except Exception as e:
+                logger.warning(f"Failed to load ML classifier: {e}")
+                self.use_ml_classifier = False
+
         # 初始化 MediaPipe 手部检测器（使用统一参数）
         self.mp_hands = None
         self.hands_detector = None
@@ -132,14 +157,16 @@ class BehaviorRecognizer:
                 params = get_unified_params()
                 pose_backend = params.pose_detection.backend
                 pose_params = params.pose_detection
-                
+
                 self.pose_detector = PoseDetectorFactory.create(
                     backend=pose_backend,
                     model_path=pose_params.model_path,
-                    device=pose_params.device
+                    device=pose_params.device,
                 )
                 self.motion_analyzer = MotionAnalyzer()
-                logger.info(f"Advanced detection modules initialized (Pose Backend: {pose_backend})")
+                logger.info(
+                    f"Advanced detection modules initialized (Pose Backend: {pose_backend})"
+                )
             except Exception as e:
                 logger.warning(f"Failed to initialize advanced detection: {e}")
                 self.use_advanced_detection = False
@@ -172,7 +199,8 @@ class BehaviorRecognizer:
             f"threshold={self.confidence_threshold}, "
             f"advanced_detection={self.use_advanced_detection}, "
             f"mediapipe={self.use_mediapipe}, "
-            f"handwash_min_duration={self.params.handwashing_min_duration}s"
+            f"handwash_min_duration={self.params.handwashing_min_duration}s, "
+            f"use_ml_classifier={self.use_ml_classifier}, ml_window={self.ml_window}, alpha={self.ml_fusion_alpha}"
         )
 
     def detect_hairnet(
@@ -413,8 +441,11 @@ class BehaviorRecognizer:
 
                 # 姿态检测增强
                 if self.pose_detector and frame is not None:
-                    pose_data = self.pose_detector.detect_pose(frame)
-                    hands_data = self.pose_detector.detect_hands(frame)
+                    pose_data = self.pose_detector.detect(frame)
+                    # 检查是否存在 detect_hands 方法
+                    hands_data = []
+                    if hasattr(self.pose_detector, "detect_hands"):
+                        hands_data = self.pose_detector.detect_hands(frame)
 
                     if pose_data and hands_data:
                         pose_confidence = self._analyze_handwash_pose(
@@ -438,7 +469,84 @@ class BehaviorRecognizer:
                 person_bbox, enhanced_hand_regions
             )
 
+        # 可选：ML分类器融合
+        if self.use_ml_classifier and self.ml_model is not None and track_id is not None:
+            try:
+                vec = self._vectorize_two_hands(enhanced_hand_regions, person_bbox, frame.shape if isinstance(frame, np.ndarray) else None)
+                if vec is not None:
+                    buf = self.ml_seq_buffers[track_id]
+                    buf.append(vec)
+                    if len(buf) == self.ml_window:
+                        window_feats = np.array(list(buf), dtype=np.float32)
+                        agg = self._aggregate_features(window_feats)
+                        proba = self._predict_proba(agg)
+                        if proba is not None:
+                            confidence = float(self.ml_fusion_alpha * proba + (1.0 - self.ml_fusion_alpha) * confidence)
+            except Exception as e:
+                logger.debug(f"ML fusion skipped: {e}")
+
         return confidence
+
+    # ---- ML辅助方法 ----
+    def _vectorize_two_hands(self, hand_regions: List[Dict], person_bbox: List[int], image_shape: Optional[Tuple[int, int, int]]) -> Optional[List[float]]:
+        if not hand_regions:
+            return None
+        x1, y1, x2, y2 = map(int, person_bbox)
+        width = max(1, x2 - x1)
+        height = max(1, y2 - y1)
+
+        def _norm_xy(x: float, y: float) -> Tuple[float, float]:
+            if 0.0 <= x <= 1.0 and 0.0 <= y <= 1.0 and image_shape is not None:
+                h, w = image_shape[:2]
+                x *= w
+                y *= h
+            nx = (x - x1) / width
+            ny = (y - y1) / height
+            nx = 0.0 if nx < 0 else (1.0 if nx > 1.0 else nx)
+            ny = 0.0 if ny < 0 else (1.0 if ny > 1.0 else ny)
+            return nx, ny
+
+        hands_sorted = sorted(hand_regions, key=lambda h: float(h.get("confidence", 0.0)), reverse=True)
+        vec: List[float] = []
+        taken = 0
+        for hreg in hands_sorted:
+            if taken >= 2:
+                break
+            lmks = hreg.get("landmarks", [])
+            if not lmks:
+                vec.extend([0.0] * (21 * 2))
+            else:
+                lmks = lmks[:21] + [{}] * max(0, 21 - len(lmks))
+                for lm in lmks:
+                    x = float(lm.get("x", 0.0))
+                    y = float(lm.get("y", 0.0))
+                    nx, ny = _norm_xy(x, y)
+                    vec.extend([nx, ny])
+            taken += 1
+        while taken < 2:
+            vec.extend([0.0] * (21 * 2))
+            taken += 1
+        return vec
+
+    def _aggregate_features(self, window_feats: np.ndarray) -> np.ndarray:
+        if window_feats.ndim != 2:
+            window_feats = window_feats.reshape(len(window_feats), -1)
+        mean = window_feats.mean(axis=0)
+        std = window_feats.std(axis=0)
+        rng = (window_feats.max(axis=0) - window_feats.min(axis=0))
+        return np.concatenate([mean, std, rng], axis=0).astype(np.float32)
+
+    def _predict_proba(self, agg_feat: np.ndarray) -> Optional[float]:
+        try:
+            if hasattr(self.ml_model, "predict_proba"):
+                proba = self.ml_model.predict_proba(agg_feat.reshape(1, -1))
+                return float(proba[0, 1])
+            if hasattr(self.ml_model, "predict"):
+                pred = self.ml_model.predict(agg_feat.reshape(1, -1))
+                return float(pred[0])
+        except Exception as e:
+            logger.debug(f"ML predict failed: {e}")
+        return None
 
     def detect_sanitizing(
         self,
@@ -477,8 +585,11 @@ class BehaviorRecognizer:
 
                 # 姿态检测增强
                 if self.pose_detector and frame is not None:
-                    pose_data = self.pose_detector.detect_pose(frame)
-                    hands_data = self.pose_detector.detect_hands(frame)
+                    pose_data = self.pose_detector.detect(frame)
+                    # 检查是否存在 detect_hands 方法
+                    hands_data = []
+                    if hasattr(self.pose_detector, "detect_hands"):
+                        hands_data = self.pose_detector.detect_hands(frame)
 
                     if pose_data and hands_data:
                         pose_confidence = self._analyze_sanitizing_pose(

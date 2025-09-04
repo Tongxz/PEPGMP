@@ -12,9 +12,15 @@ import cv2
 import numpy as np
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from PIL import Image
+from websockets.exceptions import ConnectionClosedOK
+from websockets.exceptions import ConnectionClosedOK
+from websockets.exceptions import ConnectionClosedOK
 
-from services.detection_service import comprehensive_detection_logic
-from services.websocket_service import ConnectionManager, get_connection_manager
+from services.websocket_service import (
+    ConnectionManager,
+    WebSocketSession,
+    get_connection_manager,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -29,101 +35,80 @@ async def websocket_endpoint(
     try:
         while True:
             data = await websocket.receive_text()
-
             try:
-                # 解析JSON消息
                 message = json.loads(data)
                 message_type = message.get("type")
 
                 if message_type == "image":
-                    # 处理图像检测请求
-                    await process_image_detection(websocket, message)
+                    session = manager.active_sessions.get(websocket)
+                    if session:
+                        await process_image_detection(session, message)
                 elif message_type == "pong":
-                    # 心跳响应，不需要处理
-                    pass
+                    pass  # Heartbeat response
                 else:
-                    # 未知消息类型
-                    await websocket.send_text(
-                        json.dumps(
-                            {
-                                "type": "error",
-                                "message": f"Unknown message type: {message_type}",
-                            }
-                        )
-                    )
+                    logger.warning(f"Unknown message type received: {message_type}")
 
             except json.JSONDecodeError:
-                # JSON解析失败
-                await websocket.send_text(
-                    json.dumps({"type": "error", "message": "Invalid JSON format"})
-                )
-            except Exception as e:
-                # 其他处理错误
-                logger.error(f"WebSocket处理错误: {e}")
-                await websocket.send_text(
-                    json.dumps(
-                        {"type": "error", "message": f"Processing error: {str(e)}"}
+                logger.warning("Received invalid JSON message.")
+                try:
+                    await websocket.send_text(
+                        json.dumps({"type": "error", "message": "Invalid JSON format"})
                     )
-                )
+                except (WebSocketDisconnect, ConnectionClosedOK):
+                    pass # Client likely disconnected
+            except Exception as e:
+                logger.error(f"WebSocket processing error: {e}", exc_info=True)
+                try:
+                    await websocket.send_text(
+                        json.dumps({"type": "error", "message": f"Processing error: {str(e)}"})
+                    )
+                except (WebSocketDisconnect, ConnectionClosedOK):
+                    pass # Client likely disconnected
 
     except WebSocketDisconnect:
+        logger.info("Client disconnected.")
+    finally:
         manager.disconnect(websocket)
-        logger.info("Client disconnected from websocket.")
 
 
-async def process_image_detection(websocket: WebSocket, message: dict):
+async def process_image_detection(session: WebSocketSession, message: dict):
     """处理图像检测请求."""
+    from services.detection_service import process_tracked_frame
+
     try:
-        # 获取base64图像数据
         image_data = message.get("data")
         if not image_data:
-            await websocket.send_text(
-                json.dumps({"type": "error", "message": "No image data provided"})
-            )
             return
 
-        # 解码base64图像
         if image_data.startswith("data:image"):
-            # 移除data URL前缀
             image_data = image_data.split(",")[1]
 
-        # 解码base64
         image_bytes = base64.b64decode(image_data)
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-        # 转换为OpenCV图像
-        image_pil = Image.open(BytesIO(image_bytes))
-        image_cv = cv2.cvtColor(np.array(image_pil), cv2.COLOR_RGB2BGR)
+        if frame is None:
+            return
 
-        # 调用检测服务
+        # 从 app state 获取检测管道
+        optimized_pipeline = session.websocket.scope["app"].state.optimized_pipeline
+
+        # 调用新的带跟踪的处理函数
         detection_result = await asyncio.get_event_loop().run_in_executor(
-            None, comprehensive_detection_logic, image_cv
+            None, process_tracked_frame, session, frame, optimized_pipeline
         )
-
-        # 提取检测结果
-        total_persons = detection_result.get("total_persons", 0)
-        statistics = detection_result.get("statistics", {})
-        detections = detection_result.get("detections", [])
-
-        # 构建WebSocket响应
-        response = {
-            "type": "comprehensive_detection_result",
-            "detection_count": total_persons,
-            "detections": detections,
-            "statistics": {
-                "persons_with_hairnet": statistics.get("persons_with_hairnet", 0),
-                "persons_handwashing": statistics.get("persons_handwashing", 0),
-                "persons_sanitizing": statistics.get("persons_sanitizing", 0),
-            },
-            "timestamp": asyncio.get_event_loop().time(),
-        }
 
         # 发送检测结果
-        await websocket.send_text(json.dumps(response))
+        try:
+            await session.websocket.send_text(json.dumps(detection_result))
+        except (WebSocketDisconnect, ConnectionClosedOK):
+            pass # Client likely disconnected
 
     except Exception as e:
-        logger.error(f"图像检测处理错误: {e}")
-        await websocket.send_text(
-            json.dumps(
-                {"type": "error", "message": f"Image detection failed: {str(e)}"}
+        logger.error(f"Image detection processing error: {e}", exc_info=True)
+        try:
+            await session.websocket.send_text(
+                json.dumps({"type": "error", "message": f"Detection failed: {str(e)}"})
             )
-        )
+        except (WebSocketDisconnect, ConnectionClosedOK):
+            pass # Client likely disconnected

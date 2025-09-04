@@ -166,7 +166,7 @@ redis:
   url: "redis://localhost:6379/0"
 
 models:
-  yolo_model_path: "models/models/yolo/yolov8n.pt"
+  yolo_model_path: "models/yolo/yolov8n.pt"
 
 cameras:
   default_camera:
@@ -200,7 +200,7 @@ API_HOST=0.0.0.0
 API_PORT=8000
 
 # 模型配置
-MODEL_PATH=models/models/yolo/yolov8n.pt
+MODEL_PATH=models/yolo/yolov8n.pt
 
 # 安全配置
 SECRET_KEY=your-secret-key-here
@@ -216,7 +216,7 @@ EOF
 download_models() {
     log_info "下载预训练模型..."
 
-    if [ ! -f "models/models/yolo/yolov8n.pt" ]; then
+    if [ ! -f "models/yolo/yolov8n.pt" ]; then
         log_info "下载 YOLOv8 nano 模型..."
         python -c "
 import urllib.request
@@ -224,7 +224,7 @@ import os
 os.makedirs('models', exist_ok=True)
 urllib.request.urlretrieve(
     'https://github.com/ultralytics/assets/releases/download/v0.0.0/models/yolo/yolov8n.pt',
-    'models/models/yolo/yolov8n.pt'
+    'models/yolo/yolov8n.pt'
 )
 print('YOLOv8 模型下载完成')
 "

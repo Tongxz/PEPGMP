@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.api.app import app
-from src.services.detection_service import get_optimized_pipeline, get_hairnet_pipeline
+from src.api.dependencies import get_optimized_pipeline, get_hairnet_pipeline
 from src.services.region_service import get_region_service
 
 

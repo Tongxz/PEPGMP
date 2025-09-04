@@ -1,0 +1,109 @@
+{
+  "regions": [
+    {
+      "id": "entry_line_20250902",
+      "name": "入口线",
+      "type": "entrance",
+      "points": [
+        {
+          "x": 192,
+          "y": 216
+        },
+        {
+          "x": 230,
+          "y": 864
+        }
+      ],
+      "rules": {
+        "required_behaviors": [
+          "hairnet"
+        ],
+        "alert_on_violation": true
+      },
+      "is_active": true
+    },
+    {
+      "id": "handwash_zone_20250902",
+      "name": "洗手区",
+      "type": "handwash",
+      "points": [
+        {
+          "x": 576,
+          "y": 324
+        },
+        {
+          "x": 864,
+          "y": 324
+        },
+        {
+          "x": 864,
+          "y": 648
+        },
+        {
+          "x": 576,
+          "y": 648
+        }
+      ],
+      "rules": {
+        "required_behaviors": [
+          "handwashing"
+        ],
+        "alert_on_violation": true
+      },
+      "is_active": true
+    },
+    {
+      "id": "dryer_zone_20250902",
+      "name": "烘干区",
+      "type": "sanitize",
+      "points": [
+        {
+          "x": 998,
+          "y": 324
+        },
+        {
+          "x": 1228,
+          "y": 324
+        },
+        {
+          "x": 1228,
+          "y": 648
+        },
+        {
+          "x": 998,
+          "y": 648
+        }
+      ],
+      "rules": {
+        "required_behaviors": [
+          "sanitize"
+        ],
+        "alert_on_violation": true
+      },
+      "is_active": true
+    },
+    {
+      "id": "prod_entry_line_20250902",
+      "name": "生产入口线",
+      "type": "entrance",
+      "points": [
+        {
+          "x": 1632,
+          "y": 216
+        },
+        {
+          "x": 1670,
+          "y": 864
+        }
+      ],
+      "rules": {
+        "required_behaviors": [
+          "handwashing",
+          "sanitize"
+        ],
+        "alert_on_violation": true
+      },
+      "is_active": true
+    }
+  ]
+}

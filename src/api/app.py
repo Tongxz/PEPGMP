@@ -70,13 +70,14 @@ async def health_check():
     return {"status": "healthy"}
 
 
-
 # Include routers
 app.include_router(comprehensive.router, prefix="/api/v1/detect", tags=["Detection"])
 app.include_router(
     region_management.router, prefix="/api/v1/management", tags=["Region Management"]
 )
-app.include_router(websocket.router, prefix="/ws", tags=["WebSocket"])
+# 兼容旧版前端的 /api/regions 路由
+app.include_router(region_management.compat_router, tags=["Compat"])
+app.include_router(websocket.router, prefix="", tags=["WebSocket"])
 app.include_router(statistics.router, prefix="/api/v1", tags=["Statistics"])
 app.include_router(download.router, prefix="/api/v1/download", tags=["Download"])
 

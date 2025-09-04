@@ -1372,17 +1372,26 @@ class HumanDetectionApp {
 
     // 处理综合检测的实时结果
     handleComprehensiveRealtimeResult(data) {
-        const result = data.result;
+        const result = data;
+        const annotatedImageB64 = result.annotated_image;
+
+        if (annotatedImageB64) {
+            const canvas = this.canvasOverlay;
+            const ctx = canvas.getContext('2d');
+            const image = new Image();
+            image.onload = function() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+            };
+            image.src = 'data:image/jpeg;base64,' + annotatedImageB64;
+        }
 
         // 更新统计信息
-        const stats = result.statistics;
-        const humanCount = stats.human_count || 0;
-        const hairnetCount = stats.hairnet_count || 0;
-        const handwashCount = stats.handwash_count || 0;
-        const sanitizeCount = stats.sanitize_count || 0;
-
-        // 绘制检测框
-        this.drawComprehensiveDetections(result.detections || []);
+        const stats = result.statistics || {};
+        const humanCount = result.detection_count || 0;
+        const hairnetCount = stats.persons_with_hairnet || 0;
+        const handwashCount = stats.persons_handwashing || 0;
+        const sanitizeCount = stats.persons_sanitizing || 0;
 
         // 更新实时结果显示
         this.realtimeResult.innerHTML = `
@@ -1403,9 +1412,6 @@ class HumanDetectionApp {
                     <div class="info-value">${sanitizeCount}</div>
                     <div class="info-label">消毒行为</div>
                 </div>
-            </div>
-            <div class="behavior-details">
-                ${this.generateBehaviorDetails(result.detections || [])}
             </div>
         `;
     }

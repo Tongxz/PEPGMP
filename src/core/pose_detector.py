@@ -5,48 +5,61 @@
 """
 import logging
 import os
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
+
 
 # 智能GPU检测和配置
 def _configure_mediapipe_gpu():
     """智能配置MediaPipe GPU使用策略"""
     try:
         import torch
-        
+
         # 检查CUDA是否可用
         cuda_available = torch.cuda.is_available()
-        
+
         if cuda_available:
             # 检查GPU显存是否足够（至少需要2GB可用显存）
-            gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+            gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / (
+                1024**3
+            )
             allocated_memory_gb = torch.cuda.memory_allocated(0) / (1024**3)
             available_memory_gb = gpu_memory_gb - allocated_memory_gb
-            
+
             # 检查是否为支持的GPU架构（计算能力>=6.0）
             compute_capability = torch.cuda.get_device_capability(0)
             compute_version = compute_capability[0] + compute_capability[1] * 0.1
-            
+
             # GPU使用条件：
             # 1. CUDA可用
             # 2. 可用显存>=2GB
             # 3. 计算能力>=6.0
             # 4. 没有手动禁用GPU的环境变量
-            manual_disable = os.environ.get('MEDIAPIPE_DISABLE_GPU', '').lower() in ['1', 'true', 'yes']
-            
-            if not manual_disable and available_memory_gb >= 2.0 and compute_version >= 6.0:
+            manual_disable = os.environ.get("MEDIAPIPE_DISABLE_GPU", "").lower() in [
+                "1",
+                "true",
+                "yes",
+            ]
+
+            if (
+                not manual_disable
+                and available_memory_gb >= 2.0
+                and compute_version >= 6.0
+            ):
                 # 启用GPU加速
-                if 'MEDIAPIPE_DISABLE_GPU' in os.environ:
-                    del os.environ['MEDIAPIPE_DISABLE_GPU']
+                if "MEDIAPIPE_DISABLE_GPU" in os.environ:
+                    del os.environ["MEDIAPIPE_DISABLE_GPU"]
                 logger = logging.getLogger(__name__)
-                logger.info(f"MediaPipe GPU加速已启用 - GPU: {torch.cuda.get_device_name(0)}, "
-                           f"可用显存: {available_memory_gb:.1f}GB, 计算能力: {compute_version:.1f}")
+                logger.info(
+                    f"MediaPipe GPU加速已启用 - GPU: {torch.cuda.get_device_name(0)}, "
+                    f"可用显存: {available_memory_gb:.1f}GB, 计算能力: {compute_version:.1f}"
+                )
                 return True
             else:
                 # 禁用GPU，使用CPU模式
-                os.environ['MEDIAPIPE_DISABLE_GPU'] = '1'
+                os.environ["MEDIAPIPE_DISABLE_GPU"] = "1"
                 logger = logging.getLogger(__name__)
                 reasons = []
                 if manual_disable:
@@ -59,23 +72,24 @@ def _configure_mediapipe_gpu():
                 return False
         else:
             # CUDA不可用，使用CPU模式
-            os.environ['MEDIAPIPE_DISABLE_GPU'] = '1'
+            os.environ["MEDIAPIPE_DISABLE_GPU"] = "1"
             logger = logging.getLogger(__name__)
             logger.info("MediaPipe使用CPU模式 - CUDA不可用")
             return False
-            
+
     except ImportError:
         # PyTorch不可用，默认使用CPU模式
-        os.environ['MEDIAPIPE_DISABLE_GPU'] = '1'
+        os.environ["MEDIAPIPE_DISABLE_GPU"] = "1"
         logger = logging.getLogger(__name__)
         logger.info("MediaPipe使用CPU模式 - PyTorch不可用")
         return False
     except Exception as e:
         # 其他异常，默认使用CPU模式
-        os.environ['MEDIAPIPE_DISABLE_GPU'] = '1'
+        os.environ["MEDIAPIPE_DISABLE_GPU"] = "1"
         logger = logging.getLogger(__name__)
         logger.warning(f"MediaPipe GPU检测失败，使用CPU模式: {e}")
         return False
+
 
 # 配置MediaPipe GPU使用策略
 _gpu_enabled = _configure_mediapipe_gpu()
@@ -88,12 +102,16 @@ except ImportError:
     MEDIAPIPE_AVAILABLE = False
     mp = None
 
-from .enhanced_hand_detector import EnhancedHandDetector, DetectionMode, HandDetectionResult
+from ultralytics import YOLO
+
+from ..config.unified_params import get_unified_params
 from ..utils.logger import get_logger
 from .detector import BaseDetector
-from ultralytics import YOLO
-from ..config.unified_params import get_unified_params
-
+from .enhanced_hand_detector import (
+    DetectionMode,
+    EnhancedHandDetector,
+    HandDetectionResult,
+)
 
 logger = get_logger(__name__)
 
@@ -204,12 +222,16 @@ class YOLOv8PoseDetector(BaseDetector):
                     # 使用 .item() 可以安全地从0维张量中提取数值，避免DeprecationWarning
                     if box.cls[0].item() != 0:  # 只处理 'person' 类别
                         continue
-                    
+
                     bbox = box.xyxy[0].cpu().numpy().astype(int)
                     conf = box.conf[0].item()
-                    
+
                     kpts_xy = keypoints.xy[0].cpu().numpy()
-                    kpts_conf = keypoints.conf[0].cpu().numpy() if keypoints.conf is not None else np.ones(len(kpts_xy))
+                    kpts_conf = (
+                        keypoints.conf[0].cpu().numpy()
+                        if keypoints.conf is not None
+                        else np.ones(len(kpts_xy))
+                    )
 
                     detection = {
                         "bbox": bbox.tolist(),
@@ -222,7 +244,7 @@ class YOLOv8PoseDetector(BaseDetector):
                         "class_name": "person",
                     }
                     detections.append(detection)
-            
+
             return detections
 
         except Exception as e:
@@ -241,7 +263,7 @@ class YOLOv8PoseDetector(BaseDetector):
             带有检测框和关键点的图像
         """
         vis_image = image.copy()
-        
+
         for detection in detections:
             # 绘制边界框
             bbox = detection.get("bbox")
@@ -264,16 +286,32 @@ class YOLOv8PoseDetector(BaseDetector):
             if keypoints:
                 kpts_xy = keypoints.get("xy")
                 kpts_conf = keypoints.get("conf")
-                
+
                 # COCO keypoints connection pairs
                 skeleton = [
-                    [16, 14], [14, 12], [17, 15], [15, 13], [12, 13], [6, 12],
-                    [7, 13], [6, 7], [6, 8], [7, 9], [8, 10], [9, 11], [2, 3],
-                    [1, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7]
+                    [16, 14],
+                    [14, 12],
+                    [17, 15],
+                    [15, 13],
+                    [12, 13],
+                    [6, 12],
+                    [7, 13],
+                    [6, 7],
+                    [6, 8],
+                    [7, 9],
+                    [8, 10],
+                    [9, 11],
+                    [2, 3],
+                    [1, 2],
+                    [1, 3],
+                    [2, 4],
+                    [3, 5],
+                    [4, 6],
+                    [5, 7],
                 ]
-                
+
                 for i, (x, y) in enumerate(kpts_xy):
-                    if kpts_conf[i] > 0.5: # 只绘制高置信度的点
+                    if kpts_conf[i] > 0.5:  # 只绘制高置信度的点
                         cv2.circle(vis_image, (int(x), int(y)), 3, (0, 0, 255), -1)
 
                 for pair in skeleton:
@@ -297,10 +335,12 @@ class MediaPipePoseDetector(BaseDetector):
     使用MediaPipe检测人体关键点，特别是手部关键点。
     """
 
-    def __init__(self, 
-                 use_enhanced_hand_detection: bool = True,
-                 detection_mode: DetectionMode = DetectionMode.WITH_FALLBACK,
-                 **kwargs):
+    def __init__(
+        self,
+        use_enhanced_hand_detection: bool = True,
+        detection_mode: DetectionMode = DetectionMode.WITH_FALLBACK,
+        **kwargs,
+    ):
         """初始化MediaPipe姿态检测器.
 
         Args:
@@ -314,18 +354,21 @@ class MediaPipePoseDetector(BaseDetector):
             raise RuntimeError("MediaPipe is not available. Please install it.")
 
         self.use_enhanced_hand_detection = use_enhanced_hand_detection
-        
+
         # 初始化增强手部检测器
         if self.use_enhanced_hand_detection:
             try:
+                # 专项测试：仅使用主检测器（禁用肤色备用），并降低阈值提高召回
                 self.enhanced_hand_detector = EnhancedHandDetector(
-                    detection_mode=detection_mode,
+                    detection_mode=DetectionMode.PRIMARY_ONLY,
                     max_num_hands=4,
-                    min_detection_confidence=0.7,
+                    min_detection_confidence=0.4,
                     min_tracking_confidence=0.5,
-                    quality_threshold=0.7
+                    quality_threshold=0.4,
                 )
-                logger.info(f"Enhanced hand detector initialized with mode: {detection_mode.value}")
+                logger.info(
+                    f"Enhanced hand detector initialized with mode: {detection_mode.value}"
+                )
             except Exception as e:
                 logger.error(f"Failed to initialize enhanced hand detector: {e}")
                 self.use_enhanced_hand_detection = False
@@ -334,7 +377,7 @@ class MediaPipePoseDetector(BaseDetector):
             self.enhanced_hand_detector = None
 
         try:
-            mp_pose = mp.solutions.pose # type: ignore
+            mp_pose = mp.solutions.pose  # type: ignore
             self.pose = mp_pose.Pose(
                 static_image_mode=False,
                 model_complexity=1,
@@ -358,11 +401,11 @@ class MediaPipePoseDetector(BaseDetector):
         为了与YOLOv8的输出格式保持一致，这里将MediaPipe的结果进行转换。
         """
         pose_results = self._detect_pose(image)
-        hand_results = self._detect_hands(image)
+        hand_results = self.detect_hands(image)
 
         # 在此简化实现中，我们将姿态和手部检测分开处理
         # 一个更完整的实现可能会将手部关键点附加到对应的人体上
-        
+
         detections = []
         if pose_results and pose_results.pose_landmarks:
             landmarks = pose_results.pose_landmarks.landmark
@@ -379,7 +422,7 @@ class MediaPipePoseDetector(BaseDetector):
 
             detection = {
                 "bbox": [int(c) for c in bbox],
-                "confidence": np.mean(kpts_conf[kpts_conf > 0]), # 平均可见度作为置信度
+                "confidence": np.mean(kpts_conf[kpts_conf > 0]),  # 平均可见度作为置信度
                 "keypoints": {
                     "xy": kpts_xy,
                     "conf": kpts_conf,
@@ -402,36 +445,64 @@ class MediaPipePoseDetector(BaseDetector):
             logger.error(f"MediaPipe pose detection failed: {e}")
             return None
 
-    def _detect_hands(self, image: np.ndarray) -> List[Dict]:
+    def detect_hands(self, image: np.ndarray) -> List[Dict]:
         """检测手部关键点."""
         hand_detections = []
-        
+
         if self.use_enhanced_hand_detection and self.enhanced_hand_detector:
             try:
-                enhanced_results = self.enhanced_hand_detector.detect_hands_robust(image)
-                
+                enhanced_results = self.enhanced_hand_detector.detect_hands_robust(
+                    image
+                )
+
                 # 转换增强手部检测结果为统一格式
                 for result in enhanced_results:
-                    if hasattr(result, 'bbox') and hasattr(result, 'confidence'):
+                    if hasattr(result, "bbox") and hasattr(result, "confidence"):
+                        # 归一化bbox转像素坐标（若需要）
+                        bbox = result.bbox or [0, 0, 0, 0]
+                        h, w = image.shape[:2]
+                        # 如果坐标在[0,1]范围内，认为是归一化坐标
+                        if all(0.0 <= v <= 1.0 for v in bbox):
+                            x1 = int(bbox[0] * w)
+                            y1 = int(bbox[1] * h)
+                            x2 = int(bbox[2] * w)
+                            y2 = int(bbox[3] * h)
+                            bbox_px = [x1, y1, x2, y2]
+                        else:
+                            bbox_px = [int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])]
+
+                        # 转换landmarks为规范化坐标列表（若存在）
+                        landmarks_norm = None
+                        if hasattr(result, "landmarks") and result.landmarks is not None:
+                            try:
+                                landmarks_norm = [
+                                    {"x": lm.x, "y": lm.y} for lm in result.landmarks.landmark
+                                ]
+                            except Exception:
+                                landmarks_norm = None
+
                         hand_detection = {
-                            "bbox": result.bbox,
-                            "confidence": result.confidence,
+                            "bbox": bbox_px,
+                            "confidence": float(result.confidence),
                             "class_id": 1,  # 手部类别ID
-                            "class_name": "hand",
-                            "keypoints": getattr(result, 'keypoints', None)
+                            "class_name": getattr(result, "hand_label", "hand") or "hand",
+                            # 兼容两种字段：下游绘制优先使用 'landmarks'
+                            "landmarks": landmarks_norm,
+                            "keypoints": getattr(result, "keypoints", None),
+                            "source": str(getattr(result, "detection_source", "primary")),
                         }
                         hand_detections.append(hand_detection)
-                        
+
             except Exception as e:
                 logger.error(f"Enhanced hand detection failed: {e}")
-                
+
         return hand_detections
 
     def visualize(self, image: np.ndarray, detections: List[Dict]) -> np.ndarray:
         """可视化MediaPipe检测结果."""
         vis_image = image.copy()
-        mp_drawing = mp.solutions.drawing_utils # type: ignore
-        mp_pose = mp.solutions.pose # type: ignore
+        mp_drawing = mp.solutions.drawing_utils  # type: ignore
+        mp_pose = mp.solutions.pose  # type: ignore
 
         for detection in detections:
             # 这是一个简化的可视化，实际应使用MediaPipe的landmark对象
@@ -444,7 +515,7 @@ class MediaPipePoseDetector(BaseDetector):
             keypoints = detection.get("keypoints")
             if keypoints:
                 kpts_xy = keypoints.get("xy")
-                for (x, y) in kpts_xy:
+                for x, y in kpts_xy:
                     cv2.circle(vis_image, (int(x), int(y)), 3, (0, 0, 255), -1)
 
         return vis_image

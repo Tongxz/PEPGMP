@@ -126,6 +126,7 @@ class OptimizedDetectionPipeline:
         human_detector=None,
         hairnet_detector=None,
         behavior_recognizer=None,
+        pose_detector=None,  # 新增参数
         enable_cache: bool = True,
         cache_size: int = 100,
         cache_ttl: float = 30.0,
@@ -137,6 +138,7 @@ class OptimizedDetectionPipeline:
             human_detector: 人体检测器
             hairnet_detector: 发网检测器
             behavior_recognizer: 行为识别器
+            pose_detector: 姿态检测器实例 (可选，如果提供则使用此实例)
             enable_cache: 是否启用缓存
             cache_size: 缓存大小
             cache_ttl: 缓存生存时间
@@ -146,20 +148,24 @@ class OptimizedDetectionPipeline:
         self.behavior_recognizer = behavior_recognizer
 
         # 初始化姿态检测器
-        try:
-            params = get_unified_params()
-            pose_backend = params.pose_detection.backend
-            pose_params = params.pose_detection
-            
-            self.pose_detector = PoseDetectorFactory.create(
-                backend=pose_backend,
-                model_path=pose_params.model_path,
-                device=pose_params.device
-            )
-            logger.info(f"姿态检测器 ({pose_backend}) 初始化成功")
-        except Exception as e:
-            logger.warning(f"姿态检测器初始化失败: {e}")
-            self.pose_detector = None
+        if pose_detector is not None:
+            self.pose_detector = pose_detector
+            logger.info(f"姿态检测器 (外部提供) 初始化成功")
+        else:
+            try:
+                params = get_unified_params()
+                pose_backend = params.pose_detection.backend
+                pose_params = params.pose_detection
+
+                self.pose_detector = PoseDetectorFactory.create(
+                    backend=pose_backend,
+                    model_path=pose_params.model_path,
+                    device=pose_params.device,
+                )
+                logger.info(f"姿态检测器 ({pose_backend}) 初始化成功")
+            except Exception as e:
+                logger.warning(f"姿态检测器初始化失败: {e}")
+                self.pose_detector = None
 
         # 初始化缓存
         self.enable_cache = enable_cache
@@ -182,9 +188,9 @@ class OptimizedDetectionPipeline:
         """检测方法 - detect_comprehensive的别名，保持接口兼容性"""
         return self.detect_comprehensive(
             image,
-            enable_hairnet=kwargs.get('enable_hairnet', True),
-            enable_handwash=kwargs.get('enable_handwash', True),
-            enable_sanitize=kwargs.get('enable_sanitize', True)
+            enable_hairnet=kwargs.get("enable_hairnet", True),
+            enable_handwash=kwargs.get("enable_handwash", True),
+            enable_sanitize=kwargs.get("enable_sanitize", True),
         )
 
     def detect_comprehensive(
@@ -488,10 +494,10 @@ class OptimizedDetectionPipeline:
                     # 使用行为识别器检测洗手行为
                     # 获取实际的手部区域信息
                     hand_regions = self._get_actual_hand_regions(image, bbox)
-                    
+
                     # 传递完整图像帧给行为识别器以支持MediaPipe检测
                     confidence = self.behavior_recognizer.detect_handwashing(
-                        bbox, hand_regions, track_id=i+1, frame=image
+                        bbox, hand_regions, track_id=i + 1, frame=image
                     )
                     is_handwashing = (
                         confidence >= self.behavior_recognizer.confidence_threshold
@@ -562,10 +568,10 @@ class OptimizedDetectionPipeline:
                     # 使用行为识别器检测消毒行为
                     # 获取实际的手部区域信息
                     hand_regions = self._get_actual_hand_regions(image, bbox)
-                    
+
                     # 传递完整图像帧给行为识别器以支持MediaPipe检测
                     confidence = self.behavior_recognizer.detect_sanitizing(
-                        bbox, hand_regions, track_id=i+1, frame=image
+                        bbox, hand_regions, track_id=i + 1, frame=image
                     )
                     is_sanitizing = (
                         confidence >= self.behavior_recognizer.confidence_threshold
@@ -618,7 +624,7 @@ class OptimizedDetectionPipeline:
                 pass
             except Exception as e:
                 logger.debug(f"姿态检测器手部检测失败，使用估算方法: {e}")
-        
+
         # 使用估算方法
         x1, y1, x2, y2 = person_bbox
         width = x2 - x1
@@ -636,7 +642,9 @@ class OptimizedDetectionPipeline:
 
         return [{"bbox": left_hand_bbox}, {"bbox": right_hand_bbox}]
 
-    def _get_actual_hand_regions(self, image: np.ndarray, person_bbox: List[int]) -> List[Dict]:
+    def _get_actual_hand_regions(
+        self, image: np.ndarray, person_bbox: List[int]
+    ) -> List[Dict]:
         """
         获取实际的手部区域，优先使用姿态检测器
 
@@ -648,48 +656,137 @@ class OptimizedDetectionPipeline:
             手部区域列表
         """
         hand_regions = []
-        
-        # 如果有姿态检测器，尝试使用实际的手部检测
+
+        # 如果有姿态检测器，优先在人框ROI上执行手部检测，并映射回全图坐标
         if self.pose_detector is not None:
             try:
-                hands_results = self.pose_detector.detect_hands(image)
-                
-                # 过滤在人体区域内的手部
-                x1, y1, x2, y2 = person_bbox
-                for hand_result in hands_results:
-                    if 'landmarks' in hand_result:
-                        landmarks = hand_result['landmarks']
-                        # 计算手部边界框
-                        hand_x_coords = [lm.x * image.shape[1] for lm in landmarks]
-                        hand_y_coords = [lm.y * image.shape[0] for lm in landmarks]
-                        
-                        hand_x1 = int(min(hand_x_coords))
-                        hand_y1 = int(min(hand_y_coords))
-                        hand_x2 = int(max(hand_x_coords))
-                        hand_y2 = int(max(hand_y_coords))
-                        
-                        # 检查手部是否在人体区域内
-                        hand_center_x = (hand_x1 + hand_x2) / 2
-                        hand_center_y = (hand_y1 + hand_y2) / 2
-                        
-                        if x1 <= hand_center_x <= x2 and y1 <= hand_center_y <= y2:
-                            hand_regions.append({
-                                'bbox': [hand_x1, hand_y1, hand_x2, hand_y2],
-                                'landmarks': landmarks,
-                                'confidence': hand_result.get('confidence', 0.8)
-                            })
-                
+                x1, y1, x2, y2 = [int(v) for v in person_bbox]
+                # 外扩20%边距，并裁回图像范围
+                w = x2 - x1
+                h = y2 - y1
+                pad_x = int(0.2 * w)
+                pad_y = int(0.2 * h)
+                x1 = max(0, x1 - pad_x)
+                y1 = max(0, y1 - pad_y)
+                x2 = min(image.shape[1], x2 + pad_x)
+                y2 = min(image.shape[0], y2 + pad_y)
+
+                if x2 > x1 and y2 > y1:
+                    roi = image[y1:y2, x1:x2]
+                    roi_h, roi_w = roi.shape[:2]
+
+                    # 预处理：CLAHE增强亮度、轻度锐化
+                    def _enhance(img: np.ndarray) -> np.ndarray:
+                        try:
+                            lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+                            l, a, b = cv2.split(lab)
+                            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+                            l2 = clahe.apply(l)
+                            lab2 = cv2.merge((l2, a, b))
+                            enhanced = cv2.cvtColor(lab2, cv2.COLOR_LAB2BGR)
+                            # 轻度锐化
+                            kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32)
+                            sharpened = cv2.filter2D(enhanced, -1, kernel)
+                            return sharpened
+                        except Exception:
+                            return img
+
+                    # 保证最小ROI边长，并做多尺度（1.0 和 1.25倍）
+                    min_side_target = 160
+                    base_scale = 1.0
+                    min_side = max(1, min(roi_w, roi_h))
+                    if min_side < min_side_target:
+                        base_scale = float(min_side_target) / float(min_side)
+                    scales = [base_scale, min(2.0, base_scale * 1.25)]
+
+                    detected_any = False
+                    for scale in scales:
+                        # 缩放ROI
+                        scaled_w = max(1, int(round(roi_w * scale)))
+                        scaled_h = max(1, int(round(roi_h * scale)))
+                        scaled_roi = cv2.resize(roi, (scaled_w, scaled_h), interpolation=cv2.INTER_CUBIC)
+                        scaled_roi = _enhance(scaled_roi)
+
+                        # 调用手部检测（在缩放ROI上）
+                        roi_hands = self.pose_detector.detect_hands(scaled_roi)
+
+                        for hres in roi_hands:
+                            # 读取缩放ROI内的像素bbox，并映射回全图
+                            bbox = hres.get("bbox", [0, 0, 0, 0])
+                            bx1, by1, bx2, by2 = [int(b) for b in bbox]
+                            # 先还原到原ROI坐标系
+                            ox1 = bx1 / scale
+                            oy1 = by1 / scale
+                            ox2 = bx2 / scale
+                            oy2 = by2 / scale
+                            gx1, gy1 = int(round(x1 + ox1)), int(round(y1 + oy1))
+                            gx2, gy2 = int(round(x1 + ox2)), int(round(y1 + oy2))
+
+                            mapped = {
+                                "bbox": [gx1, gy1, gx2, gy2],
+                                "confidence": float(hres.get("confidence", 0.0)),
+                            }
+
+                            # 映射关键点（hres.landmarks 相对缩放ROI的归一化坐标）
+                            if "landmarks" in hres and hres["landmarks"]:
+                                mapped_landmarks = []
+                                sw, sh = scaled_w, scaled_h
+                                for lm in hres["landmarks"]:
+                                    px = lm.get("x", 0.0) * sw  # 像素坐标（缩放ROI）
+                                    py = lm.get("y", 0.0) * sh
+                                    ox = px / scale  # 还原到原ROI像素
+                                    oy = py / scale
+                                    mapped_landmarks.append({
+                                        "x": (x1 + ox) / image.shape[1],
+                                        "y": (y1 + oy) / image.shape[0],
+                                    })
+                                mapped["landmarks"] = mapped_landmarks
+
+                            # 透传来源与标签（若存在）
+                            if "class_name" in hres:
+                                mapped["class_name"] = hres["class_name"]
+                            if "source" in hres:
+                                mapped["source"] = hres["source"]
+
+                            # 仅保留手中心在该人体框内的结果
+                            cx = (gx1 + gx2) / 2
+                            cy = (gy1 + gy2) / 2
+                            if x1 <= cx <= x2 and y1 <= cy <= y2:
+                                hand_regions.append(mapped)
+
+                        if hand_regions:
+                            detected_any = True
+
+                    if detected_any:
+                        logger.debug(f"ROI手检检测到 {len(hand_regions)} 个手部区域 (多尺度/增强)")
+                        return hand_regions
+
+                # ROI为空或未检出时，退回整帧手检并过滤到该人体框
+                full_hands = self.pose_detector.detect_hands(image)
+                for hres in full_hands:
+                    bbox = hres.get("bbox", [0, 0, 0, 0])
+                    hx1, hy1, hx2, hy2 = [int(b) for b in bbox]
+                    cx = (hx1 + hx2) / 2
+                    cy = (hy1 + hy2) / 2
+                    if x1 <= cx <= x2 and y1 <= cy <= y2:
+                        hand_regions.append(hres)
+
                 if hand_regions:
-                    logger.debug(f"检测到 {len(hand_regions)} 个实际手部区域")
+                    logger.debug(f"整帧手检过滤到 {len(hand_regions)} 个手部区域")
                     return hand_regions
-                    
+
             except Exception as e:
                 logger.debug(f"姿态检测器手部检测失败，使用估算方法: {e}")
-        
+
         # 回退到估算方法
         estimated_regions = self._estimate_hand_regions(person_bbox)
         logger.debug("使用估算的手部区域")
         return estimated_regions
+
+    # --- Public helper for external callers (e.g., tracking-driven pipelines) ---
+    def get_hand_regions_for_person(self, image: np.ndarray, person_bbox: List[int]) -> List[Dict]:
+        """对外公开：根据人体框返回手部区域（可能包含landmarks与来源）"""
+        return self._get_actual_hand_regions(image, person_bbox)
 
     def _create_annotated_image(
         self,
@@ -708,15 +805,7 @@ class OptimizedDetectionPipeline:
                 bbox = detection.get("bbox", [0, 0, 0, 0])
                 x1, y1, x2, y2 = map(int, bbox)
                 cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(
-                    annotated,
-                    "Person",
-                    (x1, y1 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    (0, 255, 0),
-                    1,
-                )
+                # 留空，由上层统一中文渲染
 
             # 绘制发网检测结果
             for result in hairnet_results:
@@ -725,16 +814,7 @@ class OptimizedDetectionPipeline:
                 color = (0, 255, 0) if result.get("has_hairnet", False) else (0, 0, 255)
                 cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
 
-                text = "Hairnet" if result.get("has_hairnet", False) else "No Hairnet"
-                cv2.putText(
-                    annotated,
-                    text,
-                    (x1, y1 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.4,
-                    color,
-                    1,
-                )
+                # 留空，由上层统一中文渲染
 
             # 绘制洗手检测结果
             for result in handwash_results:
@@ -742,15 +822,7 @@ class OptimizedDetectionPipeline:
                     person_bbox = result.get("person_bbox", [0, 0, 0, 0])
                     x1, y1, x2, y2 = map(int, person_bbox)
                     # 在人体框上方绘制洗手标签
-                    cv2.putText(
-                        annotated,
-                        "Handwashing ✓",
-                        (x1, y1 - 30),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.6,
-                        (255, 0, 255),  # 紫色
-                        2,
-                    )
+                    # 留空，由上层统一中文渲染
 
             # 绘制消毒检测结果
             for result in sanitize_results:
@@ -758,126 +830,82 @@ class OptimizedDetectionPipeline:
                     person_bbox = result.get("person_bbox", [0, 0, 0, 0])
                     x1, y1, x2, y2 = map(int, person_bbox)
                     # 在人体框上方绘制消毒标签
-                    cv2.putText(
-                        annotated,
-                        "Sanitizing ✓",
-                        (x1, y1 - 50),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.6,
-                        (255, 255, 0),  # 黄色
-                        2,
-                    )
+                    # 留空，由上层统一中文渲染
 
-            # 只有在检测到人体时才检测并绘制手部关键点
+            # 手部可视化：无论是否检测到人体，都尝试绘制手部（便于手部近景视频调试）
             hands_count = 0
-            if person_detections and self.pose_detector is not None:
-                hands_results = self.pose_detector.detect_hands(image)
+            if self.pose_detector is not None:
+                hands_results = []
+                if hasattr(self.pose_detector, "detect_hands"):
+                    hands_results = self.pose_detector.detect_hands(image)
+
                 hands_count = len(hands_results)
 
-                # 绘制手部关键点
+                # 绘制手部：优先绘制bbox与来源标签；如有关键点则再绘制骨架
                 for hand_result in hands_results:
-                    landmarks = hand_result["landmarks"]
-                    hand_label = hand_result["label"]
-                    bbox = hand_result["bbox"]
+                    bbox = hand_result.get("bbox", [0, 0, 0, 0])
+                    hx1, hy1, hx2, hy2 = map(int, bbox)
+                    label = hand_result.get("class_name", "hand")
+                    src = hand_result.get("source", "auto")
 
-                    # 绘制手部边界框
-                    cv2.rectangle(
-                        annotated,
-                        (bbox[0], bbox[1]),
-                        (bbox[2], bbox[3]),
-                        (255, 255, 0),
-                        2,
-                    )  # 黄色边界框
-
-                    # 绘制手部标签
+                    # 绘制手部边界框与来源
+                    cv2.rectangle(annotated, (hx1, hy1), (hx2, hy2), (255, 255, 0), 2)
                     cv2.putText(
                         annotated,
-                        f"Hand: {hand_label}",
-                        (bbox[0], bbox[1] - 10),
+                        f"Hand: {label} [{src}]",
+                        (hx1, hy1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX,
                         0.5,
                         (255, 255, 0),
                         2,
                     )
 
-                    # 绘制手部关键点
-                    h, w = image.shape[:2]
-                    for i, landmark in enumerate(landmarks):
-                        x = int(landmark["x"] * w)
-                        y = int(landmark["y"] * h)
+                    # 若有关键点则绘制骨架
+                    if "landmarks" in hand_result and hand_result["landmarks"]:
+                        landmarks = hand_result["landmarks"]
+                        h, w = image.shape[:2]
+                        for i, landmark in enumerate(landmarks):
+                            x = int(landmark["x"] * w)
+                            y = int(landmark["y"] * h)
+                            cv2.circle(annotated, (x, y), 3, (0, 255, 255), -1)
 
-                        # 绘制关键点
-                        cv2.circle(annotated, (x, y), 3, (0, 255, 255), -1)  # 青色圆点
-
-                        # 为重要关键点添加标签
-                        if i in [4, 8, 12, 16, 20, 0]:  # MediaPipe手部关键点索引
-                            point_names = {
-                                0: "腕",
-                                4: "拇指",
-                                8: "食指",
-                                12: "中指",
-                                16: "无名指",
-                                20: "小指",
-                            }
-                            if i in point_names:
-                                cv2.putText(
-                                    annotated,
-                                    point_names[i],
-                                    (x + 5, y - 5),
-                                    cv2.FONT_HERSHEY_SIMPLEX,
-                                    0.3,
-                                    (0, 255, 255),
-                                    1,
-                                )
-
-                    # 绘制手部连接线
-                    if len(landmarks) >= 21:
-                        # 连接手腕到各指根部
-                        wrist = (int(landmarks[0]["x"] * w), int(landmarks[0]["y"] * h))
-                        finger_bases = [5, 9, 13, 17]
-                        for base_idx in finger_bases:
-                            if base_idx < len(landmarks):
-                                base = (
-                                    int(landmarks[base_idx]["x"] * w),
-                                    int(landmarks[base_idx]["y"] * h),
-                                )
-                                cv2.line(annotated, wrist, base, (0, 255, 255), 1)
-
-                        # 连接各指关节
-                        finger_connections = [
-                            [1, 2, 3, 4],  # 拇指
-                            [5, 6, 7, 8],  # 食指
-                            [9, 10, 11, 12],  # 中指
-                            [13, 14, 15, 16],  # 无名指
-                            [17, 18, 19, 20],  # 小指
-                        ]
-
-                        for finger in finger_connections:
-                            for j in range(len(finger) - 1):
-                                if finger[j] < len(landmarks) and finger[j + 1] < len(
-                                    landmarks
-                                ):
-                                    pt1 = (
-                                        int(landmarks[finger[j]]["x"] * w),
-                                        int(landmarks[finger[j]]["y"] * h),
+                        if len(landmarks) >= 21:
+                            wrist = (
+                                int(landmarks[0]["x"] * w),
+                                int(landmarks[0]["y"] * h),
+                            )
+                            finger_bases = [5, 9, 13, 17]
+                            for base_idx in finger_bases:
+                                if base_idx < len(landmarks):
+                                    base = (
+                                        int(landmarks[base_idx]["x"] * w),
+                                        int(landmarks[base_idx]["y"] * h),
                                     )
-                                    pt2 = (
-                                        int(landmarks[finger[j + 1]]["x"] * w),
-                                        int(landmarks[finger[j + 1]]["y"] * h),
-                                    )
-                                    cv2.line(annotated, pt1, pt2, (0, 255, 255), 1)
+                                    cv2.line(annotated, wrist, base, (0, 255, 255), 1)
+
+                            finger_connections = [
+                                [1, 2, 3, 4],
+                                [5, 6, 7, 8],
+                                [9, 10, 11, 12],
+                                [13, 14, 15, 16],
+                                [17, 18, 19, 20],
+                            ]
+
+                            for finger in finger_connections:
+                                for j in range(len(finger) - 1):
+                                    if finger[j] < len(landmarks) and finger[j + 1] < len(landmarks):
+                                        pt1 = (
+                                            int(landmarks[finger[j]]["x"] * w),
+                                            int(landmarks[finger[j]]["y"] * h),
+                                        )
+                                        pt2 = (
+                                            int(landmarks[finger[j + 1]]["x"] * w),
+                                            int(landmarks[finger[j + 1]]["y"] * h),
+                                        )
+                                        cv2.line(annotated, pt1, pt2, (0, 255, 255), 1)
 
             # 在左上角显示帧信息
-            info_text = f"Persons: {len(person_detections)}, Hands: {hands_count}"
-            cv2.putText(
-                annotated,
-                info_text,
-                (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (255, 255, 255),
-                2,
-            )
+            # 顶层渲染中文信息
 
         except Exception as e:
             logger.error(f"图像注释失败: {e}")

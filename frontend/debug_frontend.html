@@ -1,55 +1,19 @@
 <!DOCTYPE html>
 <html>
-
 <head>
     <title>前端录制功能调试</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-        }
-
-        .debug-section {
-            margin: 20px 0;
-            padding: 15px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-        }
-
-        .status {
-            margin: 10px 0;
-            padding: 10px;
-            border-radius: 3px;
-        }
-
-        .info {
-            background-color: #e7f3ff;
-        }
-
-        .success {
-            background-color: #e7ffe7;
-        }
-
-        .error {
-            background-color: #ffe7e7;
-        }
-
-        button {
-            padding: 10px 20px;
-            margin: 5px;
-            cursor: pointer;
-        }
-
-        input[type="file"] {
-            margin: 10px 0;
-        }
-
-        .checkbox-container {
-            margin: 15px 0;
-        }
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .debug-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .status { margin: 10px 0; padding: 10px; border-radius: 3px; }
+        .info { background-color: #e7f3ff; }
+        .success { background-color: #e7ffe7; }
+        .error { background-color: #ffe7e7; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        input[type="file"] { margin: 10px 0; }
+        .checkbox-container { margin: 15px 0; }
     </style>
 </head>
-
 <body>
     <h1>🔧 前端录制功能调试工具</h1>
 
@@ -161,11 +125,10 @@
         }
 
         // 页面加载时的初始化
-        document.addEventListener('DOMContentLoaded', function () {
+        document.addEventListener('DOMContentLoaded', function() {
             log('🔧 前端录制功能调试工具已加载');
             log('请选择一个视频文件，勾选录制选项，然后测试功能');
         });
     </script>
 </body>
-
 </html>

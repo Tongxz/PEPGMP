@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 
 # This would be initialized at app startup
 region_manager: Optional[RegionManager] = None
+# Persist path for saving/loading regions configuration
+regions_config_path: Optional[str] = None
 
 
 def get_region_manager() -> Optional[RegionManager]:
@@ -85,6 +87,29 @@ class RegionService:
         """
         self.region_manager.remove_region(region_id)
 
+    def save_to_file(self) -> bool:
+        """将当前区域配置持久化到磁盘文件."""
+        from src.services.region_service import regions_config_path as _cfg
+        if not _cfg:
+            logger.warning("regions_config_path is not set; skip saving to file")
+            return False
+        return self.region_manager.save_regions_config(_cfg)
+
+    def get_all_region_ids(self) -> List[str]:
+        """返回当前所有区域ID."""
+        return list(self.region_manager.regions.keys())
+
+    def remove_regions_not_in(self, keep_ids: List[str]) -> int:
+        """删除不在 keep_ids 列表中的区域，返回删除数量."""
+        keep = set(keep_ids)
+        to_delete = [rid for rid in self.region_manager.regions.keys() if rid not in keep]
+        for rid in to_delete:
+            try:
+                self.region_manager.remove_region(rid)
+            except Exception:
+                logger.exception(f"Failed to remove region {rid}")
+        return len(to_delete)
+
     def _from_dict(self, data: Dict[str, Any]) -> Region:
         """Helper to create a Region object from a dictionary."""
         try:
@@ -130,10 +155,11 @@ def initialize_region_service(regions_file: str):
     Args:
         regions_file: 区域配置文件路径
     """
-    global region_manager
+    global region_manager, regions_config_path
     logger.info(f"Initializing RegionService with config: {regions_file}")
     try:
         region_manager = RegionManager()
+        regions_config_path = regions_file
         if not region_manager.load_regions_config(regions_file):
             logger.warning(
                 f"Could not load regions from {regions_file}. Starting with an empty set."

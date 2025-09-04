@@ -3,17 +3,21 @@ behavior_recognition:
   hairnet_min_duration: 1.0
   hairnet_stability_frames: 5
   handwashing_max_duration: 60.0
-  handwashing_min_duration: 3.0
-  handwashing_stability_frames: 8
+  handwashing_min_duration: 0.0
+  handwashing_stability_frames: 1
   history_maxlen: 30
   max_num_hands: 2
   min_detection_confidence: 0.5
   min_tracking_confidence: 0.5
   sanitizing_max_duration: 30.0
-  sanitizing_min_duration: 2.0
-  sanitizing_stability_frames: 5
+  sanitizing_min_duration: 0.0
+  sanitizing_stability_frames: 1
   use_advanced_detection: true
   use_mediapipe: true
+  use_ml_classifier: true
+  ml_model_path: models/handwash_xgb_tmp.joblib
+  ml_window: 30
+  ml_fusion_alpha: 0.5
 hairnet_detection:
   confidence_boost_factor: 1.2
   confidence_threshold: 0.6
@@ -33,15 +37,15 @@ hairnet_detection:
   upper_region_ratio: 0.4
   white_ratio_threshold: 0.002
 human_detection:
-  confidence_threshold: 0.3
+  confidence_threshold: 0.25
   device: auto
   iou_threshold: 0.5
   max_box_ratio: 6.0
   max_detections: 10
-  min_box_area: 800
+  min_box_area: 500
   min_height: 50
   min_width: 25
-  model_path: models/yolo/yolov8s.pt
+  model_path: models/yolo/yolov8n.pt
   nms_threshold: 0.4
 detection_rules:
   consecutive_frames: 30            # 连续满足条件帧数阈值

@@ -103,6 +103,12 @@ class BehaviorRecognitionParams:
     # 历史记录配置
     history_maxlen: int = 30  # 行为历史最大长度
 
+    # ML 分类器融合（可选）
+    use_ml_classifier: bool = False
+    ml_model_path: str = "models/handwash_xgb.joblib"
+    ml_window: int = 30
+    ml_fusion_alpha: float = 0.7
+
 
 @dataclass
 class PoseDetectionParams:
