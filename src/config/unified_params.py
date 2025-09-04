@@ -164,6 +164,11 @@ class UnifiedParams:
     pose_detection: PoseDetectionParams
     detection_rules: DetectionRulesParams
     system: SystemParams
+    # 新增：自适应档位与运行配置块（以 dict 承载，便于深合并）
+    inference: Dict[str, Any]
+    runtime: Dict[str, Any]
+    cascade: Dict[str, Any]
+    profiles: Dict[str, Any]
 
     def __init__(self):
         self.human_detection = HumanDetectionParams()
@@ -172,6 +177,11 @@ class UnifiedParams:
         self.pose_detection = PoseDetectionParams()
         self.detection_rules = DetectionRulesParams()
         self.system = SystemParams()
+        # 新增：默认运行期配置（与 YAML 对齐）
+        self.inference = {"profile": "fast"}
+        self.runtime = {"frame_skip": 1, "osd_minimal": True, "log_interval": 120}
+        self.cascade = {"enable": False, "heavy_weights": None, "trigger_confidence_range": None, "trigger_roi": None}
+        self.profiles = {"fast": {}, "balanced": {}, "accurate": {}}
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
@@ -182,6 +192,10 @@ class UnifiedParams:
             "pose_detection": asdict(self.pose_detection),
             "detection_rules": asdict(self.detection_rules),
             "system": asdict(self.system),
+            "inference": self.inference,
+            "runtime": self.runtime,
+            "cascade": self.cascade,
+            "profiles": self.profiles,
         }
 
     def save_to_yaml(self, file_path: str):
@@ -219,7 +233,7 @@ class UnifiedParams:
             with open(file_path, "r", encoding="utf-8") as f:
                 config_data = yaml.safe_load(f)
 
-            # 更新配置
+            # 更新配置（基础块）
             if "human_detection" in config_data:
                 for key, value in config_data["human_detection"].items():
                     if hasattr(instance.human_detection, key):
@@ -250,12 +264,60 @@ class UnifiedParams:
                     if hasattr(instance.system, key):
                         setattr(instance.system, key, value)
 
+            # 新增：运行期基础块（dict 直接合并覆盖）
+            for blk in ("inference", "runtime", "cascade", "profiles"):
+                if blk in config_data and isinstance(config_data[blk], dict):
+                    instance.__dict__[blk] = {
+                        **instance.__dict__.get(blk, {}),
+                        **config_data[blk],
+                    }
+
             logger.info(f"配置已从 {file_path} 加载")
 
         except Exception as e:
             logger.error(f"加载配置失败: {e}，使用默认配置")
 
         return instance
+
+    # --- 新增：深合并工具与最终配置获取 ---
+    @staticmethod
+    def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+        out: Dict[str, Any] = dict(base or {})
+        for k, v in (override or {}).items():
+            if isinstance(v, dict) and isinstance(out.get(k), dict):
+                out[k] = UnifiedParams._deep_merge(out[k], v)
+            else:
+                out[k] = v
+        return out
+
+    def get_profile_name(self, env: Optional[str] = None) -> str:
+        # ENV 优先（可选），否则取 YAML/inference.profile
+        env_profile = (env or os.getenv("HBD_PROFILE", "")).strip().lower()
+        return env_profile or str(self.inference.get("profile", "fast"))
+
+    def build_effective_config(self, profile: Optional[str] = None, cli_overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """生成合并后的有效配置（基础 + profiles[profile] + CLI 覆盖）。"""
+        prof = (profile or self.get_profile_name()).strip().lower()
+        prof_dict = self.profiles.get(prof, {}) if isinstance(self.profiles, dict) else {}
+        # 基础块合并
+        merged = {
+            "human_detection": asdict(self.human_detection),
+            "hairnet_detection": asdict(self.hairnet_detection),
+            "behavior_recognition": asdict(self.behavior_recognition),
+            "pose_detection": asdict(self.pose_detection),
+            "detection_rules": asdict(self.detection_rules),
+            "system": asdict(self.system),
+            "inference": dict(self.inference),
+            "runtime": dict(self.runtime),
+            "cascade": dict(self.cascade),
+        }
+        merged = self._deep_merge(merged, prof_dict)
+        # CLI 覆盖（最高优先级）
+        if cli_overrides:
+            merged = self._deep_merge(merged, cli_overrides)
+        # 附加元信息
+        merged.setdefault("inference", {})["profile"] = prof
+        return merged
 
     def update_param(self, module: str, param: str, value: Any):
         """更新单个参数"""

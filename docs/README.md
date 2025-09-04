@@ -72,10 +72,20 @@
 
 ## 🔗 相关链接
 
-- [项目根目录 README](../README.md)
+- [项目根目录 README](../README.md)（包含档位 profiles/设备自适应、主入口 CLI 参考、环境脚本与统一参数示例）
 - [开发环境配置](../development/README.md)
 - [测试文档](../tests/README.md)
 - [部署文档](../deployment/README.md)
+
+## 📌 新增与变更（与根 README 同步）
+
+- 自适应档位与设备自适应：见根 README“自适应档位与设备自适应（Profiles + Device）”
+- 主入口 CLI 参数：`--profile/--device/--imgsz/--human-weights/--cascade-enable/--log-interval`
+- 环境脚本：
+  - `scripts/setup_macos_arm64.sh`（Apple Silicon 一键环境与 MPS 检测）
+  - `development/start_dev.sh`（可导出 `HBD_PROFILE` 并透传）
+- 统一参数与 profiles 深合并示例：见根 README“统一参数（unified_params.yaml）与 Profiles 深合并”
+- 项目结构更新：`src/core/optimized_detection_pipeline.py` 为主入口综合管线；`src/services/realtime_video_detection.py` 为独立手部直检服务（对比用）
 
 ---
 

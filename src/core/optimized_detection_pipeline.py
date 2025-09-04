@@ -27,6 +27,17 @@ from src.core.motion_analyzer import MotionAnalyzer
 from src.core.pose_detector import PoseDetectorFactory
 from src.utils.logger import get_logger
 
+# 级联相关依赖（可选）
+try:
+    from ultralytics import YOLO as _YOLOHeavy
+except Exception:  # 发生错误时延迟到运行期再判断
+    _YOLOHeavy = None  # type: ignore
+
+try:
+    from src.config.model_config import ModelConfig as _MC
+except Exception:
+    _MC = None  # type: ignore
+
 logger = logging.getLogger(__name__)
 
 
@@ -130,6 +141,7 @@ class OptimizedDetectionPipeline:
         enable_cache: bool = True,
         cache_size: int = 100,
         cache_ttl: float = 30.0,
+        cascade_config: Optional[Dict[str, Any]] = None,
     ):
         """
         初始化优化检测管道
@@ -183,6 +195,15 @@ class OptimizedDetectionPipeline:
         }
 
         logger.info(f"优化检测管道初始化完成，缓存: {'启用' if enable_cache else '禁用'}")
+
+        # 级联相关
+        self.cascade: Dict[str, Any] = cascade_config or {}
+        self._cascade_model = None  # 惰性加载重模型
+        self.cascade_stats = {
+            "triggers": 0,
+            "refined": 0,
+            "time_total": 0.0,
+        }
 
     def detect(self, image: np.ndarray, **kwargs) -> DetectionResult:
         """检测方法 - detect_comprehensive的别名，保持接口兼容性"""
@@ -269,6 +290,15 @@ class OptimizedDetectionPipeline:
 
         logger.info(f"人体检测完成: 检测到 {len(person_detections)} 个人")
 
+        # 可选：级联二次检测，对边界分数段或ROI内的目标进行重检
+        try:
+            t0 = time.time()
+            person_detections = self._cascade_refine_persons(image, person_detections)
+            processing_times["cascade_refine"] = time.time() - t0
+        except Exception as e:
+            processing_times["cascade_refine"] = 0.0
+            logger.debug(f"级联细化跳过: {e}")
+
         # 阶段2: 发网检测（基于人体检测结果）
         hairnet_results = []
         if enable_hairnet and len(person_detections) > 0:
@@ -325,6 +355,152 @@ class OptimizedDetectionPipeline:
             processing_times=processing_times,
             annotated_image=annotated_image,
         )
+
+    # ----------------------- 级联逻辑 -----------------------
+    def _cascade_refine_persons(self, image: np.ndarray, person_detections: List[Dict]) -> List[Dict]:
+        """按配置对指定目标进行级联重检并细化框/分数。
+
+        策略：
+        - 若 cascade.enable=False 或缺少 heavy_weights，则直接返回原结果；
+        - 若配置了 trigger_confidence_range=[lo,hi]，仅对落入区间的目标触发；
+        - 若配置了 trigger_roi（多边形），仅对中心点落入 ROI 的目标触发；
+        - 在ROI（人框或指定ROI）内使用重模型检测 person 类，取最高分，映射回全图更新 bbox/score；
+        - 记录触发次数、成功细化次数与耗时。
+        """
+
+        cfg = self.cascade or {}
+        if not bool(cfg.get("enable", False)):
+            return person_detections
+
+        heavy_weights: Optional[str] = cfg.get("heavy_weights")
+        if not heavy_weights:
+            logger.warning("级联启用但未提供 heavy_weights，跳过级联")
+            return person_detections
+
+        # 惰性加载重模型
+        if self._cascade_model is None:
+            if _YOLOHeavy is None:
+                logger.warning("未安装 ultralytics，无法执行级联重检")
+                return person_detections
+            try:
+                self._cascade_model = _YOLOHeavy(heavy_weights)
+                # 设备选择（尽量与统一策略一致）
+                if _MC is not None:
+                    dev = _MC().select_device(requested=None)
+                    if hasattr(self._cascade_model, "to"):
+                        self._cascade_model.to(dev)
+                logger.info(f"级联重模型已加载: {heavy_weights}")
+            except Exception as e:
+                logger.warning(f"级联重模型加载失败，跳过级联: {e}")
+                return person_detections
+
+        trig_range = cfg.get("trigger_confidence_range") or None
+        roi_poly = cfg.get("trigger_roi") or None  # [[x,y], ...]
+
+        def _in_range(score: float) -> bool:
+            try:
+                if not trig_range or len(trig_range) != 2:
+                    return True
+                lo, hi = float(trig_range[0]), float(trig_range[1])
+                return (lo <= float(score) <= hi)
+            except Exception:
+                return True
+
+        def _pt_in_poly(px: float, py: float, poly: List[List[float]]) -> bool:
+            # 射线法
+            inside = False
+            n = len(poly)
+            for i in range(n):
+                x1, y1 = poly[i]
+                x2, y2 = poly[(i + 1) % n]
+                cond = ((y1 > py) != (y2 > py)) and (
+                    px < (x2 - x1) * (py - y1) / (y2 - y1 + 1e-6) + x1
+                )
+                if cond:
+                    inside = not inside
+            return inside
+
+        refined: List[Dict] = []
+        img_h, img_w = image.shape[:2]
+        t_begin = time.time()
+        triggers = 0
+        refined_cnt = 0
+
+        for det in person_detections:
+            try:
+                bbox = det.get("bbox", [0, 0, 0, 0])
+                score = float(det.get("confidence", 1.0))
+                x1, y1, x2, y2 = [int(v) for v in bbox]
+                if x2 <= x1 or y2 <= y1:
+                    refined.append(det)
+                    continue
+
+                # 触发条件：分数区间 + ROI（可选）
+                cx = (x1 + x2) / 2.0
+                cy = (y1 + y2) / 2.0
+                if not _in_range(score):
+                    refined.append(det)
+                    continue
+                if isinstance(roi_poly, list) and len(roi_poly) >= 3:
+                    if not _pt_in_poly(cx, cy, roi_poly):
+                        refined.append(det)
+                        continue
+
+                triggers += 1
+
+                # 在人框ROI上执行重检
+                roi = image[y1:y2, x1:x2]
+                if roi.size == 0:
+                    refined.append(det)
+                    continue
+
+                res = self._cascade_model(roi)
+                best = None
+                for r in res:
+                    boxes = getattr(r, "boxes", None)
+                    if boxes is None:
+                        continue
+                    for b in boxes:
+                        try:
+                            if int(b.cls[0]) != 0:  # 仅person
+                                continue
+                            conf = float(b.conf[0].cpu().numpy())
+                            bx1, by1, bx2, by2 = [float(v) for v in b.xyxy[0].cpu().numpy()]
+                            if best is None or conf > best[0]:
+                                best = (conf, bx1, by1, bx2, by2)
+                        except Exception:
+                            continue
+
+                if best is None:
+                    refined.append(det)
+                    continue
+
+                conf_h, bx1, by1, bx2, by2 = best
+                # 映射回全图坐标
+                gx1 = int(x1 + max(0.0, bx1))
+                gy1 = int(y1 + max(0.0, by1))
+                gx2 = int(x1 + min(float(x2 - x1), bx2))
+                gy2 = int(y1 + min(float(y2 - y1), by2))
+                if gx2 > gx1 and gy2 > gy1:
+                    det = det.copy()
+                    det["bbox"] = [gx1, gy1, gx2, gy2]
+                    det["confidence"] = max(float(det.get("confidence", 0.0)), float(conf_h))
+                    det["cascade_refined"] = True
+                    refined_cnt += 1
+                refined.append(det)
+            except Exception:
+                refined.append(det)
+
+        self.cascade_stats["triggers"] += triggers
+        self.cascade_stats["refined"] += refined_cnt
+        self.cascade_stats["time_total"] += max(0.0, time.time() - t_begin)
+
+        if triggers:
+            logger.info(
+                f"级联：触发={triggers}, 细化={refined_cnt}, 总耗时+={time.time() - t_begin:.3f}s"
+            )
+
+        return refined
 
     def _detect_persons(self, image: np.ndarray) -> List[Dict]:
         """人体检测 - 所有其他检测的基础
@@ -754,8 +930,8 @@ class OptimizedDetectionPipeline:
                             if x1 <= cx <= x2 and y1 <= cy <= y2:
                                 hand_regions.append(mapped)
 
-                        if hand_regions:
-                            detected_any = True
+                if hand_regions:
+                    detected_any = True
 
                     if detected_any:
                         logger.debug(f"ROI手检检测到 {len(hand_regions)} 个手部区域 (多尺度/增强)")

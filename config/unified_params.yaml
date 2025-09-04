@@ -63,3 +63,37 @@ system:
   log_level: INFO
   max_request_size: 10485760
   max_workers: 4
+
+# --- 新增：自适应档位与运行期配置（基础 + profiles 覆盖） ---
+inference:
+  profile: fast
+
+runtime:
+  frame_skip: 1
+  osd_minimal: true
+  log_interval: 120
+
+cascade:
+  enable: false
+  heavy_weights: null
+  trigger_confidence_range: null  # 例如: [0.4, 0.6]
+  trigger_roi: null               # 例如: [[x1,y1],[x2,y2],...]
+
+profiles:
+  fast: {}
+  balanced:
+    human_detection:
+      model_path: models/yolo/yolov8s.pt
+      confidence_threshold: 0.5
+    runtime:
+      frame_skip: 0
+  accurate:
+    human_detection:
+      model_path: models/yolo/yolov8m.pt
+      max_detections: 20
+    runtime:
+      osd_minimal: false
+    cascade:
+      enable: true
+      heavy_weights: models/yolo/yolov8l.pt
+      trigger_confidence_range: [0.4, 0.6]

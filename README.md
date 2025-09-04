@@ -28,19 +28,25 @@
 - **部署**: Docker, Uvicorn, Gunicorn
 - **测试**: pytest, unittest
 
-## 系统架构
+## 系统架构（更新）
 
 ```
 ├── src/
-│   ├── api/                 # FastAPI应用
-│   │   └── app.py          # 主应用文件
-│   ├── core/               # 核心检测模块
-│   │   ├── detector.py     # 人体检测器
-│   │   ├── hairnet_detector.py  # 发网检测器
+│   ├── api/                         # FastAPI应用
+│   │   └── app.py                   # 主应用文件
+│   ├── core/                        # 核心检测模块
+│   │   ├── optimized_detection_pipeline.py   # 优化综合管线（主入口使用）
+│   │   ├── detector.py              # 人体检测器（YOLOv8）
+│   │   ├── hairnet_detector.py      # 发网检测器
 │   │   ├── yolo_hairnet_detector.py # YOLO发网检测器
-│   │   └── data_manager.py # 数据管理
-│   ├── config/             # 配置模块
-│   └── utils/              # 工具函数
+│   │   ├── pose_detector.py         # 姿态/手部
+│   │   └── data_manager.py          # 数据管理
+│   ├── services/
+│   │   └── realtime_video_detection.py # 手部直检服务（对比用）
+│   ├── config/                      # 配置模块
+│   │   ├── unified_params.py        # 统一配置（profiles 深合并）
+│   │   └── model_config.py          # 设备选择（mps→cuda→cpu）
+│   └── utils/                       # 工具函数
 ├── docs/                   # 技术文档
 │   ├── README_HAIRNET_DETECTION.md  # 发网检测文档
 │   ├── README_ADD_DATASET.md        # 数据集添加指南
@@ -68,7 +74,7 @@
 │   ├── unit/              # 单元测试
 │   ├── integration/       # 集成测试
 │   └── fixtures/          # 测试数据
-└── scripts/                # 开发工具脚本
+└── scripts/                # 开发工具脚本（含 setup_macos_arm64.sh / cleanup_root.sh 等）
 ```
 
 ## 🏗️ 系统架构
@@ -114,6 +120,21 @@
 | MPS/GPU 不可用 | Apple Silicon 默认 CPU 版 | 升级到 macOS ≥ 12.3 并使用 `--pre` 安装，或改用 CUDA 版 |
 
 > 完整依赖见 `requirements.dev.txt`，生产镜像仍使用根目录 `requirements.txt`。
+
+### 环境脚本
+
+- `scripts/setup_macos_arm64.sh`（Apple Silicon）：安装 PyTorch（MPS 兼容）及依赖，并检测 MPS 可用性。
+  ```bash
+  bash scripts/setup_macos_arm64.sh
+  ```
+
+- `development/start_dev.sh`：开发一键启动（可在启动前导出 `HBD_PROFILE`，脚本可透传至运行命令）
+  ```bash
+  export HBD_PROFILE=fast   # 或 balanced / accurate
+  bash development/start_dev.sh
+  ```
+
+> 说明：截图默认保存到 `output/screenshots/`，可用 `HBD_SAVE_DIR=/some/path` 覆盖。
 
 ---
 
@@ -192,6 +213,52 @@ python main.py --mode detection --source path/to/video.mp4
 python main.py --mode detection --source 0 --debug
 ```
 
+#### 主入口 CLI 参数参考
+
+- `--profile fast|balanced|accurate`：档位（CLI > ENV > YAML）
+- `--device cpu|cuda|mps`：指定推理设备（否则按 mps→cuda→cpu 自动选择）
+- `--imgsz <int>`：YOLO 输入尺寸（覆盖配置）
+- `--human-weights <path>`：YOLO 人体权重（覆盖配置）
+- `--cascade-enable`：启用级联二次检测（若配置中未默认开启）
+- `--log-interval <int>`：日志限流间隔（帧）
+
+### 自适应档位与设备自适应（Profiles + Device）
+
+> 完整原理与更详细说明见 `docs/自适应档位与设备自适应方案.md`
+
+- 档位（profile）与设备选择优先级：`CLI > 环境变量 > YAML 配置`
+  - 环境变量：`HBD_PROFILE=fast|balanced|accurate`，`HBD_DEVICE=cpu|cuda|mps`
+  - 设备自动回退顺序：`mps → cuda → cpu`（可被 `--device` 或 `HBD_DEVICE` 强制覆盖）
+
+#### 常用运行示例（CPU 当前设备）
+
+- 快速档（fast，建议先验证链路稳定）
+```bash
+source venv/bin/activate
+python main.py --mode detection \
+  --source tests/fixtures/videos/20250724072822_175680.mp4 \
+  --profile fast --device cpu --imgsz 512 \
+  --human-weights models/yolo/yolov8n.pt --log-interval 120
+```
+
+- 准确档（accurate，较慢但更稳）
+```bash
+source venv/bin/activate
+python main.py --mode detection \
+  --source tests/fixtures/videos/20250724072822_175680.mp4 \
+  --profile accurate --device cpu --imgsz 640 \
+  --human-weights models/yolo/yolov8s.pt --log-interval 120
+```
+
+> 如迁移到 Apple Silicon（M 系列）并使用 MPS：请设置 `export PYTORCH_ENABLE_MPS_FALLBACK=1`，
+> 以便 `torchvision::nms` 在 MPS 不支持时自动回退到 CPU。
+
+#### 级联（Cascade）可选开启
+
+- 在 `config/unified_params.yaml` 的 `profiles.accurate.cascade.enable: true` 或 CLI `--cascade-enable`
+- 可通过配置控制触发条件：`cascade.trigger_confidence_range: [0.4, 0.6]`、可选 `cascade.trigger_roi`
+- 运行中日志会统计：级联触发次数、细化数与累计耗时
+
 #### 2. API服务模式
 
 ```bash
@@ -236,6 +303,57 @@ behavior:
     - hairnet_detection
     - handwash_detection
     - sanitize_detection
+```
+
+### 统一参数（unified_params.yaml）与 Profiles 深合并
+
+- 基础 + profiles[profile] 深合并 + CLI/ENV 覆盖（优先级：CLI > ENV > YAML）
+- 关键块：`inference`、`runtime`、`cascade`、`profiles`
+
+```yaml
+# --- 基础配置 ---
+inference:
+  profile: fast
+
+human_detection:
+  model_path: models/yolo/yolov8n.pt
+  imgsz: 512
+  confidence_threshold: 0.4
+  max_detections: 10
+
+runtime:
+  frame_skip: 1
+  osd_minimal: true
+  log_interval: 120
+
+cascade:
+  enable: false
+  heavy_weights: null
+  trigger_confidence_range: null  # 例如 [0.4, 0.6]
+  trigger_roi: null               # 例如 [[x1,y1],[x2,y2],...]
+
+# --- 档位覆盖 ---
+profiles:
+  fast: {}
+
+  balanced:
+    human_detection:
+      model_path: models/yolo/yolov8s.pt
+      imgsz: 640
+      confidence_threshold: 0.5
+    runtime:
+      frame_skip: 0
+
+  accurate:
+    human_detection:
+      model_path: models/yolo/yolov8m.pt
+      max_detections: 20
+    runtime:
+      osd_minimal: false
+    cascade:
+      enable: true
+      heavy_weights: models/yolo/yolov8l.pt
+      trigger_confidence_range: [0.4, 0.6]
 ```
 
 ## 🔧 API接口
@@ -388,6 +506,25 @@ pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
    - 调整置信度阈值
    - 检查光照条件
    - 考虑重新训练模型
+
+4. **XGBoost 无法加载（洗手 ML 分类器未启用）**
+   - 症状：`libxgboost.dylib` 加载失败，提示缺少 `libomp.dylib`
+   - 解决：
+     - Intel Mac：
+       ```bash
+       brew install libomp
+       export DYLD_LIBRARY_PATH="/usr/local/opt/libomp/lib:$DYLD_LIBRARY_PATH"
+       ```
+     - Apple Silicon：
+       ```bash
+       brew install libomp
+       export DYLD_LIBRARY_PATH="/opt/homebrew/opt/libomp/lib:$DYLD_LIBRARY_PATH"
+       ```
+     - 将 `export DYLD_LIBRARY_PATH=...` 写入启动脚本或 shell 配置以持久化。
+
+5. **MPS 上 YOLO 报错 `torchvision::nms` 未实现**
+   - 说明：MPS 部分算子暂不支持，可开启 CPU 回退
+   - 解决：运行前设置 `export PYTORCH_ENABLE_MPS_FALLBACK=1`
 
 ## 📝 更新日志
 

@@ -18,6 +18,8 @@ sys.path.insert(0, str(src_path))
 
 from config import Settings
 from utils.logger import setup_project_logger
+import cv2
+import time
 
 
 def main():
@@ -71,6 +73,14 @@ def main():
         help="日志级别 (默认: INFO)",
     )
 
+    # 自适应相关 CLI
+    parser.add_argument("--profile", type=str, default=None, help="fast|balanced|accurate（优先级: CLI>ENV>YAML)")
+    parser.add_argument("--device", type=str, default=None, help="cpu|cuda|mps（优先级: CLI>ENV>auto)")
+    parser.add_argument("--imgsz", type=int, default=None, help="YOLO 输入尺寸（覆盖配置）")
+    parser.add_argument("--human-weights", type=str, default=None, help="YOLO 人体检测权重路径（覆盖配置）")
+    parser.add_argument("--cascade-enable", action="store_true", help="启用级联二次检测")
+    parser.add_argument("--log-interval", type=int, default=None, help="日志限流间隔（帧）")
+
     args = parser.parse_args()
 
     # 设置日志
@@ -117,12 +127,140 @@ def run_detection(args, logger):
     """
     logger.info(f"开始检测，输入源: {args.source}")
 
-    # TODO: 实现检测逻辑
-    # from core.detector import HumanDetector
-    # from core.tracker import MultiObjectTracker
-    # from core.behavior import BehaviorRecognizer
+    # 1) 加载统一参数并应用 profiles/CLI 覆盖
+    try:
+        from config.unified_params import get_unified_params
+        params = get_unified_params()
+        cli_overrides = {"runtime": {}, "human_detection": {}, "cascade": {}}
+        if args.imgsz:
+            cli_overrides["human_detection"]["imgsz"] = int(args.imgsz)
+        if args.human_weights:
+            cli_overrides["human_detection"]["model_path"] = str(args.human_weights)
+        if args.cascade_enable:
+            cli_overrides["cascade"]["enable"] = True
+        if args.log_interval is not None:
+            cli_overrides["runtime"]["log_interval"] = int(args.log_interval)
+        effective = params.build_effective_config(profile=args.profile, cli_overrides=cli_overrides)
+    except Exception as e:
+        logger.error(f"加载/合并配置失败: {e}")
+        return
 
-    logger.info("检测模式暂未实现，请等待后续版本")
+    # 2) 统一设备选择
+    try:
+        from config.model_config import ModelConfig
+        mc = ModelConfig()
+        # 如 CLI 指定 device 覆盖
+        dev_req = (args.device or None)
+        device = mc.select_device(requested=dev_req)
+    except Exception as e:
+        logger.error(f"选择设备失败: {e}")
+        device = "cpu"
+
+    # 3) 输出配置摘要
+    hd = effective.get("human_detection", {})
+    imgsz = hd.get("imgsz", None)
+    weights = hd.get("model_path", None)
+    prof = effective.get("inference", {}).get("profile", "fast")
+    logger.info(f"配置摘要: device={device}, profile={prof}, imgsz={imgsz}, weights={weights}")
+
+    # 4) 构建“优化综合管线”并运行（启用 YOLO 人体与可选级联）
+    try:
+        # 将合并后的关键人检参数回填到全局配置，确保 HumanDetector 读取到
+        from config.unified_params import update_global_param
+        for k in [
+            "model_path",
+            "confidence_threshold",
+            "iou_threshold",
+            "min_box_area",
+            "max_box_ratio",
+            "min_width",
+            "min_height",
+            "nms_threshold",
+            "max_detections",
+            "device",
+        ]:
+            if k in hd:
+                update_global_param("human_detection", k, hd[k])
+
+        from src.core.behavior import BehaviorRecognizer
+        from src.core.detector import HumanDetector
+        from src.core.pose_detector import PoseDetectorFactory
+        from src.core.optimized_detection_pipeline import OptimizedDetectionPipeline
+
+        # 权重文件存在性检查与回退
+        wpath = Path(weights) if weights else None
+        if not (wpath and wpath.exists()):
+            alt = Path("models/yolo/yolov8n.pt")
+            logger.warning(f"指定权重不存在: {weights}，回退到 {alt}")
+            weights = str(alt)
+            update_global_param("human_detection", "model_path", weights)
+
+        human_detector = HumanDetector(model_path=weights, device=device)
+        pose_detector = PoseDetectorFactory.create(backend="mediapipe")
+        behavior_recognizer = BehaviorRecognizer()
+        cascade_cfg = effective.get("cascade", {})
+
+        pipeline = OptimizedDetectionPipeline(
+            human_detector=human_detector,
+            hairnet_detector=None,
+            behavior_recognizer=behavior_recognizer,
+            pose_detector=pose_detector,
+            enable_cache=True,
+            cache_size=50,
+            cache_ttl=20.0,
+            cascade_config=cascade_cfg,
+        )
+
+        # 打开输入源
+        src_str = str(args.source)
+        if src_str.isdigit():
+            cam_index = int(src_str)
+            cap = cv2.VideoCapture(cam_index, cv2.CAP_AVFOUNDATION)
+            if not cap or not cap.isOpened():
+                cap = cv2.VideoCapture(cam_index)
+            if not cap or not cap.isOpened():
+                logger.error("无法打开摄像头")
+                return
+        else:
+            if not Path(src_str).exists():
+                logger.error(f"视频文件不存在: {src_str}")
+                return
+            cap = cv2.VideoCapture(src_str)
+            if not cap or not cap.isOpened():
+                logger.error(f"无法打开视频文件: {src_str}")
+                return
+
+        # 运行循环（简单可视化）
+        frame_idx = 0
+        log_iv = int(effective.get("runtime", {}).get("log_interval", 120) or 0)
+        try:
+            while True:
+                ok, frame = cap.read()
+                if not ok:
+                    break
+                frame_idx += 1
+
+                result = pipeline.detect_comprehensive(
+                    frame, enable_hairnet=False, enable_handwash=True, enable_sanitize=False
+                )
+
+                annotated = result.annotated_image if result.annotated_image is not None else frame
+                cv2.imshow("HBD - Main", annotated)
+
+                if log_iv and frame_idx % log_iv == 0:
+                    cs = pipeline.cascade_stats
+                    logger.info(
+                        f"进度帧={frame_idx} 级联: 触发={cs.get('triggers',0)} 细化={cs.get('refined',0)} 耗时累计={cs.get('time_total',0.0):.3f}s"
+                    )
+
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+        finally:
+            cap.release()
+            cv2.destroyAllWindows()
+    except Exception as e:
+        logger.error(f"主入口综合管线运行失败: {e}")
+        return
 
 
 def run_api_server(args, logger):

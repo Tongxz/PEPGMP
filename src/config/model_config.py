@@ -3,9 +3,11 @@
 包含各种检测模型的配置类和统一的配置管理器.
 """
 import os
+import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+logger = logging.getLogger(__name__)
 
 @dataclass
 class YOLOConfig:
@@ -181,28 +183,71 @@ class ModelConfig:
 
         return status
 
-    def get_device_config(self) -> str:
-        """获取设备配置.
+    def select_device(self, requested: Optional[str] = None) -> str:
+        """统一选择设备，支持环境变量与优先级回退。
+
+        优先级：传入 requested > 环境变量 HBD_DEVICE > auto（mps→cuda→cpu）。
+
+        Args:
+            requested: 显式请求的设备（'cpu'|'cuda'|'mps'|'auto'|None）
 
         Returns:
-            设备类型 ('cpu', 'cuda', 'mps')
+            最终设备字符串：'cpu'|'cuda'|'mps'
         """
         try:
             import torch
+        except Exception:
+            logger.warning("PyTorch 未安装，强制使用 CPU 设备")
+            return "cpu"
 
-            if self.yolo.device == "auto":
-                if torch.cuda.is_available():
-                    return "cuda"
-                elif (
-                    hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
-                ):
+        env_req = (os.getenv("HBD_DEVICE", "") or "").strip().lower()
+        device_req = (requested or env_req or self.yolo.device or "auto").strip().lower()
+
+        def _mps_available() -> bool:
+            return bool(getattr(torch.backends, "mps", None)) and bool(torch.backends.mps.is_available())
+
+        def _cuda_available() -> bool:
+            return bool(torch.cuda.is_available())
+
+        # 标准化请求
+        if device_req not in {"cpu", "cuda", "mps", "auto"}:
+            logger.warning(f"未知的设备请求 '{device_req}'，回退为 'auto'")
+            device_req = "auto"
+
+        # 处理显式请求
+        if device_req in {"cpu", "cuda", "mps"}:
+            if device_req == "mps":
+                if _mps_available():
+                    logger.info("Device selected: mps (explicit)")
                     return "mps"
                 else:
-                    return "cpu"
+                    logger.warning("MPS 请求但不可用：可能 PyTorch 未启用 MPS 或硬件不支持，回退策略将生效")
+                    # 回退到 auto 选择
+                    device_req = "auto"
+            if device_req == "cuda":
+                if _cuda_available():
+                    logger.info("Device selected: cuda (explicit)")
+                    return "cuda"
+                else:
+                    logger.warning("CUDA 请求但不可用：未检测到 CUDA GPU 或 CUDA 未正确安装，回退策略将生效")
+                    device_req = "auto"
+            if device_req == "cpu":
+                logger.info("Device selected: cpu (explicit)")
+                return "cpu"
 
-            return self.yolo.device
-        except ImportError:
-            return "cpu"
+        # auto 策略：mps → cuda → cpu
+        if _mps_available():
+            logger.info("Device selected: mps (auto)")
+            return "mps"
+        if _cuda_available():
+            logger.info("Device selected: cuda (auto)")
+            return "cuda"
+        logger.warning("MPS/CUDA 不可用，使用 CPU")
+        return "cpu"
+
+    def get_device_config(self) -> str:
+        """保留旧接口：获取设备配置（内部走统一选择逻辑）。"""
+        return self.select_device(requested=self.yolo.device)
 
     def get_memory_requirements(self) -> Dict[str, str]:
         """获取模型内存需求估算.
