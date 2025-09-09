@@ -37,16 +37,17 @@ hairnet_detection:
   upper_region_ratio: 0.4
   white_ratio_threshold: 0.002
 human_detection:
-  confidence_threshold: 0.15
+  confidence_threshold: 0.25
   device: auto
   iou_threshold: 0.5
   max_box_ratio: 6.0
-  max_detections: 15
+  max_detections: 20
   min_box_area: 200
   min_height: 32
   min_width: 20
-  model_path: models/yolo/yolov8n.pt
+  model_path: models/yolo/yolov8m.pt
   nms_threshold: 0.4
+  imgsz: 640
 detection_rules:
   consecutive_frames: 30            # 连续满足条件帧数阈值
   horizontal_move_std: 8.0          # 手腕水平坐标标准差阈值 (像素)
@@ -55,23 +56,23 @@ detection_rules:
   ioua_threshold: 0.5               # ROI IOUA 阈值
 system:
   api_timeout: 30.0
-  batch_size: 1
-  cache_size: 100
+  batch_size: 8
+  cache_size: 200
   cache_ttl: 300
   debug_mode: false
   enable_cache: true
   log_level: INFO
   max_request_size: 10485760
-  max_workers: 4
+  max_workers: 8
 
 # --- 新增：自适应档位与运行期配置（基础 + profiles 覆盖） ---
 inference:
-  profile: fast
+  profile: accurate
 
 runtime:
-  frame_skip: 1
-  osd_minimal: true
-  log_interval: 120
+  frame_skip: 0
+  osd_minimal: false
+  log_interval: 60
 
 cascade:
   enable: false
