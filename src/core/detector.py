@@ -32,7 +32,17 @@ class BaseDetector(ABC):
     def _get_device(self, device: str) -> str:
         """获取计算设备"""
         if device == "auto":
-            return "cuda" if torch.cuda.is_available() else "cpu"
+            try:
+                # 优先 MPS (Apple Silicon) → CUDA → CPU
+                mps_built = bool(getattr(torch.backends, "mps", None))
+                mps_available = mps_built and bool(torch.backends.mps.is_available())
+                if mps_available:
+                    return "mps"
+                if torch.cuda.is_available():
+                    return "cuda"
+            except Exception:
+                pass
+            return "cpu"
         return device
 
     @abstractmethod

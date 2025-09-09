@@ -64,6 +64,21 @@ class Region:
 
         logger.info(f"Region {self.name} created with {len(polygon)} vertices")
 
+        # 预计算AABB包围盒用于快速过滤（x_min,y_min,x_max,y_max）
+        self._recompute_aabb()
+
+    def _recompute_aabb(self) -> None:
+        """根据当前多边形重算AABB。"""
+        try:
+            if self.polygon:
+                xs = [float(x) for (x, _) in self.polygon]
+                ys = [float(y) for (_, y) in self.polygon]
+                self._aabb = (min(xs), min(ys), max(xs), max(ys))
+            else:
+                self._aabb = (0.0, 0.0, 0.0, 0.0)
+        except Exception:
+            self._aabb = (0.0, 0.0, 0.0, 0.0)
+
     def point_in_region(self, point: Tuple[int, int]) -> bool:
         """
         判断点是否在区域内（射线法）
@@ -107,13 +122,34 @@ class Region:
         """
         x1, y1, x2, y2 = bbox
 
+        # 预过滤：若与区域AABB有足够重叠则快速判定True；否则继续用中心点/顶点判定
+        try:
+            ax1, ay1, ax2, ay2 = self._aabb
+            ix1 = max(float(x1), ax1); iy1 = max(float(y1), ay1)
+            ix2 = min(float(x2), ax2); iy2 = min(float(y2), ay2)
+            if ix2 > ix1 and iy2 > iy1:
+                inter = (ix2 - ix1) * (iy2 - iy1)
+                area_bbox = max(1.0, float(x2 - x1) * float(y2 - y1))
+                if inter / area_bbox >= float(threshold):
+                    return True
+        except Exception:
+            pass
+
+        # 中心点优先：若中心点在区域内，直接认为重叠
+        cx, cy = ((x1 + x2) // 2, (y1 + y2) // 2)
+        try:
+            if self.point_in_region((cx, cy)):
+                return True
+        except Exception:
+            pass
+
         # 检查边界框的关键点
         points = [
             (x1, y1),  # 左上
             (x2, y1),  # 右上
             (x1, y2),  # 左下
             (x2, y2),  # 右下
-            ((x1 + x2) // 2, (y1 + y2) // 2),  # 中心
+            (cx, cy),  # 中心
         ]
 
         inside_count = sum(1 for point in points if self.point_in_region(point))
@@ -181,6 +217,12 @@ class RegionManager:
         self.regions = {}  # region_id -> Region
         self.region_occupancy = {}  # region_id -> set of track_ids
         self.track_regions = {}  # track_id -> set of region_ids
+        self.meta = {
+            "canvas_size": None,      # {width:int,height:int}
+            "background_size": None,  # {width:int,height:int}
+            "fit_mode": None,         # 'contain'|'cover'|'stretch'
+            "ref_size": None          # 'WxH' string
+        }
 
         logger.info("RegionManager initialized")
 
@@ -386,6 +428,8 @@ class RegionManager:
         """
         try:
             config = {"regions": [region.to_dict() for region in self.regions.values()]}
+            if any(self.meta.values()):
+                config["meta"] = self.meta
 
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
@@ -415,6 +459,9 @@ class RegionManager:
             self.regions.clear()
             self.region_occupancy.clear()
             self.track_regions.clear()
+
+            # 记录 meta（可选）
+            self.meta = config.get("meta", self.meta) or self.meta
 
             # 加载区域（兼容多种字段命名：type/region_type、points/polygon、id/region_id、is_active/isActive）
             for region_data in config.get("regions", []):
@@ -481,6 +528,52 @@ class RegionManager:
             logger.error(f"Failed to load regions config: {e}")
             return False
 
+    def apply_mapping(self, frame_width: int, frame_height: int):
+        """按 meta 优先映射到帧尺寸；若 meta 不全，回退到现有逻辑。
+
+        优先级：
+        - 若存在 canvas/background/fit_mode：调用 scale_from_canvas_and_bg
+        - 否则若存在 ref_size（"WxH"）：调用 scale_from_reference
+        - 否则调用 scale_to_frame_if_needed
+        """
+        try:
+            if getattr(self, "_scaled_once", False):
+                return
+            meta = self.meta or {}
+            cs = meta.get("canvas_size") or {}
+            bs = meta.get("background_size") or {}
+            fit = meta.get("fit_mode") or "contain"
+            ref = meta.get("ref_size") or None
+            if all(k in cs for k in ("width", "height")) and all(k in bs for k in ("width", "height")):
+                cw = int(cs.get("width") or 0); ch = int(cs.get("height") or 0)
+                bw = int(bs.get("width") or 0); bh = int(bs.get("height") or 0)
+                if cw > 0 and ch > 0 and bw > 0 and bh > 0:
+                    self.scale_from_canvas_and_bg(cw, ch, bw, bh, frame_width, frame_height, fit_mode=str(fit))
+                    try:
+                        self._last_mapping = f"canvas_bg_fit(cw={cw},ch={ch},bw={bw},bh={bh},fit={fit})"
+                    except Exception:
+                        pass
+                    return
+            if isinstance(ref, str) and ("x" in ref.lower()):
+                try:
+                    rw, rh = map(int, ref.lower().split("x", 1))
+                    if rw > 0 and rh > 0:
+                        self.scale_from_reference(rw, rh, frame_width, frame_height)
+                        try:
+                            self._last_mapping = f"ref_size({rw}x{rh})"
+                        except Exception:
+                            pass
+                        return
+                except Exception:
+                    pass
+            self.scale_to_frame_if_needed(frame_width, frame_height)
+            try:
+                self._last_mapping = "auto"
+            except Exception:
+                pass
+        except Exception as e:
+            logger.warning(f"apply_mapping failed: {e}")
+
     def scale_to_frame_if_needed(self, frame_width: int, frame_height: int):
         """在知道视频帧尺寸后，对区域坐标做一次性缩放以适配当前帧坐标系。
 
@@ -516,6 +609,10 @@ class RegionManager:
                         ny = float(y) * sy
                         new_poly.append((nx, ny))
                     r.polygon = new_poly
+                    try:
+                        r._recompute_aabb()
+                    except Exception:
+                        pass
 
             # 情况一：归一化坐标
             if max_x <= 1.0 and max_y <= 1.0 and min_x >= 0.0 and min_y >= 0.0:
@@ -572,6 +669,10 @@ class RegionManager:
                     ny = float(y) * sy
                     new_poly.append((nx, ny))
                 r.polygon = new_poly
+                try:
+                    r._recompute_aabb()
+                except Exception:
+                    pass
             self._scaled_once = True
             logger.info(f"Regions scaled from reference ({ref_width}x{ref_height}) to frame ({frame_width}x{frame_height}) with sx={sx:.4f}, sy={sy:.4f}")
         except Exception as e:
@@ -641,6 +742,10 @@ class RegionManager:
                     nx, ny = _map_point(x, y)
                     new_poly.append((nx, ny))
                 r.polygon = new_poly
+                try:
+                    r._recompute_aabb()
+                except Exception:
+                    pass
 
             self._scaled_once = True
             logger.info(f"Regions mapped from canvas({canvas_width}x{canvas_height}, fit={fit_mode}) with bg({bg_width}x{bg_height}) to frame({frame_width}x{frame_height}).")

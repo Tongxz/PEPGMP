@@ -7,6 +7,7 @@ import base64
 import json
 import logging
 from io import BytesIO
+import os
 
 import cv2
 import numpy as np
@@ -112,3 +113,65 @@ async def process_image_detection(session: WebSocketSession, message: dict):
             )
         except (WebSocketDisconnect, ConnectionClosedOK):
             pass # Client likely disconnected
+
+
+@router.websocket("/ws/events")
+async def websocket_events(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        try:
+            from urllib.parse import parse_qs
+
+            qs = parse_qs(websocket.url.query or "") if hasattr(websocket, "url") else {}
+            etype_filter = None
+            if isinstance(qs, dict):
+                vals = qs.get("etype")
+                if vals and len(vals) > 0:
+                    etype_filter = str(vals[0])
+        except Exception:
+            etype_filter = None
+
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+        events_file = os.path.join(project_root, "logs", "events_record.jsonl")
+
+        last_pos = 0
+        while True:
+            try:
+                if not os.path.exists(events_file):
+                    await asyncio.sleep(0.5)
+                    continue
+                with open(events_file, "r", encoding="utf-8") as f:
+                    if last_pos == 0:
+                        f.seek(0, os.SEEK_END)
+                        last_pos = f.tell()
+                    else:
+                        f.seek(last_pos)
+                    lines = f.readlines()
+                    last_pos = f.tell()
+                if lines:
+                    for line in lines:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            obj = json.loads(line)
+                            if etype_filter and str(obj.get("type")) != etype_filter:
+                                continue
+                            await websocket.send_text(json.dumps({"type": "event", "data": obj}))
+                        except Exception:
+                            continue
+                try:
+                    await websocket.send_text(json.dumps({"type": "ping"}))
+                except Exception:
+                    pass
+                await asyncio.sleep(0.5)
+            except (WebSocketDisconnect, ConnectionClosedOK):
+                break
+            except Exception as e:
+                logger.debug(f"ws/events tail error: {e}")
+                await asyncio.sleep(0.5)
+    finally:
+        try:
+            await websocket.close()
+        except Exception:
+            pass

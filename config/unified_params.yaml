@@ -37,14 +37,14 @@ hairnet_detection:
   upper_region_ratio: 0.4
   white_ratio_threshold: 0.002
 human_detection:
-  confidence_threshold: 0.25
+  confidence_threshold: 0.15
   device: auto
   iou_threshold: 0.5
   max_box_ratio: 6.0
-  max_detections: 10
-  min_box_area: 500
-  min_height: 50
-  min_width: 25
+  max_detections: 15
+  min_box_area: 200
+  min_height: 32
+  min_width: 20
   model_path: models/yolo/yolov8n.pt
   nms_threshold: 0.4
 detection_rules:
@@ -78,6 +78,31 @@ cascade:
   heavy_weights: null
   trigger_confidence_range: null  # 例如: [0.4, 0.6]
   trigger_roi: null               # 例如: [[x1,y1],[x2,y2],...]
+
+# 流程合规（默认关闭，仅占位；由代码读取后决定是否启用）
+process:
+  enable: true
+  min_dwell_seconds:
+    stand: 0.5
+    sink: 0.5
+    dryer: 0.5
+  cooldown_seconds: 10
+  # HANDWASHING_ACTIVE 连续帧阈值（达到后触发），建议 3~5
+  handwash_min_consecutive: 3
+  region_names:
+    entrance: "入口线"
+    stand: "洗手站立区域"
+    sink: "洗手水池"          # 对齐现有 regions.json 中名称
+    dryer: "烘干区域"
+    work: "车间入口"
+
+# 抓拍配置（新增）
+capture:
+  anonymize_head: true
+  anonymize_ratio: 0.4
+  blur_kernel: 31
+  # 区域标注参考分辨率（用于还原映射，形如 "WxH"），例如 640x480
+  region_ref_size: "640x480"
 
 profiles:
   fast: {}

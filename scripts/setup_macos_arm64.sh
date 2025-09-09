@@ -52,19 +52,60 @@ log "升级基础构建工具..."
 pip install --upgrade pip setuptools wheel
 
 log "安装 PyTorch/torchvision/torchaudio（Apple Silicon + MPS）..."
-# 直接使用官方 arm64 macOS 轮子
-pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision torchaudio || pip install torch torchvision torchaudio
+# 优先安装稳定版（包含 MPS）；如需 CPU-only，可设置 CPU_ONLY=1
+if [[ "${CPU_ONLY:-0}" == "1" ]]; then
+  warn "启用 CPU_ONLY=1：从 CPU 通道安装 PyTorch（不启用 MPS）"
+  if ! pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision torchaudio; then
+    err "CPU 通道安装失败，回退到默认 PyPI 源"
+    pip install torch torchvision torchaudio
+  fi
+else
+  if ! pip install torch torchvision torchaudio; then
+    warn "PyPI 安装失败，尝试 CPU 通道"
+    pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision torchaudio
+  fi
+fi
 ok "PyTorch 系列安装完成"
 
 log "安装项目依赖（requirements.txt / requirements.dev.txt）..."
+# 过滤 torch/torchvision/torchaudio，避免覆盖上一步已安装版本
 if [[ -f requirements.txt ]]; then
-  pip install -r requirements.txt
-  ok "requirements.txt 安装完成"
+  if ! pip install -r <(grep -Ev '^(torch|torchvision|torchaudio)($|[>=<])' requirements.txt); then
+    warn "requirements.txt 安装出现部分警告，可忽略或稍后重试"
+  fi
+  ok "requirements.txt 安装完成（已过滤 torch* 包）"
 fi
 if [[ -f requirements.dev.txt ]]; then
-  # 若 dev 文件内包含 torch 行也会被已装版本满足
-  pip install -r requirements.dev.txt || warn "requirements.dev.txt 安装出现部分警告，可忽略或稍后重试"
-  ok "requirements.dev.txt 处理完成"
+  if ! pip install -r <(grep -Ev '^(torch|torchvision|torchaudio)($|[>=<])' requirements.dev.txt); then
+    warn "requirements.dev.txt 安装出现部分警告，可忽略或稍后重试"
+  fi
+  ok "requirements.dev.txt 处理完成（已过滤 torch* 包）"
+fi
+
+# 可选：下载 YOLO 模型（开启方式：DOWNLOAD_MODELS=1）
+if [[ "${DOWNLOAD_MODELS:-0}" == "1" ]]; then
+  log "检测/下载 YOLO 模型（yolov8n.pt）..."
+  mkdir -p models/yolo || true
+  if [[ ! -f models/yolo/yolov8n.pt ]]; then
+    python - <<'PY'
+import os, urllib.request
+os.makedirs('models/yolo', exist_ok=True)
+url = 'https://github.com/ultralytics/assets/releases/download/v0.0.0/models/yolo/yolov8n.pt'
+dst = 'models/yolo/yolov8n.pt'
+try:
+    urllib.request.urlretrieve(url, dst)
+    print('下载完成: %s' % dst)
+except Exception as e:
+    print('下载失败: %s' % e)
+PY
+    if [[ -f models/yolo/yolov8n.pt ]]; then
+      ok "YOLO 模型下载完成"
+    else
+      warn "YOLO 模型下载失败"
+    fi
+  else
+    ok "YOLO 模型已存在，跳过下载"
+  fi
 fi
 
 log "验证关键依赖与 MPS 可用性..."
@@ -94,6 +135,7 @@ log "完成。后续建议:"
 echo "- 运行 demo: source venv/bin/activate && python demo_camera_direct.py --source <视频路径>"
 echo "- 如需强制 MPS，可在代码中选择 device='mps'（已自动适配则不必）"
 echo "- 若 MPS 不可用，代码会回退到 CPU（速度较慢，建议缩小分辨率/帧率）"
+echo "- 如遇 torchvision::nms 在 MPS 未实现，可先导出: PYTORCH_ENABLE_MPS_FALLBACK=1"
 
 ok "环境搭建完成（macOS/ARM64）"
 

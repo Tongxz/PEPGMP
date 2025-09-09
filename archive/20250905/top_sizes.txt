@@ -1,0 +1,100 @@
+3.0G	.
+1.4G	./venv/lib/python3.10/site-packages
+1.4G	./venv/lib/python3.10
+1.4G	./venv/lib
+1.4G	./venv
+902M	./output
+368M	./venv/lib/python3.10/site-packages/torch
+332M	./models
+274M	./.git/objects
+274M	./.git
+273M	./output/processed_videos
+232M	./venv/lib/python3.10/site-packages/jaxlib
+230M	./venv/lib/python3.10/site-packages/torch/lib
+225M	./venv/lib/python3.10/site-packages/jaxlib/libjax_common.dylib
+203M	./venv/lib/python3.10/site-packages/torch/lib/libtorch_cpu.dylib
+173M	./models/yolo
+118M	./venv/lib/python3.10/site-packages/cv2
+109M	./venv/lib/python3.10/site-packages/mediapipe
+109M	./models/hairnet_model
+107M	./venv/lib/python3.10/site-packages/polars
+100M	./venv/lib/python3.10/site-packages/polars/polars.abi3.so
+ 99M	./models/hairnet_model/weights
+ 94M	./datasets
+ 92M	./venv/lib/python3.10/site-packages/scipy
+ 84M	./models/yolo/yolov8l.pt
+ 78M	./.git/objects/85/f4cb9e9454a5944aebcc4ac73fd5571f3ddcd3
+ 78M	./.git/objects/85
+ 75M	./output/tmp
+ 73M	./venv/lib/python3.10/site-packages/mediapipe/python
+ 72M	./venv/lib/python3.10/site-packages/mediapipe/python/_framework_bindings.cpython-310-darwin.so
+ 63M	./venv/lib/python3.10/site-packages/cv2/.dylibs
+ 59M	./venv/lib/python3.10/site-packages/pandas
+ 58M	./venv/lib/python3.10/site-packages/torch/include
+ 55M	./venv/lib/python3.10/site-packages/sympy
+ 54M	./venv/lib/python3.10/site-packages/numpy
+ 52M	./datasets/tmp_pos
+ 50M	./models/yolo/yolov8m.pt
+ 50M	./models/hairnet_model/weights/last.pt
+ 50M	./models/hairnet_model/weights/best.pt
+ 50M	./models/hairnet_detection/hairnet_detection.pt
+ 50M	./models/hairnet_detection
+ 46M	./.git/objects/f7/64f6327b942d300d41d7ffb0229d6cd4f9f77f
+ 46M	./.git/objects/f7
+ 46M	./.git/objects/61/4536dd45b7625e568f8de045f57bdf00997d35
+ 46M	./.git/objects/61
+ 46M	./.git/objects/4c/258295cc46fca9450111bed5f67445e879ccf4
+ 46M	./.git/objects/4c
+ 44M	./venv/lib/python3.10/site-packages/cv2/cv2.abi3.so
+ 43M	./venv/lib/python3.10/site-packages/torch/include/ATen
+ 42M	./venv/lib/python3.10/site-packages/sklearn
+ 36M	./output/tmp/handseq_pos
+ 31M	./output/violations
+ 31M	./datasets/tmp_neg
+ 30M	./venv/lib/python3.10/site-packages/torch/include/ATen/ops
+ 29M	./tests/fixtures
+ 29M	./tests
+ 29M	./output/violations/not_handwashing
+ 29M	./output/annotated_tmp_model.mp4
+ 28M	./venv/lib/python3.10/site-packages/mediapipe/modules
+ 27M	./venv/lib/python3.10/site-packages/pandas/tests
+ 27M	./output/processed_videos/20250724072822_175680_processed_1755497589.mp4
+ 27M	./output/processed_videos/20250724072822_175680_processed_1755495951.mp4
+ 26M	./venv/lib/python3.10/site-packages/numpy/.dylibs
+ 26M	./venv/lib/python3.10/site-packages/matplotlib
+ 25M	./venv/lib/python3.10/site-packages/torch/lib/libtorch_python.dylib
+ 23M	./output/handwash_features_tmp.csv
+ 23M	./.git/objects/pack/pack-e2bf641a9ed305f25932ee1b1ce702414dd0af12.pack
+ 23M	./.git/objects/pack
+ 22M	./venv/lib/python3.10/site-packages/numpy/.dylibs/libopenblas64_.0.dylib
+ 22M	./models/yolo/yolov8s.pt
+ 21M	./output/processed_videos/20250724072822_175680_processed_1755510001.mp4
+ 21M	./output/processed_videos/20250724072708_processed_1757044029.mp4
+ 21M	./output/processed_videos/20250724072708_processed_1756112652.mp4
+ 21M	./output/processed_videos/20250724072708_processed_1756108340.mp4
+ 21M	./output/processed_videos/20250724072708_processed_1756107170.mp4
+ 21M	./output/processed_videos/20250724072708_processed_1756103016.mp4
+ 21M	./output/processed_videos/20250724072708_processed_1756102579.mp4
+ 21M	./output/processed_videos/20250724072708_processed_1755586819.mp4
+ 21M	./output/processed_videos/20250724072708_processed_1755563759.mp4
+ 21M	./output/annotated_handonly_yolov8n.mp4
+ 21M	./output/annotated_handonly_osd_hwplan.mp4
+ 20M	./venv/lib/python3.10/site-packages/jax
+ 20M	./output/annotated_roi_regions_seq_cn_track_stable_uniq_hwplan.mp4
+ 20M	./output/annotated_roi_regions_seq_cn_long.mp4
+ 20M	./output/annotated_minimal_osd_hwplan.mp4
+ 20M	./.git/objects/90/b4a2c7bc9e91cf6810356c01517bcdf060b98d
+ 20M	./.git/objects/90
+ 18M	./venv/lib/python3.10/site-packages/pandas/_libs
+ 18M	./tests/fixtures/videos
+ 18M	./output/annotated_roi_validate.mp4
+ 17M	./output/tmp/handwash_features_pos.csv
+ 17M	./output/annotated_handonly_hw_highlight.mp4
+ 16M	./venv/lib/python3.10/site-packages/sqlalchemy
+ 16M	./venv/lib/python3.10/site-packages/jax/_src
+ 16M	./venv/lib/python3.10/site-packages/fontTools
+ 14M	./venv/lib/python3.10/site-packages/scipy/stats
+ 14M	./venv/lib/python3.10/site-packages/networkx
+ 14M	./venv/lib/python3.10/site-packages/PIL
+ 14M	./output/tmp/handseq_neg
+ 14M	./output/annotated_roi_regions_seq_cn_track.mp4

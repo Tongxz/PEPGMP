@@ -169,6 +169,10 @@ class UnifiedParams:
     runtime: Dict[str, Any]
     cascade: Dict[str, Any]
     profiles: Dict[str, Any]
+    # 新增：流程合规配置块（以 dict 承载，便于深合并）
+    process: Dict[str, Any]
+    # 新增：抓拍配置块（以 dict 承载，便于深合并）
+    capture: Dict[str, Any]
 
     def __init__(self):
         self.human_detection = HumanDetectionParams()
@@ -182,6 +186,8 @@ class UnifiedParams:
         self.runtime = {"frame_skip": 1, "osd_minimal": True, "log_interval": 120}
         self.cascade = {"enable": False, "heavy_weights": None, "trigger_confidence_range": None, "trigger_roi": None}
         self.profiles = {"fast": {}, "balanced": {}, "accurate": {}}
+        self.process = {}
+        self.capture = {}
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
@@ -196,6 +202,8 @@ class UnifiedParams:
             "runtime": self.runtime,
             "cascade": self.cascade,
             "profiles": self.profiles,
+            "process": dict(self.process or {}),
+            "capture": dict(self.capture or {}),
         }
 
     def save_to_yaml(self, file_path: str):
@@ -272,6 +280,14 @@ class UnifiedParams:
                         **config_data[blk],
                     }
 
+            # 新增：流程合规配置块（作为 dict 原样带入，后续在 build_effective_config 中深合并）
+            if "process" in config_data and isinstance(config_data["process"], dict):
+                instance.process = dict(config_data["process"])  # 浅拷贝即可
+
+            # 新增：抓拍配置块（作为 dict 原样带入）
+            if "capture" in config_data and isinstance(config_data["capture"], dict):
+                instance.capture = dict(config_data["capture"])  # 浅拷贝
+
             logger.info(f"配置已从 {file_path} 加载")
 
         except Exception as e:
@@ -310,6 +326,8 @@ class UnifiedParams:
             "inference": dict(self.inference),
             "runtime": dict(self.runtime),
             "cascade": dict(self.cascade),
+            "process": dict(self.process or {}),
+            "capture": dict(self.capture or {}),
         }
         merged = self._deep_merge(merged, prof_dict)
         # CLI 覆盖（最高优先级）

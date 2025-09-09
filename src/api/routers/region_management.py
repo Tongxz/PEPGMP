@@ -35,6 +35,49 @@ def create_region(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.post("/regions/meta", summary="更新区域元信息（画布/背景/铺放/参考）")
+def update_regions_meta(
+    payload: Dict[str, Any],
+    region_service: RegionService = Depends(get_region_service),
+) -> Dict[str, Any]:
+    try:
+        meta = payload or {}
+        cs = (meta.get("canvas_size") or {})
+        bs = (meta.get("background_size") or {})
+        fit = meta.get("fit_mode") or None
+        ref = meta.get("ref_size") or None
+
+        normalized = {
+            "canvas_size": {
+                "width": int(cs.get("width") or 0),
+                "height": int(cs.get("height") or 0),
+            } if cs else None,
+            "background_size": {
+                "width": int(bs.get("width") or 0),
+                "height": int(bs.get("height") or 0),
+            } if bs else None,
+            "fit_mode": str(fit) if fit else None,
+            "ref_size": str(ref) if ref else None,
+        }
+
+        # 设置并保存
+        try:
+            region_service.region_manager.meta = normalized
+        except Exception:
+            # 兼容早期注入
+            from src.services import region_service as _rs
+            if getattr(_rs, "region_manager", None) is not None:
+                _rs.region_manager.meta = normalized
+
+        try:
+            region_service.save_to_file()
+        except Exception:
+            pass
+        return {"status": "success", "meta": normalized}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.put("/regions/{region_id}", summary="更新区域信息")
 def update_region(
     region_id: str,
@@ -104,6 +147,30 @@ def compat_save_regions(
 ) -> Dict[str, Any]:
     try:
         regions = payload.get("regions", [])
+        # 可选：保存 meta（画布/背景/铺放方式），用于后端还原映射
+        meta = payload.get("meta")
+        try:
+            if isinstance(meta, dict):
+                cs = meta.get("canvas_size") or {}
+                bs = meta.get("background_size") or {}
+                fit = meta.get("fit_mode") or None
+                ref = meta.get("ref_size") or None
+                # 仅写入合法的数值
+                _meta = {
+                    "canvas_size": {
+                        "width": int(cs.get("width") or 0),
+                        "height": int(cs.get("height") or 0),
+                    } if (cs and str(cs.get("width","0")).isdigit() and str(cs.get("height","0")).isdigit()) else None,
+                    "background_size": {
+                        "width": int(bs.get("width") or 0),
+                        "height": int(bs.get("height") or 0),
+                    } if (bs and str(bs.get("width","0")).isdigit() and str(bs.get("height","0")).isdigit()) else None,
+                    "fit_mode": str(fit) if fit else None,
+                    "ref_size": str(ref) if ref else None,
+                }
+                region_service.region_manager.meta = _meta
+        except Exception:
+            pass
         created = 0
         updated = 0
         upsert_ids: _List[str] = []

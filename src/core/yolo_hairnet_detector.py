@@ -79,9 +79,17 @@ class YOLOHairnetDetector:
             实际使用的设备名称
         """
         if device == "auto":
-            import torch
-
-            return "cuda" if torch.cuda.is_available() else "cpu"
+            try:
+                import torch
+                mps_built = bool(getattr(torch.backends, "mps", None))
+                mps_available = mps_built and bool(torch.backends.mps.is_available())
+                if mps_available:
+                    return "mps"
+                if torch.cuda.is_available():
+                    return "cuda"
+            except Exception:
+                pass
+            return "cpu"
         return device
 
     def _load_model(self):

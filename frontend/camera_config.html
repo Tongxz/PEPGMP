@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>摄像头配置管理</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Arial, sans-serif;
+            margin: 24px;
+        }
+
+        h1 {
+            font-size: 20px;
+            margin: 0 0 12px;
+        }
+
+        .row {
+            display: flex;
+            gap: 24px;
+            align-items: flex-start;
+        }
+
+        .card {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 16px;
+            flex: 1;
+        }
+
+        label {
+            display: block;
+            font-size: 12px;
+            color: #6b7280;
+            margin: 8px 0 4px;
+        }
+
+        input,
+        select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        button {
+            padding: 8px 12px;
+            border: 0;
+            border-radius: 6px;
+            background: #2563eb;
+            color: white;
+            cursor: pointer;
+        }
+
+        button.secondary {
+            background: #6b7280;
+        }
+
+        button.danger {
+            background: #dc2626;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        th,
+        td {
+            border-bottom: 1px solid #e5e7eb;
+            padding: 8px;
+            text-align: left;
+        }
+
+        tr:hover {
+            background: #f9fafb;
+        }
+
+        .actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .muted {
+            color: #6b7280;
+            font-size: 12px;
+        }
+
+        .hint {
+            font-size: 12px;
+            color: #374151;
+            margin-top: 8px;
+        }
+    </style>
+    <script>
+        async function api(path, options = {}) {
+            const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...options });
+            if (!res.ok) { throw new Error('HTTP ' + res.status); }
+            const ct = res.headers.get('content-type') || '';
+            return ct.includes('application/json') ? res.json() : res.text();
+        }
+
+        async function loadList() {
+            try {
+                const data = await api('/api/v1/cameras');
+                const tbody = document.querySelector('#tbl tbody');
+                tbody.innerHTML = '';
+                (data.cameras || []).forEach(cam => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+            <td>${cam.id || ''}</td>
+            <td>${cam.name || ''}</td>
+            <td class="muted">${cam.source || ''}</td>
+            <td>${cam.resolution || ''}</td>
+            <td>${cam.fps ?? ''}</td>
+            <td class="muted">${cam.regions_file || ''}</td>
+            <td class="actions">
+              <button class="secondary" onclick='fillForm(${JSON.stringify(cam)})'>编辑</button>
+              <button class="danger" onclick='delCam(${JSON.stringify(cam.id)})'>删除</button>
+            </td>
+          `;
+                    tbody.appendChild(tr);
+                });
+            } catch (e) {
+                alert('加载失败: ' + e.message);
+            }
+        }
+
+        function val(id) { return document.getElementById(id).value.trim(); }
+        function setVal(id, v) { document.getElementById(id).value = v ?? ''; }
+
+        function fillForm(cam) {
+            setVal('id', cam.id);
+            setVal('name', cam.name);
+            setVal('source', cam.source);
+            setVal('resolution', cam.resolution || '');
+            setVal('fps', cam.fps ?? '');
+            setVal('regions_file', cam.regions_file || '');
+        }
+
+        async function createCam() {
+            const payload = collectPayload(true);
+            try {
+                await api('/api/v1/cameras', { method: 'POST', body: JSON.stringify(payload) });
+                await loadList();
+                alert('已创建');
+            } catch (e) { alert('创建失败: ' + e.message); }
+        }
+
+        async function updateCam() {
+            const payload = collectPayload(false);
+            const id = val('id');
+            if (!id) return alert('请先填写 id');
+            try {
+                await api('/api/v1/cameras/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify(payload) });
+                await loadList();
+                alert('已更新');
+            } catch (e) { alert('更新失败: ' + e.message); }
+        }
+
+        async function delCam(id) {
+            if (!confirm('确认删除摄像头 ' + id + ' ?')) return;
+            try {
+                await api('/api/v1/cameras/' + encodeURIComponent(id), { method: 'DELETE' });
+                await loadList();
+            } catch (e) { alert('删除失败: ' + e.message); }
+        }
+
+        function collectPayload(requireId) {
+            const id = val('id');
+            const name = val('name');
+            const source = val('source');
+            const resolution = val('resolution');
+            const fps = val('fps');
+            const regions_file = val('regions_file');
+            if (requireId && !id) throw new Error('id 不能为空');
+            if (!name) throw new Error('name 不能为空');
+            if (!source) throw new Error('source 不能为空');
+            const payload = { id, name, source };
+            if (resolution) payload.resolution = resolution;
+            if (fps) payload.fps = Number(fps);
+            if (regions_file) payload.regions_file = regions_file;
+            return payload;
+        }
+
+        window.addEventListener('DOMContentLoaded', loadList);
+    </script>
+</head>
+
+<body>
+    <h1>摄像头配置管理</h1>
+    <div class="row">
+        <div class="card" style="max-width: 440px;">
+            <h2 style="font-size:16px; margin-top:0;">表单</h2>
+            <label for="id">ID（唯一）</label>
+            <input id="id" placeholder="例如 cam0" />
+
+            <label for="name">名称</label>
+            <input id="name" placeholder="例如 大门口 USB0" />
+
+            <label for="source">来源（USB 索引或 rtsp://）</label>
+            <input id="source" placeholder="0 或 rtsp://user:pass@ip:554/stream" />
+
+            <label for="resolution">分辨率（可选）</label>
+            <input id="resolution" placeholder="1280x720" />
+
+            <label for="fps">帧率（可选）</label>
+            <input id="fps" type="number" min="1" max="120" placeholder="20" />
+
+            <label for="regions_file">区域文件（可选）</label>
+            <input id="regions_file" placeholder="config/regions_site_sink.json" />
+
+            <div class="actions" style="margin-top:12px;">
+                <button onclick="createCam()">创建</button>
+                <button class="secondary" onclick="updateCam()">更新</button>
+            </div>
+            <div class="hint">更新时只需填写要修改的字段，未填写的字段保留原值。</div>
+        </div>
+
+        <div class="card">
+            <h2 style="font-size:16px; margin-top:0;">已配置摄像头</h2>
+            <table id="tbl">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>名称</th>
+                        <th>来源</th>
+                        <th>分辨率</th>
+                        <th>FPS</th>
+                        <th>区域文件</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            <div class="muted" style="margin-top:8px;">数据存储于 <code>config/cameras.yaml</code></div>
+        </div>
+    </div>
+</body>
+
+</html>
+

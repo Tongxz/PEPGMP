@@ -3,7 +3,9 @@
 提供区域管理的服务层接口，包括区域的创建、更新、删除和查询功能.
 """
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+import os
+import threading
 
 from fastapi import Depends
 
@@ -15,6 +17,8 @@ logger = logging.getLogger(__name__)
 region_manager: Optional[RegionManager] = None
 # Persist path for saving/loading regions configuration
 regions_config_path: Optional[str] = None
+_lock = threading.RLock()
+_cached_mapped_signature: Optional[Tuple[int, int, float]] = None  # (W,H,mtime)
 
 
 def get_region_manager() -> Optional[RegionManager]:
@@ -93,7 +97,9 @@ class RegionService:
         if not _cfg:
             logger.warning("regions_config_path is not set; skip saving to file")
             return False
-        return self.region_manager.save_regions_config(_cfg)
+        with _lock:
+            ok = self.region_manager.save_regions_config(_cfg)
+        return ok
 
     def get_all_region_ids(self) -> List[str]:
         """返回当前所有区域ID."""
@@ -158,17 +164,70 @@ def initialize_region_service(regions_file: str):
     global region_manager, regions_config_path
     logger.info(f"Initializing RegionService with config: {regions_file}")
     try:
-        region_manager = RegionManager()
-        regions_config_path = regions_file
-        if not region_manager.load_regions_config(regions_file):
-            logger.warning(
-                f"Could not load regions from {regions_file}. Starting with an empty set."
-            )
-        logger.info("RegionService initialized successfully.")
-        logger.info(f"Global region_manager set: {region_manager is not None}")
+        with _lock:
+            region_manager = RegionManager()
+            regions_config_path = regions_file
+            if not region_manager.load_regions_config(regions_file):
+                logger.warning(
+                    f"Could not load regions from {regions_file}. Starting with an empty set."
+                )
+            logger.info("RegionService initialized successfully.")
+            logger.info(f"Global region_manager set: {region_manager is not None}")
     except Exception as e:
         logger.exception(f"Failed to initialize RegionService: {e}")
         # 确保即使出错也有一个基本的RegionManager实例
+        with _lock:
+            if region_manager is None:
+                region_manager = RegionManager()
+                logger.info("Created fallback RegionManager instance")
+
+
+def get_region_manager_for_frame(frame_w: int, frame_h: int) -> Optional[RegionManager]:
+    """统一入口：按需加载、热更新、一次性映射并缓存签名。
+
+    - 若文件 mtime 变化或帧尺寸变化：重新加载/映射
+    - 映射通过 RegionManager.apply_mapping 完成（优先 meta）
+    """
+    global region_manager, regions_config_path, _cached_mapped_signature
+    with _lock:
+        if not regions_config_path:
+            logger.warning("regions_config_path not set; cannot load regions")
+            return None
+        mtime = 0.0
+        try:
+            mtime = os.path.getmtime(regions_config_path)
+        except Exception:
+            pass
+        sig = (int(frame_w), int(frame_h), float(mtime))
+        need_reload = False
+        # 首次或文件更新需要 reload
         if region_manager is None:
             region_manager = RegionManager()
-            logger.info("Created fallback RegionManager instance")
+            need_reload = True
+        if _cached_mapped_signature is None or _cached_mapped_signature[2] != sig[2]:
+            need_reload = True
+        if need_reload:
+            try:
+                if not region_manager.load_regions_config(regions_config_path):
+                    logger.warning("reload regions failed; keep previous")
+            except Exception as e:
+                logger.warning(f"reload regions exception: {e}")
+        # 按帧尺寸映射（避免重复）
+        try:
+            region_manager.apply_mapping(int(frame_w), int(frame_h))
+            # 打印一次策略与路径
+            try:
+                mapping = getattr(region_manager, 'meta', None)
+                strategy = None
+                # 取一个区域的 _last_mapping 作为策略提示
+                for _r in region_manager.regions.values():
+                    strategy = getattr(_r, '_last_mapping', None)
+                    if strategy:
+                        break
+                logger.info(f"Regions ready: path={regions_config_path}, strategy={strategy}")
+            except Exception:
+                pass
+        except Exception as e:
+            logger.warning(f"apply_mapping failed in service: {e}")
+        _cached_mapped_signature = sig
+        return region_manager

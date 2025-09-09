@@ -19,7 +19,10 @@ sys.path.append(project_root)
 
 from src.api.routers import (
     comprehensive,
+    cameras,
     download,
+    events,
+    metrics,
     region_management,
     statistics,
     websocket,
@@ -39,9 +42,9 @@ async def lifespan(app: FastAPI):
     detection_service.initialize_detection_services()
     app.state.optimized_pipeline = detection_service.optimized_pipeline
     app.state.hairnet_pipeline = detection_service.hairnet_pipeline
-    region_service.initialize_region_service(
-        os.path.join(project_root, "config", "regions.json")
-    )
+    # 统一区域文件来源：优先环境变量 HBD_REGIONS_FILE，其次默认 config/regions.json
+    regions_file = os.environ.get("HBD_REGIONS_FILE", os.path.join(project_root, "config", "regions.json"))
+    region_service.initialize_region_service(regions_file)
     yield
     # Shutdown
     logger.info("Shutting down the application...")
@@ -80,6 +83,9 @@ app.include_router(region_management.compat_router, tags=["Compat"])
 app.include_router(websocket.router, prefix="", tags=["WebSocket"])
 app.include_router(statistics.router, prefix="/api/v1", tags=["Statistics"])
 app.include_router(download.router, prefix="/api/v1/download", tags=["Download"])
+app.include_router(events.router, tags=["Events"])
+app.include_router(metrics.router, tags=["Metrics"])
+app.include_router(cameras.router, tags=["Cameras"])
 
 from fastapi.responses import RedirectResponse
 

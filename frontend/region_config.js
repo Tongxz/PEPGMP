@@ -525,7 +525,7 @@ class RegionConfigManager {
             const p = this.drawingPoints[i];
             const dx = p.x - x;
             const dy = p.y - y;
-            const d = Math.sqrt(dx*dx + dy*dy);
+            const d = Math.sqrt(dx * dx + dy * dy);
             if (d < bestDist && d <= threshold) {
                 bestDist = d;
                 best = i;
@@ -645,7 +645,22 @@ class RegionConfigManager {
                     if (resp.ok) created++; else failed++;
                 }
             }
-            const msg = `保存完成（新增${created}，更新${updated}${failed?`, 失败${failed}`:''}）`;
+            // 附带保存 meta（画布/背景/铺放），便于后端完美还原
+            try {
+                const metaPayload = {
+                    canvas_size: { width: Math.round(this.canvas.width), height: Math.round(this.canvas.height) },
+                    background_size: { width: Number(this.backgroundNaturalSize.width || 0), height: Number(this.backgroundNaturalSize.height || 0) },
+                    fit_mode: this.fitMode
+                };
+                await fetch('/api/v1/management/regions/meta', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(metaPayload)
+                });
+            } catch (e) {
+                console.warn('Save meta failed:', e);
+            }
+            const msg = `保存完成（新增${created}，更新${updated}${failed ? `, 失败${failed}` : ''}）`;
             this.showNotification(msg, failed ? 'warning' : 'success');
         } catch (error) {
             console.error('Save error:', error);
@@ -762,13 +777,20 @@ class RegionConfigManager {
         }
 
         const config = {
-            regions: this.regions,
-            canvas_size: {
-                width: this.canvas.width,
-                height: this.canvas.height
+            meta: {
+                canvas_size: {
+                    width: Math.round(this.canvas.width),
+                    height: Math.round(this.canvas.height)
+                },
+                background_size: {
+                    width: Number(this.backgroundNaturalSize.width || 0),
+                    height: Number(this.backgroundNaturalSize.height || 0)
+                },
+                fit_mode: this.fitMode
             },
+            regions: this.regions,
             exported_at: new Date().toISOString(),
-            version: '1.0'
+            version: '1.1'
         };
 
         const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
@@ -801,7 +823,7 @@ class RegionConfigManager {
         if (cs) cs.textContent = `${Math.round(this.canvas.width)}x${Math.round(this.canvas.height)}`;
         if (bs) bs.textContent = (this.backgroundNaturalSize.width && this.backgroundNaturalSize.height)
             ? `${this.backgroundNaturalSize.width}x${this.backgroundNaturalSize.height}` : '-';
-        if (fm) fm.textContent = `${this.fitMode}` + (this.fitMode==='contain'?'(自适应)':'');
+        if (fm) fm.textContent = `${this.fitMode}` + (this.fitMode === 'contain' ? '(自适应)' : '');
     }
 }
 

@@ -1,0 +1,3 @@
+examples/legacy/
+frontend/*debug*
+frontend/yolo_test.html

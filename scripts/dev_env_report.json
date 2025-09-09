@@ -1,0 +1,40 @@
+{
+  "timestamp": "2025年 9月 5日 星期五 11时42分04秒 CST",
+  "python_version": {
+    "current": "3.10.13",
+    "required": "3.8.0",
+    "ok": true
+  },
+  "virtual_environment": {
+    "active": true,
+    "ok": true
+  },
+  "dependencies": {
+    "satisfied": [
+      "torch",
+      "torchvision",
+      "torchaudio",
+      "ultralytics",
+      "opencv-python",
+      "fastapi",
+      "numpy",
+      "pillow",
+      "pyyaml",
+      "uvicorn"
+    ],
+    "missing": [],
+    "outdated": [],
+    "ok": true
+  },
+  "gpu_support": {
+    "available": false,
+    "ok": true
+  },
+  "model_files": {
+    "ok": false
+  },
+  "imports": {
+    "ok": true
+  },
+  "overall_status": true
+}

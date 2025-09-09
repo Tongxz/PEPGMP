@@ -33,7 +33,15 @@ def initialize_detection_services_for_demo():
     global optimized_pipeline, hairnet_pipeline, region_manager_demo
     logger.info("Initializing detection services for demo...")
     try:
-        detector = HumanDetector()
+        # 统一设备选择（mps→cuda→cpu），并打印
+        try:
+            from src.config.model_config import ModelConfig
+            dev = ModelConfig().select_device(requested=None)
+        except Exception:
+            dev = "auto"
+        logger.info(f"设备自动选择结果: {dev}")
+
+        detector = HumanDetector(device=dev)
         behavior_recognizer = BehaviorRecognizer()
         mediapipe_pose_detector = PoseDetectorFactory.create(backend="mediapipe")
         
@@ -43,7 +51,7 @@ def initialize_detection_services_for_demo():
             behavior_recognizer=behavior_recognizer,
             pose_detector=mediapipe_pose_detector,
         )
-        hairnet_pipeline = YOLOHairnetDetector() # Not strictly used by comprehensive, but good to initialize
+        hairnet_pipeline = YOLOHairnetDetector(device=dev) # Not strictly used by comprehensive, but good to initialize
         logger.info("Detection services initialized for demo.")
         # Load regions for demo (if exists)
         try:
@@ -253,8 +261,8 @@ def main():
         if not cap or not cap.isOpened():
             cap = cv2.VideoCapture(cam_index)
         if not cap or not cap.isOpened():
-        logger.error("Error: Could not open webcam.")
-        return
+            logger.error("Error: Could not open webcam.")
+            return
         # Set lower resolution for better throughput unless user overrides
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, args.width)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, args.height)
@@ -265,7 +273,7 @@ def main():
         cap = cv2.VideoCapture(source_str)
         if not cap or not cap.isOpened():
             logger.error(f"Error: Could not open video file: {source_str}")
-        return
+            return
 
     logger.info("Webcam opened successfully. Press 'q' to quit.")
 
@@ -431,6 +439,16 @@ def main():
                         no_person_streak += 1
                     else:
                         no_person_streak = 0
+            else:
+                # 本帧无新结果，回放上一帧标注并进入下一循环
+                if last_annotated is not None:
+                    cv2.imshow('Real-time Detection (Direct Camera)', last_annotated)
+                else:
+                    cv2.imshow('Real-time Detection (Direct Camera)', frame)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    logger.info("Exiting application.")
+                    break
+                continue
             tracker_input = [{"bbox": p.get("bbox"), "confidence": p.get("confidence")} for p in person_detections]
             tracked_objects = demo_session.tracker.update(tracker_input)
 
@@ -817,30 +835,25 @@ def main():
                     if event_consecutive >= max(1, args.exit_consecutive):
                         logger.info(f"Exit event '{args.exit_on}' observed for {event_consecutive} consecutive processed frames. Exiting.")
                         break
-            else:
-                # No new result processed; reuse last annotated frame for display
-                if last_annotated is not None:
-                    cv2.imshow('Real-time Detection (Direct Camera)', last_annotated)
-                else:
-                    cv2.imshow('Real-time Detection (Direct Camera)', frame)
+            
 
             # --- Violation Capture Logic (only when new detection result exists) ---
             if result is not None:
-            for tobj in tracked_objects:
-                track_id = tobj['track_id']
-                person_bbox = tobj['bbox']
+                for tobj in tracked_objects:
+                    track_id = tobj['track_id']
+                    person_bbox = tobj['bbox']
 
-                # Hairnet violation
+                    # Hairnet violation
                     if not args.hand_only:
-                for h_res in hairnet_results:
-                    if _bbox_overlap(person_bbox, h_res.get("person_bbox", [])) and not h_res.get("has_hairnet"):
-                        _capture_violation(demo_session, frame, track_id, 'no_hairnet', person_bbox)
+                        for h_res in hairnet_results:
+                            if _bbox_overlap(person_bbox, h_res.get("person_bbox", [])) and not h_res.get("has_hairnet"):
+                                _capture_violation(demo_session, frame, track_id, 'no_hairnet', person_bbox)
                                 break  # Only capture once per person per frame for this violation type
 
-                # Handwashing violation (absence of behavior)
+                    # Handwashing violation (absence of behavior)
                     st = track_states.get(track_id, {})
                     if st.get("hw_neg_cnt", 0) >= max(1, args.handwash_neg_frames):
-                    _capture_violation(demo_session, frame, track_id, 'not_handwashing', person_bbox)
+                        _capture_violation(demo_session, frame, track_id, 'not_handwashing', person_bbox)
             
             # --- Exit Condition ---
             if cv2.waitKey(1) & 0xFF == ord('q'):

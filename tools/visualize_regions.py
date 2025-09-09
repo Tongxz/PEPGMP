@@ -1,8 +1,16 @@
 import os
+import sys
+from pathlib import Path
 import json
 import argparse
 import cv2
 from typing import List, Tuple
+
+# 确保可导入 src/*
+ROOT = Path(__file__).resolve().parents[1]
+# 为了支持 `from src.core.region import RegionManager`，需要把“项目根目录”加入 sys.path
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 
 def load_regions(config_path: str) -> List[dict]:
@@ -48,44 +56,62 @@ def color_for(region_type: str, name: str) -> Tuple[int, int, int]:
     return (200, 200, 200)
 
 
-def draw_regions(img, regions: List[dict]) -> None:
+def draw_regions_with_region_manager(img, regions_path: str, ref: str = "", canvas: str = "", bg: str = "", fit_mode: str = "contain") -> None:
     import numpy as np
+    from src.core.region import RegionManager
     h, w = img.shape[:2]
-    # 收集所有点判断参考尺寸/是否需要缩放
-    all_pts = []
-    parsed = []
-    for r in regions:
-        poly = r.get('polygon') or r.get('points') or []
-        pts = to_points_float(poly)
-        parsed.append((r, pts))
-        all_pts.extend(pts)
-    sx = sy = 1.0
-    if all_pts:
-        maxx = max(p[0] for p in all_pts)
-        maxy = max(p[1] for p in all_pts)
-        minx = min(p[0] for p in all_pts)
-        miny = min(p[1] for p in all_pts)
-        # 归一化坐标 [0,1] → 放大到帧
-        if 0.0 <= minx and 0.0 <= miny and maxx <= 1.0 and maxy <= 1.0:
-            sx, sy = float(w), float(h)
-        else:
-            # 若超出帧大小，按轴向比例缩放到帧
-            if maxx > w * 1.02 or maxy > h * 1.02:
-                sx = (w / maxx) if maxx > 0 else 1.0
-                sy = (h / maxy) if maxy > 0 else 1.0
-        print(f"Region scale factors: sx={sx:.4f}, sy={sy:.4f} (frame={w}x{h}, max=({maxx:.1f},{maxy:.1f}))")
+    rm = RegionManager()
+    if not rm.load_regions_config(regions_path):
+        raise SystemExit(f'Failed to load regions from {regions_path}')
 
-    # 绘制（应用缩放）
-    for r, pts in parsed:
-        rtype = r.get('region_type') or r.get('type')
-        name = r.get('name', '')
+    # 优先使用配置内的 meta（前端导出写入），与运行时完全一致
+    if not (ref or canvas or bg):
+        # 无 CLI 指示时，直接按 meta 应用
+        rm.apply_mapping(w, h)
+        applied = "apply_mapping(meta)"
+    else:
+        # CLI 指示优先（用于对比实验）
+        if canvas and bg and ("x" in canvas) and ("x" in bg):
+            try:
+                cw, ch = map(int, canvas.lower().split("x", 1))
+                bw, bh = map(int, bg.lower().split("x", 1))
+                if cw > 0 and ch > 0 and bw > 0 and bh > 0:
+                    rm.scale_from_canvas_and_bg(cw, ch, bw, bh, w, h, fit_mode=fit_mode)
+                    applied = f"scale_from_canvas_and_bg(cw={cw},ch={ch},bw={bw},bh={bh},fit={fit_mode})"
+                else:
+                    rm.scale_to_frame_if_needed(w, h)
+            except Exception:
+                rm.scale_to_frame_if_needed(w, h)
+                applied = "scale_to_frame_if_needed"
+        elif ref and ("x" in ref):
+            try:
+                rw, rh = map(int, ref.lower().split("x", 1))
+                if rw > 0 and rh > 0:
+                    rm.scale_from_reference(rw, rh, w, h)
+                    applied = f"scale_from_reference({rw}x{rh})"
+                else:
+                    rm.scale_to_frame_if_needed(w, h)
+                    applied = "scale_to_frame_if_needed"
+            except Exception:
+                rm.scale_to_frame_if_needed(w, h)
+                applied = "scale_to_frame_if_needed"
+        else:
+            rm.scale_to_frame_if_needed(w, h)
+            applied = "scale_to_frame_if_needed"
+
+    print(f"Region mapping applied by: {applied}")
+
+    # 绘制区域（已缩放后的坐标）
+    for r in rm.regions.values():
+        rtype = r.region_type.value
+        name = r.name
+        pts = [(int(round(x)), int(round(y))) for (x, y) in r.polygon]
         if len(pts) < 2:
             continue
-        scaled = [(int(round(x*sx)), int(round(y*sy))) for x, y in pts]
         color = color_for(rtype, name)
-        arr = np.array(scaled, dtype=np.int32).reshape((-1, 1, 2))
+        arr = np.array(pts, dtype=np.int32).reshape((-1, 1, 2))
         cv2.polylines(img, [arr], isClosed=True, color=color, thickness=2)
-        x, y = scaled[0]
+        x, y = pts[0]
         label = f"{name or rtype}"
         cv2.putText(img, label, (x, max(15, y - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
@@ -95,6 +121,11 @@ def main():
     ap.add_argument('--video', required=True, help='video file path')
     ap.add_argument('--regions', default=os.path.join(os.getcwd(), 'config', 'regions.json'), help='regions config json')
     ap.add_argument('--out', default=os.path.join(os.getcwd(), 'output', 'regions_on_first_frame.jpg'), help='output image path')
+    # 对齐 demo 的坐标还原参数（可选）
+    ap.add_argument('--regions-ref-size', dest='ref', default='', help="Reference size 'WxH' used when annotating (e.g., 1280x720)")
+    ap.add_argument('--regions-canvas-size', dest='canvas', default='', help="Canvas size 'WxH' used when annotating (e.g., 1280x720)")
+    ap.add_argument('--regions-bg-size', dest='bg', default='', help="Background image size 'WxH' shown in canvas (e.g., 1920x1080)")
+    ap.add_argument('--regions-fit-mode', dest='fit', default='contain', choices=['contain','cover','stretch'], help='How background fits in canvas')
     args = ap.parse_args()
 
     if not os.path.exists(args.video):
@@ -108,8 +139,7 @@ def main():
     if not ok or frame is None:
         raise SystemExit('Failed to read first frame')
 
-    regions = load_regions(args.regions)
-    draw_regions(frame, regions)
+    draw_regions_with_region_manager(frame, args.regions, ref=args.ref, canvas=args.canvas, bg=args.bg, fit_mode=args.fit)
 
     os.makedirs(os.path.dirname(args.out) or '.', exist_ok=True)
     cv2.imwrite(args.out, frame)

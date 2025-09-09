@@ -3,10 +3,12 @@
 提供统计数据和违规记录的API端点.
 """
 import logging
-from datetime import datetime
+import os
+import json
+from datetime import datetime, timedelta
 from typing import Dict, List, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from src.services.region_service import RegionService, get_region_service
 
@@ -109,3 +111,72 @@ def get_realtime_statistics(
             "performance_metrics": {},
             "alerts": {}
         }
+
+
+def _read_recent_events(max_lines: int = 5000) -> List[Dict[str, Any]]:
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    events_file = os.path.join(project_root, "logs", "events_record.jsonl")
+    out: List[Dict[str, Any]] = []
+    if not os.path.exists(events_file):
+        return out
+    try:
+        with open(events_file, "rb") as f:
+            # 尾读，提高大文件效率
+            try:
+                f.seek(0, os.SEEK_END)
+                end = f.tell()
+                step = 8192
+                data = b""
+                while end > 0 and data.count(b"\n") <= max_lines:
+                    offset = max(0, end - step)
+                    f.seek(offset)
+                    chunk = f.read(end - offset)
+                    data = chunk + data
+                    end = offset
+                text = data.decode("utf-8", errors="ignore")
+            except Exception:
+                text = open(events_file, "r", encoding="utf-8").read()
+        for line in text.strip().splitlines()[-max_lines:]:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                out.append(json.loads(line))
+            except Exception:
+                continue
+    except Exception:
+        return []
+    return out
+
+
+@router.get("/statistics/summary", summary="事件统计汇总")
+def get_statistics_summary(
+    minutes: int = Query(60, ge=1, le=24 * 60),
+    limit: int = Query(1000, ge=1, le=10000),
+) -> Dict[str, Any]:
+    """返回最近 N 分钟内的事件统计与分布。"""
+    rows = _read_recent_events(max_lines=max(limit * 2, 2000))
+    since_ts = (datetime.utcnow() - timedelta(minutes=minutes)).timestamp()
+    total = 0
+    by_type: Dict[str, int] = {}
+    samples: List[Dict[str, Any]] = []
+
+    for r in reversed(rows):
+        try:
+            ts = float(r.get("ts", 0.0))
+            if ts < since_ts:
+                continue
+            et = str(r.get("type", "UNKNOWN"))
+            by_type[et] = by_type.get(et, 0) + 1
+            total += 1
+            if len(samples) < limit:
+                samples.append(r)
+        except Exception:
+            continue
+
+    return {
+        "window_minutes": minutes,
+        "total_events": total,
+        "counts_by_type": by_type,
+        "samples": list(reversed(samples)),  # 按时间正序返回样本
+    }
