@@ -243,6 +243,64 @@ python main.py --mode detection \
   --log-interval 60
 ```
 
+### 快速本地验证（一机多进程 + 前端配置/统计）
+
+1) 准备环境
+```bash
+cd /Users/zhou/Code/Pyt
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+2) 准备摄像头配置（已提供示例）
+```yaml
+# config/cameras.yaml
+cameras:
+  - id: cam0
+    name: USB0
+    source: "0"
+    regions_file: config/regions.json
+    profile: accurate
+    device: auto
+    imgsz: auto
+    auto_tune: true
+  - id: vid1
+    name: 测试视频
+    source: tests/fixtures/videos/20250724072708.mp4
+    regions_file: config/regions.json
+    profile: accurate
+    device: auto
+    imgsz: auto
+    auto_tune: true
+```
+
+3) 启动 API（控制面）
+```bash
+python main.py --mode api --port 8000
+# 摄像头配置:  http://127.0.0.1:8000/frontend/camera_config.html
+# 统计与看板:  http://127.0.0.1:8000/frontend/statistics.html
+```
+
+4) 启动检测进程（数据面）
+- 前端按钮在摄像头列表中对每路进行“启动/停止/重启”，状态每4秒刷新。
+- 或一键托管全部：
+```bash
+python main.py --mode supervisor
+```
+
+5) 验证叠加图与事件
+- 下载叠加图：
+  - `/api/v1/download/overlay?name=overlay_debug`
+  - `/api/v1/download/overlay?name=overlay_first_frame`
+- 事件文件：`logs/events_record.jsonl`（每条含 `camera_id`）
+- 抓拍目录：`output/captures/<camera_id>/<event_id>/...`
+
+6) 指标与统计
+- 指标：`GET /metrics`（含 `hbd_events_total{camera=..., type=...}`）
+- 统计：`GET /api/v1/statistics/summary?minutes=60&camera_id=cam0`
+- 趋势：`GET /api/v1/statistics/daily?days=7&camera_id=cam0`
+- 历史：`GET /api/v1/statistics/history?minutes=60&limit=100&camera_id=cam0`
+
 - 事件输出：`logs/events_record.jsonl`
 - 建议：用前端页面 `frontend/region_config.html` 标注并保存区域（自动包含 meta），后端将按帧尺寸统一映射。
 
@@ -882,6 +940,40 @@ services:
   - 日志 JSON 行（jsonl）或 Prometheus 导出（可选）
   - 周期性汇总脚本：统计 `events_record.jsonl` 并输出日报
 
+### 统计/趋势/历史（真实接口）
+
+- 概览统计（窗口内聚合，支持摄像头过滤）：
+  - `GET /api/v1/statistics/summary?minutes=60&camera_id=cam0`
+  - 返回：`window_minutes`、`total_events`、`counts_by_type`、`samples`
+
+- 按天趋势（近 N 天）：
+  - `GET /api/v1/statistics/daily?days=7&camera_id=cam0`
+  - 返回：`[{date:'YYYY-MM-DD', total_events: N, counts_by_type: {ETYPE: COUNT}}]`
+
+- 近期历史（倒序，支持摄像头过滤）：
+  - `GET /api/v1/statistics/history?minutes=60&limit=100&camera_id=cam0`
+  - 返回：事件明细（`ts, camera_id, type, track_id, region, detail`）
+
+- 前端入口：`/frontend/statistics.html`
+  - 顶部可选 `camera_id`，概览/趋势/历史联动过滤；支持“下载叠加图”
+
+### Prometheus/Grafana 看板示例（按摄像头）
+
+- 事件总量（按摄像头/类型）：
+  - `hbd_events_total{camera="cam0"}`
+  - `hbd_events_total{camera="cam0", type="NO_HAIRNET_AT_SINK"}`
+
+- 所有摄像头的某类事件：
+  - `sum by (camera) (hbd_events_total{type="NO_HAIRNET_AT_SINK"})`
+
+- 总计：
+  - `hbd_events_total`
+
+- 速率（示例）：
+  - `rate(hbd_events_total{camera="cam0"}[5m])`
+
+> 指标来源：`GET /metrics`（已包含 `camera` 维度；同时保留按 `type` 聚合与总计）。
+
 ---
 
 ## 🔒 隐私与数据治理
@@ -954,6 +1046,56 @@ python scripts/cleanup_output.py --days 7 --yes --paths output/captures logs
   - 流程规则单元/集成/端到端用例：未完成
 
 > 说明：标注“未完成”的项均已在 README 给出落地指引/接口草案，可按优先级 P0→P1→P2 逐步实现。
+
+---
+
+## 📌 统一实施计划（Windows GPU 自适应 + 前端仅配置/展示）
+
+本节统一记录“检测进程直连摄像头（数据面）+ API 仅做配置与统计（控制面）”与“Windows GPU 自适应运行”的合并方案，作为后续执行与验收的权威参考，避免偏差。
+
+### 总体架构
+- **数据面（Workers）**：每路摄像头一个独立检测进程，直连 USB/RTSP，不经 API 转发；输出事件 `logs/events_record.jsonl` 与抓拍 `output/captures/<camera_id>/...`，暴露 `/metrics`。
+- **控制面（API）**：仅负责配置（`/api/v1/cameras`、区域管理）、查询（`/api/v1/events/recent`、`/api/v1/statistics/summary`、`/metrics`）、运维（启动/停止/重启检测进程）。
+- **前端**：仅做配置/状态与统计看板，不播放视频流。
+
+### P0（立即落地，改动小收益高）
+- [ ] 事件增加 `camera_id` 字段，抓拍目录结构采用 `output/captures/<camera_id>/...`
+- [ ] Prometheus 指标增加 `camera` 标签（可选 `device`），示例：`hbd_events_total{camera="cam0",type="NO_HAIRNET_AT_SINK"} 12`
+- [ ] 新增 `src/services/process_manager.py`：读取 `config/cameras.yaml`，提供 `start/stop/restart/status/start_all`
+- [ ] 扩展 `src/api/routers/cameras.py`：`POST /api/v1/cameras/{id}/start|stop|restart`、`GET /api/v1/cameras/{id}/status`
+- [ ] `main.py` 增加 `--mode supervisor`：按 `cameras.yaml` 一键托管全部进程
+- [ ] Windows 硬件自适应：新增 `src/utils/hardware_probe.py`，`main.py` 支持 `--auto-device`、`--auto-tune`（默认启用，未显式指定时生效）
+
+说明与收益：
+- 以最小改动获得“一机多路可运维”“按摄像头可观测”“Windows GPU 自动最优”的工程特性；不破坏现有单路/API 逻辑，可随时回退。
+
+### P1（体验完善）
+- [ ] 前端 `camera_config.html` 增加“启动/停止/重启/状态”按钮，调用上述 API
+- [ ] 统计看板按 `camera_id` 聚合/筛选（使用 `GET /api/v1/statistics/summary?camera_id=...`）
+- [ ] 下载叠加端点：`GET /api/v1/download/overlay?...`（当前未实现，按需补齐）
+
+### P2（中期演进）
+- [ ] 事件改为 MQ（Kafka/RabbitMQ），抓拍改为对象存储（MinIO/S3），API 改读聚合/时序库
+- [ ] 远程多机进程编排：`process_manager` 扩展为 SSH/Ansible 或 K8s DaemonSet
+
+### 当前已完成（与本方案直接相关）
+- [x] 摄像头 CRUD 与预览：`/api/v1/cameras`、`/api/v1/cameras/{id}/preview`
+- [x] 事件查询：`GET /api/v1/events/recent`
+- [x] 统计汇总：`GET /api/v1/statistics/summary`
+- [x] Prometheus 基本指标：`GET /metrics`（未含 camera 维度）
+- [x] WebSocket：`/ws` 与 `/ws/events`（导入路径已修正）
+- [x] RTSP 指数退避重连（检测模式）
+- [x] 区域标注含 meta 与统一映射（RegionManager 改进）
+- [x] 多目标跟踪（MultiObjectTracker）与 UOD 数据结构（含 hand_in_sink）
+
+### 配置与运行要点（落地基线）
+- 权威配置：`config/cameras.yaml`（建议新增），字段：`id,name,source,regions_file,profile,device( auto|cuda|cpu ),imgsz( auto|512|640 ),frame_skip( auto|0|1 ),auto_tune: true`；可附 `env` 覆盖线程数等。
+- 单路调试：`python main.py --mode detection --source 0 --camera-id cam0 --regions-file ... --auto-device --auto-tune`
+- 托管所有摄像头：`python main.py --mode supervisor`
+
+### 与 README 其它章节的对齐说明
+- 本节为统一执行清单与里程碑对照；如有与上文示例不一致之处，以本节为准进行实施与验收。
+
 
 ### v1.0.0 (2024-01-XX)
 
