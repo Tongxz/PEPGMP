@@ -1,331 +1,122 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>发网检测统计分析</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 20px;
-            padding: 30px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-        }
-
-        .header {
-            text-align: center;
-            margin-bottom: 40px;
-        }
-
-        .header h1 {
-            color: #2c3e50;
-            font-size: 2.5em;
-            margin-bottom: 10px;
-            font-weight: 700;
-        }
-
-        .header p {
-            color: #7f8c8d;
-            font-size: 1.1em;
-        }
-
-        .nav-tabs {
-            display: flex;
-            margin-bottom: 30px;
-            border-bottom: 2px solid #ecf0f1;
-        }
-
-        .nav-tab {
-            padding: 15px 30px;
-            background: none;
-            border: none;
-            font-size: 1.1em;
-            font-weight: 600;
-            color: #7f8c8d;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            border-bottom: 3px solid transparent;
-        }
-
-        .nav-tab.active {
-            color: #3498db;
-            border-bottom-color: #3498db;
-        }
-
-        .nav-tab:hover {
-            color: #2980b9;
-        }
-
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 25px;
-            margin-bottom: 40px;
-        }
-
-        .stat-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 25px;
-            border-radius: 15px;
-            text-align: center;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-            transition: transform 0.3s ease;
-        }
-
-        .stat-card:hover {
-            transform: translateY(-5px);
-        }
-
-        .stat-card.success {
-            background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%);
-        }
-
-        .stat-card.warning {
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-        }
-
-        .stat-card.info {
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-        }
-
-        .stat-value {
-            font-size: 2.5em;
-            font-weight: 700;
-            margin-bottom: 10px;
-        }
-
-        .stat-label {
-            font-size: 1.1em;
-            opacity: 0.9;
-        }
-
-        .chart-container {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            margin-bottom: 30px;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
-        }
-
-        .chart-title {
-            font-size: 1.4em;
-            font-weight: 600;
-            color: #2c3e50;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-
-        .chart {
-            width: 100%;
-            height: 400px;
-        }
-
-        .history-table {
-            background: white;
-            border-radius: 15px;
-            overflow: hidden;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
-        }
-
-        .table-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px;
-            font-size: 1.3em;
-            font-weight: 600;
-        }
-
-        .table-content {
-            max-height: 500px;
-            overflow-y: auto;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        th, td {
-            padding: 15px;
-            text-align: left;
-            border-bottom: 1px solid #ecf0f1;
-        }
-
-        th {
-            background: #f8f9fa;
-            font-weight: 600;
-            color: #2c3e50;
-        }
-
-        tr:hover {
-            background: #f8f9fa;
-        }
-
-        .status-badge {
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 0.9em;
-            font-weight: 600;
-        }
-
-        .status-compliant {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .status-non-compliant {
-            background: #f8d7da;
-            color: #721c24;
-        }
-
-        .refresh-btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 12px 25px;
-            border-radius: 25px;
-            font-size: 1em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-bottom: 20px;
-        }
-
-        .refresh-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-        }
-
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #7f8c8d;
-            font-size: 1.1em;
-        }
-
-        .error {
-            background: #f8d7da;
-            color: #721c24;
-            padding: 15px;
-            border-radius: 10px;
-            margin: 20px 0;
-            text-align: center;
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                padding: 20px;
-            }
-
-            .header h1 {
-                font-size: 2em;
-            }
-
-            .stats-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .nav-tabs {
-                flex-direction: column;
-            }
-
-            .nav-tab {
-                text-align: center;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="/frontend/nav.css">
+    <link rel="stylesheet" href="/frontend/theme.css">
+    <script defer src="/frontend/nav.js"></script>
 </head>
+
 <body>
-    <div class="container">
-        <div class="header">
+    <div class="layout-container">
+        <!-- 页面头部 -->
+        <header class="layout-header">
             <h1>🥽 发网检测统计分析</h1>
             <p>实时监控发网佩戴合规情况，提供详细的统计分析和历史记录</p>
-        </div>
+        </header>
 
-        <div class="nav-tabs">
-            <button class="nav-tab active" onclick="showTab('overview')">📊 概览</button>
-            <button class="nav-tab" onclick="showTab('trends')">📈 趋势分析</button>
-            <button class="nav-tab" onclick="showTab('history')">📋 历史记录</button>
-        </div>
-
-        <!-- 概览标签页 -->
-        <div id="overview" class="tab-content active">
-            <button class="refresh-btn" onclick="refreshData()">🔄 刷新数据</button>
-
-            <div class="stats-grid" id="statsGrid">
-                <div class="loading">正在加载统计数据...</div>
-            </div>
-
-            <div class="chart-container">
-                <div class="chart-title">今日检测趋势</div>
-                <canvas id="todayChart" class="chart"></canvas>
-            </div>
-        </div>
-
-        <!-- 趋势分析标签页 -->
-        <div id="trends" class="tab-content">
-            <div class="chart-container">
-                <div class="chart-title">7天合规率趋势</div>
-                <canvas id="complianceChart" class="chart"></canvas>
-            </div>
-
-            <div class="chart-container">
-                <div class="chart-title">检测量统计</div>
-                <canvas id="volumeChart" class="chart"></canvas>
-            </div>
-        </div>
-
-        <!-- 历史记录标签页 -->
-        <div id="history" class="tab-content">
-            <div class="history-table">
-                <div class="table-header">
-                    📋 检测历史记录
+        <!-- 主要内容区 -->
+        <main class="layout-content">
+            <!-- 控制栏 -->
+            <div class="card card-compact">
+                <div class="flex flex-wrap items-center gap-4">
+                    <div class="flex items-center gap-2">
+                        <label for="cameraSelect" class="text-sm font-semibold text-gray-700 flex-none">摄像头:</label>
+                        <select id="cameraSelect" onchange="refreshData()" class="form-select" style="width: 180px;">
+                            <option value="">全部</option>
+                        </select>
+                    </div>
+                    <div class="flex gap-2">
+                        <button class="btn btn-primary btn-sm" onclick="refreshData()">🔄 刷新</button>
+                        <a class="btn btn-secondary btn-sm" href="/api/v1/download/overlay?name=overlay_debug"
+                            target="_blank">
+                            🖼️ 下载叠加图
+                        </a>
+                    </div>
                 </div>
-                <div class="table-content">
-                    <table id="historyTable">
+            </div>
+
+            <!-- 标签页导航 -->
+            <div class="tabs">
+                <div class="tabs-nav">
+                    <button class="tabs-tab active" onclick="showTab('overview')">📊 概览</button>
+                    <button class="tabs-tab" onclick="showTab('trends')">📈 趋势分析</button>
+                    <button class="tabs-tab" onclick="showTab('history')">📋 历史记录</button>
+                </div>
+            </div>
+
+            <!-- 概览标签页 -->
+            <div id="overview" class="tabs-content active">
+                <!-- 统计卡片 -->
+                <div id="statsGrid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
+                    <div class="card card-compact text-center">
+                        <div class="text-2xl font-bold text-primary">0</div>
+                        <div class="text-xs text-gray-600">事件总数</div>
+                    </div>
+                </div>
+
+                <!-- 今日趋势图 -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">今日检测趋势</h3>
+                    </div>
+                    <div style="height: 300px; position: relative;">
+                        <canvas id="todayChart" style="width: 100%; height: 100%;"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 趋势分析标签页 -->
+            <div id="trends" class="tabs-content">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- 事件总量趋势 -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">7天事件总量趋势</h3>
+                        </div>
+                        <div style="height: 300px; position: relative;">
+                            <canvas id="complianceChart" style="width: 100%; height: 100%;"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- 事件类型分布 -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">按类型事件统计</h3>
+                        </div>
+                        <div style="height: 300px; position: relative;">
+                            <canvas id="volumeChart" style="width: 100%; height: 100%;"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 历史记录标签页 -->
+            <div id="history" class="tabs-content">
+                <div class="table-container">
+                    <table class="table" id="historyTable">
                         <thead>
                             <tr>
                                 <th>时间</th>
-                                <th>检测人数</th>
-                                <th>佩戴发网</th>
-                                <th>合规率</th>
-                                <th>平均置信度</th>
-                                <th>状态</th>
+                                <th>摄像头</th>
+                                <th>事件类型</th>
+                                <th>TrackID</th>
+                                <th>区域</th>
+                                <th>详情</th>
                             </tr>
                         </thead>
                         <tbody id="historyTableBody">
                             <tr>
-                                <td colspan="6" class="loading">正在加载历史记录...</td>
+                                <td colspan="6" class="text-center text-gray-500 py-8">正在加载历史记录...</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
             </div>
-        </div>
+        </main>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -337,12 +128,12 @@
         // 标签页切换
         function showTab(tabName) {
             // 隐藏所有标签页
-            document.querySelectorAll('.tab-content').forEach(tab => {
+            document.querySelectorAll('.tabs-content').forEach(tab => {
                 tab.classList.remove('active');
             });
 
             // 移除所有标签按钮的激活状态
-            document.querySelectorAll('.nav-tab').forEach(btn => {
+            document.querySelectorAll('.tabs-tab').forEach(btn => {
                 btn.classList.remove('active');
             });
 
@@ -372,7 +163,9 @@
         // 加载概览数据
         async function loadOverviewData() {
             try {
-                const response = await fetch('http://localhost:8000/api/statistics/realtime');
+                const cam = document.getElementById('cameraSelect').value.trim();
+                const qs = cam ? ('?camera_id=' + encodeURIComponent(cam)) : '';
+                const response = await fetch('/api/v1/statistics/summary' + qs);
                 const data = await response.json();
                 currentData.overview = data;
 
@@ -385,105 +178,62 @@
         }
 
         // 渲染统计卡片
-        function renderStatsCards(data) {
+        function renderStatsCards(summary) {
             const statsGrid = document.getElementById('statsGrid');
-
-            const today = data.today || {};
-            const total = data.total || {};
-
-            const todayComplianceRate = today.today_persons > 0 ?
-                ((today.today_with_hairnet || 0) / today.today_persons * 100).toFixed(1) : '0.0';
-
-            const totalComplianceRate = total.total_persons > 0 ?
-                ((total.total_with_hairnet || 0) / total.total_persons * 100).toFixed(1) : '0.0';
+            const total = summary.total_events || 0;
+            const byType = summary.counts_by_type || {};
+            const get = (k) => (byType[k] || 0);
+            const nh = get('NO_HAIRNET_AT_SINK');
+            const dwell = get('INSUFFICIENT_DWELL_TIME');
+            const washing = get('HANDWASHING_ACTIVE');
+            const others = Math.max(0, total - nh - dwell - washing);
 
             statsGrid.innerHTML = `
-                <div class="stat-card info">
-                    <div class="stat-value">${today.today_detections || 0}</div>
-                    <div class="stat-label">今日检测次数</div>
+                <div class="card card-compact text-center">
+                    <div class="text-2xl font-bold text-primary">${total}</div>
+                    <div class="text-xs text-gray-600">事件总数</div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-value">${today.today_persons || 0}</div>
-                    <div class="stat-label">今日检测人数</div>
+                <div class="card card-compact text-center">
+                    <div class="text-2xl font-bold text-error">${nh}</div>
+                    <div class="text-xs text-gray-600">未戴发网</div>
                 </div>
-                <div class="stat-card success">
-                    <div class="stat-value">${today.today_with_hairnet || 0}</div>
-                    <div class="stat-label">今日佩戴发网</div>
+                <div class="card card-compact text-center">
+                    <div class="text-2xl font-bold text-warning">${dwell}</div>
+                    <div class="text-xs text-gray-600">驻留不足</div>
                 </div>
-                <div class="stat-card ${parseFloat(todayComplianceRate) >= 90 ? 'success' : 'warning'}">
-                    <div class="stat-value">${todayComplianceRate}%</div>
-                    <div class="stat-label">今日合规率</div>
+                <div class="card card-compact text-center">
+                    <div class="text-2xl font-bold text-success">${washing}</div>
+                    <div class="text-xs text-gray-600">洗手检测</div>
                 </div>
-                <div class="stat-card info">
-                    <div class="stat-value">${total.total_detections || 0}</div>
-                    <div class="stat-label">总检测次数</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">${totalComplianceRate}%</div>
-                    <div class="stat-label">总体合规率</div>
+                <div class="card card-compact text-center">
+                    <div class="text-2xl font-bold text-gray-600">${others}</div>
+                    <div class="text-xs text-gray-600">其他事件</div>
                 </div>
             `;
         }
 
-        // 渲染今日趋势图
-        function renderTodayChart(data) {
+        // 概览小图：当前窗口各事件类型占比
+        function renderTodayChart(summary) {
             const ctx = document.getElementById('todayChart').getContext('2d');
-
-            if (charts.today) {
-                charts.today.destroy();
-            }
-
-            // 模拟今日小时数据（实际应该从API获取）
-            const hours = Array.from({length: 24}, (_, i) => i);
-            const detections = hours.map(() => Math.floor(Math.random() * 20));
-            const compliance = hours.map(() => Math.floor(Math.random() * 40 + 60));
-
+            if (charts.today) charts.today.destroy();
+            const byType = summary.counts_by_type || {};
+            const labels = Object.keys(byType);
+            const data = labels.map(k => byType[k] || 0);
             charts.today = new Chart(ctx, {
-                type: 'line',
+                type: 'bar',
                 data: {
-                    labels: hours.map(h => `${h}:00`),
+                    labels,
                     datasets: [{
-                        label: '检测次数',
-                        data: detections,
-                        borderColor: '#3498db',
-                        backgroundColor: 'rgba(52, 152, 219, 0.1)',
-                        tension: 0.4,
-                        yAxisID: 'y'
-                    }, {
-                        label: '合规率(%)',
-                        data: compliance,
-                        borderColor: '#2ecc71',
-                        backgroundColor: 'rgba(46, 204, 113, 0.1)',
-                        tension: 0.4,
-                        yAxisID: 'y1'
+                        label: '事件数',
+                        data,
+                        backgroundColor: 'rgba(0, 92, 180, 0.8)',
+                        borderRadius: 4
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            type: 'linear',
-                            display: true,
-                            position: 'left',
-                            title: {
-                                display: true,
-                                text: '检测次数'
-                            }
-                        },
-                        y1: {
-                            type: 'linear',
-                            display: true,
-                            position: 'right',
-                            title: {
-                                display: true,
-                                text: '合规率(%)'
-                            },
-                            grid: {
-                                drawOnChartArea: false,
-                            },
-                        }
-                    }
+                    scales: { y: { beginAtZero: true } }
                 }
             });
         }
@@ -491,7 +241,9 @@
         // 加载趋势数据
         async function loadTrendsData() {
             try {
-                const response = await fetch('http://localhost:8000/api/statistics/daily?days=7');
+                const cam = document.getElementById('cameraSelect').value.trim();
+                const qs = cam ? ('?days=7&camera_id=' + encodeURIComponent(cam)) : '?days=7';
+                const response = await fetch('/api/v1/statistics/daily' + qs);
                 const data = await response.json();
 
                 renderComplianceChart(data);
@@ -505,24 +257,21 @@
         // 渲染合规率趋势图
         function renderComplianceChart(data) {
             const ctx = document.getElementById('complianceChart').getContext('2d');
+            if (charts.compliance) charts.compliance.destroy();
 
-            if (charts.compliance) {
-                charts.compliance.destroy();
-            }
-
-            const labels = data.map(d => d.date).reverse();
-            const rates = data.map(d => d.compliance_rate || 0).reverse();
+            const labels = data.map(d => d.date);
+            const totals = data.map(d => d.total_events || 0);
 
             charts.compliance = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: '合规率(%)',
-                        data: rates,
-                        borderColor: '#e74c3c',
-                        backgroundColor: 'rgba(231, 76, 60, 0.1)',
-                        tension: 0.4,
+                        label: '总事件量',
+                        data: totals,
+                        borderColor: '#3A7AFE',
+                        backgroundColor: 'rgba(58, 122, 254, 0.1)',
+                        tension: 0.3,
                         fill: true
                     }]
                 },
@@ -532,11 +281,7 @@
                     scales: {
                         y: {
                             beginAtZero: true,
-                            max: 100,
-                            title: {
-                                display: true,
-                                text: '合规率(%)'
-                            }
+                            title: { display: true, text: '事件数' }
                         }
                     }
                 }
@@ -546,40 +291,32 @@
         // 渲染检测量统计图
         function renderVolumeChart(data) {
             const ctx = document.getElementById('volumeChart').getContext('2d');
+            if (charts.volume) charts.volume.destroy();
 
-            if (charts.volume) {
-                charts.volume.destroy();
-            }
+            const labels = data.map(d => d.date);
+            const typeSet = new Set();
+            data.forEach(d => {
+                const m = d.counts_by_type || {};
+                Object.keys(m).forEach(t => typeSet.add(t));
+            });
+            const types = Array.from(typeSet);
+            const palette = ['#3A7AFE', '#52C41A', '#FAAD14', '#FF7A45', '#722ED1', '#FF4D4F'];
+            const color = (i) => palette[i % palette.length];
 
-            const labels = data.map(d => d.date).reverse();
-            const detections = data.map(d => d.total_detections || 0).reverse();
-            const persons = data.map(d => d.total_persons || 0).reverse();
+            const datasets = types.map((t, idx) => ({
+                label: t,
+                data: data.map(d => (d.counts_by_type && d.counts_by_type[t]) ? d.counts_by_type[t] : 0),
+                backgroundColor: color(idx),
+            }));
 
             charts.volume = new Chart(ctx, {
                 type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: '检测次数',
-                        data: detections,
-                        backgroundColor: 'rgba(52, 152, 219, 0.8)'
-                    }, {
-                        label: '检测人数',
-                        data: persons,
-                        backgroundColor: 'rgba(46, 204, 113, 0.8)'
-                    }]
-                },
+                data: { labels, datasets },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: {
-                        y: {
-                            beginAtZero: true,
-                            title: {
-                                display: true,
-                                text: '数量'
-                            }
-                        }
+                        y: { beginAtZero: true, title: { display: true, text: '事件数' } }
                     }
                 }
             });
@@ -588,7 +325,9 @@
         // 加载历史记录
         async function loadHistoryData() {
             try {
-                const response = await fetch('http://localhost:8000/api/statistics/history?limit=50');
+                const cam = document.getElementById('cameraSelect').value.trim();
+                const qs = cam ? ('?minutes=60&limit=50&camera_id=' + encodeURIComponent(cam)) : '?minutes=60&limit=50';
+                const response = await fetch('/api/v1/statistics/history' + qs);
                 const data = await response.json();
 
                 renderHistoryTable(data);
@@ -603,26 +342,22 @@
             const tbody = document.getElementById('historyTableBody');
 
             if (data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="loading">暂无历史记录</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-gray-500 py-8">暂无历史记录</td></tr>';
                 return;
             }
 
-            tbody.innerHTML = data.map(record => {
-                const complianceRate = record.total_persons > 0 ?
-                    (record.persons_with_hairnet / record.total_persons * 100).toFixed(1) : '0.0';
-
-                const isCompliant = parseFloat(complianceRate) >= 90;
-                const statusClass = isCompliant ? 'status-compliant' : 'status-non-compliant';
-                const statusText = isCompliant ? '合规' : '不合规';
-
+            const esc = (s) => (s == null ? '' : String(s)).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+            tbody.innerHTML = data.map(rec => {
+                const when = new Date((rec.ts || 0) * 1000).toLocaleString('zh-CN');
+                const detail = rec.detail ? esc(JSON.stringify(rec.detail)) : '';
                 return `
                     <tr>
-                        <td>${new Date(record.timestamp).toLocaleString('zh-CN')}</td>
-                        <td>${record.total_persons}</td>
-                        <td>${record.persons_with_hairnet}</td>
-                        <td>${complianceRate}%</td>
-                        <td>${(record.accuracy_score || 0).toFixed(3)}</td>
-                        <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                        <td class="text-sm">${when}</td>
+                        <td><span class="badge badge-info">${esc(rec.camera_id)}</span></td>
+                        <td><span class="badge badge-gray text-xs">${esc(rec.type)}</span></td>
+                        <td class="font-mono text-sm">${esc(rec.track_id)}</td>
+                        <td class="text-sm">${esc(rec.region)}</td>
+                        <td class="truncate max-w-xs text-xs" title="${detail}">${detail}</td>
                     </tr>
                 `;
             }).join('');
@@ -630,21 +365,27 @@
 
         // 显示错误信息
         function showError(message) {
-            const errorDiv = document.createElement('div');
-            errorDiv.className = 'error';
-            errorDiv.textContent = message;
-
-            const container = document.querySelector('.container');
-            container.insertBefore(errorDiv, container.firstChild);
-
-            setTimeout(() => {
-                errorDiv.remove();
-            }, 5000);
+            // 简单的错误提示
+            console.error(message);
         }
 
         // 页面加载完成后初始化
-        document.addEventListener('DOMContentLoaded', function() {
-            loadOverviewData();
+        async function loadCameras() {
+            try {
+                const res = await fetch('/api/v1/cameras');
+                const data = await res.json();
+                const sel = document.getElementById('cameraSelect');
+                sel.innerHTML = '<option value="">全部</option>' + (data.cameras || []).map(c =>
+                    `<option value="${c.id}">${c.id} - ${c.name || ''}</option>`
+                ).join('');
+            } catch (e) {
+                console.error('加载摄像头列表失败:', e);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', async function () {
+            await loadCameras();
+            await loadOverviewData();
 
             // 每30秒自动刷新概览数据
             setInterval(() => {
@@ -655,4 +396,5 @@
         });
     </script>
 </body>
+
 </html>
