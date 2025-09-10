@@ -121,3 +121,33 @@ async def download_image(filename: str):
         filename=filename,
         headers={"Content-Length": str(file_size)},
     )
+
+
+@router.get("/overlay", summary="下载最近的区域叠加图")
+async def download_overlay(name: str = "overlay_debug"):
+    """
+    下载最近生成的区域叠加图。
+
+    参数:
+      - name: overlay_debug | overlay_first_frame
+    """
+    logs_dir = "./logs"
+    allowed = {
+        "overlay_debug": os.path.join(logs_dir, "overlay_debug.jpg"),
+        "overlay_first_frame": os.path.join(logs_dir, "overlay_first_frame.jpg"),
+    }
+    if name not in allowed:
+        raise HTTPException(status_code=400, detail="invalid name")
+    file_path = allowed[name]
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="overlay not found")
+    try:
+        file_size = os.path.getsize(file_path)
+    except Exception:
+        file_size = None
+    return FileResponse(
+        path=file_path,
+        media_type="image/jpeg",
+        filename=os.path.basename(file_path),
+        headers={"Content-Length": str(file_size)} if file_size is not None else None,
+    )

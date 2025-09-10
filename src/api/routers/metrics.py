@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import json
-from typing import Dict
+from typing import Dict, Tuple
 
 from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
@@ -41,7 +41,9 @@ def _read_event_counts(max_lines: int = 5000) -> Dict[str, int]:
             try:
                 obj = json.loads(line)
                 et = str(obj.get("type", "UNKNOWN"))
-                counts[et] = counts.get(et, 0) + 1
+                cam = str(obj.get("camera_id", "unknown"))
+                key = f"{cam}||{et}"
+                counts[key] = counts.get(key, 0) + 1
             except Exception:
                 continue
     except Exception:
@@ -57,7 +59,16 @@ def metrics():
     lines = []
     lines.append("# HELP hbd_events_total Total number of events recorded")
     lines.append("# TYPE hbd_events_total counter")
-    for et, c in counts.items():
+    # 输出按 camera+type 的计数，并派生按 type 的聚合
+    by_type: Dict[str, int] = {}
+    for key, c in counts.items():
+        try:
+            cam, et = key.split("||", 1)
+        except ValueError:
+            cam, et = "unknown", key
+        lines.append(f'hbd_events_total{{camera="{cam}",type="{et}"}} {c}')
+        by_type[et] = by_type.get(et, 0) + c
+    for et, c in by_type.items():
         lines.append(f'hbd_events_total{{type="{et}"}} {c}')
     lines.append(f"hbd_events_total {total}")
     return "\n".join(lines) + "\n"

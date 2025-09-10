@@ -135,3 +135,31 @@ def preview_camera(camera_id: str = Path(...)) -> Response:
         raise HTTPException(status_code=500, detail=f"Preview error: {e}")
 
 
+# --- 新增：进程控制路由 ---
+from src.services.process_manager import get_process_manager
+
+
+@router.post("/api/v1/cameras/{camera_id}/start")
+def start_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
+    pm = get_process_manager()
+    return pm.start(camera_id)
+
+
+@router.post("/api/v1/cameras/{camera_id}/stop")
+def stop_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
+    pm = get_process_manager()
+    return pm.stop(camera_id)
+
+
+@router.post("/api/v1/cameras/{camera_id}/restart")
+def restart_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
+    pm = get_process_manager()
+    return pm.restart(camera_id)
+
+
+@router.get("/api/v1/cameras/{camera_id}/status")
+def status_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
+    pm = get_process_manager()
+    return pm.status(camera_id)
+
+

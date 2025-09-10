@@ -14,10 +14,8 @@ import numpy as np
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from PIL import Image
 from websockets.exceptions import ConnectionClosedOK
-from websockets.exceptions import ConnectionClosedOK
-from websockets.exceptions import ConnectionClosedOK
 
-from services.websocket_service import (
+from src.services.websocket_service import (
     ConnectionManager,
     WebSocketSession,
     get_connection_manager,
@@ -74,7 +72,7 @@ async def websocket_endpoint(
 
 async def process_image_detection(session: WebSocketSession, message: dict):
     """处理图像检测请求."""
-    from services.detection_service import process_tracked_frame
+    from src.services.detection_service import process_tracked_frame
 
     try:
         image_data = message.get("data")

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timedelta
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Query
 
@@ -51,7 +51,8 @@ def _read_events(lines: int = 2000) -> List[Dict[str, Any]]:
 def recent_events(
     limit: int = Query(100, ge=1, le=1000),
     minutes: int = Query(60, ge=1, le=24 * 60),
-    etype: str | None = Query(None, description="过滤事件类型，如 NO_HAIRNET_AT_SINK"),
+    etype: Optional[str] = Query(None, description="过滤事件类型，如 NO_HAIRNET_AT_SINK"),
+    camera_id: Optional[str] = Query(None, description="过滤摄像头 ID，如 cam0"),
 ) -> List[Dict[str, Any]]:
     """返回最近的事件列表（从 logs/events_record.jsonl 读取）"""
     rows = _read_events(lines=2000)
@@ -62,6 +63,8 @@ def recent_events(
             if float(r.get("ts", 0.0)) < since_ts:
                 continue
             if etype and str(r.get("type")) != etype:
+                continue
+            if camera_id is not None and str(r.get("camera_id", "")) != str(camera_id):
                 continue
             out.append(r)
             if len(out) >= limit:

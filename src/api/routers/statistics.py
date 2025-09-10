@@ -6,7 +6,7 @@ import logging
 import os
 import json
 from datetime import datetime, timedelta
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 from fastapi import APIRouter, Depends, Query
 
@@ -153,8 +153,12 @@ def _read_recent_events(max_lines: int = 5000) -> List[Dict[str, Any]]:
 def get_statistics_summary(
     minutes: int = Query(60, ge=1, le=24 * 60),
     limit: int = Query(1000, ge=1, le=10000),
+    camera_id: Optional[str] = Query(None, description="按摄像头过滤（可选）"),
 ) -> Dict[str, Any]:
-    """返回最近 N 分钟内的事件统计与分布。"""
+    """返回最近 N 分钟内的事件统计与分布。
+
+    可选参数 camera_id 用于仅统计指定摄像头的事件。
+    """
     rows = _read_recent_events(max_lines=max(limit * 2, 2000))
     since_ts = (datetime.utcnow() - timedelta(minutes=minutes)).timestamp()
     total = 0
@@ -166,6 +170,9 @@ def get_statistics_summary(
             ts = float(r.get("ts", 0.0))
             if ts < since_ts:
                 continue
+            if camera_id is not None:
+                if str(r.get("camera_id", "")) != str(camera_id):
+                    continue
             et = str(r.get("type", "UNKNOWN"))
             by_type[et] = by_type.get(et, 0) + 1
             total += 1
@@ -180,3 +187,79 @@ def get_statistics_summary(
         "counts_by_type": by_type,
         "samples": list(reversed(samples)),  # 按时间正序返回样本
     }
+
+
+@router.get("/statistics/daily", summary="按天统计事件趋势")
+def get_statistics_daily(
+    days: int = Query(7, ge=1, le=90),
+    camera_id: Optional[str] = Query(None, description="按摄像头过滤（可选）"),
+) -> List[Dict[str, Any]]:
+    """返回最近 N 天内的每日事件统计。
+
+    输出：[{date: 'YYYY-MM-DD', total_events: int, counts_by_type: {etype: count}}]
+    """
+    rows = _read_recent_events(max_lines=200000)
+    from datetime import timezone
+    # 构建最近 N 天日期集合（UTC）
+    today = datetime.utcnow().date()
+    days_set = {str((today - timedelta(days=i))) for i in range(days)}
+    per_day: Dict[str, Dict[str, int]] = {}
+    total_day: Dict[str, int] = {}
+    for r in rows:
+        try:
+            if camera_id is not None and str(r.get("camera_id", "")) != str(camera_id):
+                continue
+            ts = float(r.get("ts", 0.0))
+            d = datetime.utcfromtimestamp(ts).date()
+            dstr = str(d)
+            if dstr not in days_set:
+                continue
+            et = str(r.get("type", "UNKNOWN"))
+            if dstr not in per_day:
+                per_day[dstr] = {}
+                total_day[dstr] = 0
+            per_day[dstr][et] = per_day[dstr].get(et, 0) + 1
+            total_day[dstr] = total_day.get(dstr, 0) + 1
+        except Exception:
+            continue
+    # 组装输出（按日期升序）
+    out: List[Dict[str, Any]] = []
+    for i in range(days-1, -1, -1):
+        dstr = str(today - timedelta(days=i))
+        out.append({
+            "date": dstr,
+            "total_events": int(total_day.get(dstr, 0)),
+            "counts_by_type": per_day.get(dstr, {}),
+        })
+    return out
+
+
+@router.get("/statistics/history", summary="近期事件历史")
+def get_statistics_history(
+    minutes: int = Query(60, ge=1, le=24 * 60),
+    limit: int = Query(100, ge=1, le=1000),
+    camera_id: Optional[str] = Query(None, description="按摄像头过滤（可选）"),
+) -> List[Dict[str, Any]]:
+    """返回近期事件列表，按时间倒序。"""
+    rows = _read_recent_events(max_lines=max(limit * 5, 2000))
+    since_ts = (datetime.utcnow() - timedelta(minutes=minutes)).timestamp()
+    out: List[Dict[str, Any]] = []
+    for r in reversed(rows):
+        try:
+            if float(r.get("ts", 0.0)) < since_ts:
+                continue
+            if camera_id is not None and str(r.get("camera_id", "")) != str(camera_id):
+                continue
+            out.append({
+                "ts": r.get("ts"),
+                "camera_id": r.get("camera_id"),
+                "type": r.get("type"),
+                "track_id": r.get("track_id"),
+                "region": (r.get("evidence", {}) or {}).get("region"),
+                "detail": r.get("evidence", {}),
+            })
+            if len(out) >= limit:
+                break
+        except Exception:
+            continue
+    return out
