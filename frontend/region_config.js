@@ -24,11 +24,11 @@ class RegionConfigManager {
 
         // 颜色配置
         this.colors = {
-            entrance: '#28a745',
-            work_area: '#007bff',
-            restricted: '#dc3545',
-            monitoring: '#ffc107',
-            custom: '#6f42c1'
+            entrance: '#52C41A',    // 成功绿
+            work_area: '#3A7AFE',   // 品牌蓝
+            restricted: '#FF4D4F',  // 危险红
+            monitoring: '#FAAD14',  // 警告橙
+            custom: '#722ED1'       // 强调紫
         };
 
         this.initEventListeners();
@@ -167,7 +167,7 @@ class RegionConfigManager {
                     description: regionData.description,
                     points: [...this.drawingPoints],
                     rules: regionData.rules,
-                    color: this.colors[regionData.type] || '#6f42c1',
+                    color: this.colors[regionData.type] || '#722ED1',
                     updatedAt: new Date().toISOString()
                 };
 
@@ -189,7 +189,7 @@ class RegionConfigManager {
                 rules: regionData.rules,
                 isActive: true,
                 createdAt: new Date().toISOString(),
-                color: this.colors[regionData.type] || '#6f42c1'
+                color: this.colors[regionData.type] || '#8B5CF6'
             };
 
             this.regions.push(region);
@@ -339,7 +339,7 @@ class RegionConfigManager {
         // 绘制状态指示器
         this.ctx.beginPath();
         this.ctx.arc(centerX + 50, centerY - 20, 6, 0, 2 * Math.PI);
-        this.ctx.fillStyle = region.isActive ? '#28a745' : '#dc3545';
+        this.ctx.fillStyle = region.isActive ? '#52C41A' : '#FF4D4F';
         this.ctx.fill();
 
         this.ctx.restore();
@@ -351,7 +351,7 @@ class RegionConfigManager {
         this.ctx.save();
 
         // 绘制已确定的线段
-        this.ctx.strokeStyle = '#007bff';
+        this.ctx.strokeStyle = '#3A7AFE';
         this.ctx.lineWidth = 2;
         this.ctx.setLineDash([5, 5]);
 
@@ -376,7 +376,7 @@ class RegionConfigManager {
         this.drawingPoints.forEach((point, index) => {
             this.ctx.beginPath();
             this.ctx.arc(point.x, point.y, 5, 0, 2 * Math.PI);
-            this.ctx.fillStyle = '#007bff';
+            this.ctx.fillStyle = '#3A7AFE';
             this.ctx.fill();
 
             this.ctx.fillStyle = '#fff';
@@ -704,7 +704,7 @@ class RegionConfigManager {
                         points,
                         rules: r.rules || {},
                         isActive: r.is_active !== false,
-                        color: '#007bff'
+                        color: '#3A7AFE'
                     };
                 });
 
@@ -758,7 +758,7 @@ class RegionConfigManager {
                             points,
                             rules: r.rules || {},
                             isActive: r.is_active !== false,
-                            color: '#007bff'
+                            color: '#3A7AFE'
                         };
                     });
                     this.updateRegionList();
