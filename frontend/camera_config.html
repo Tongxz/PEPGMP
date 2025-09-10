@@ -1,137 +1,180 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>摄像头配置管理</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Arial, sans-serif;
-            margin: 24px;
-        }
+    <link rel="stylesheet" href="/frontend/nav.css">
+    <link rel="stylesheet" href="/frontend/theme.css">
+    <script defer src="/frontend/nav.js"></script>
+</head>
 
-        h1 {
-            font-size: 20px;
-            margin: 0 0 12px;
-        }
+<body>
+    <div class="layout-container">
+        <!-- 页面头部 -->
+        <header class="layout-header">
+            <h1>📷 摄像头配置管理</h1>
+            <p>管理摄像头参数、进程状态与区域文件映射</p>
+        </header>
 
-        .row {
-            display: flex;
-            gap: 24px;
-            align-items: flex-start;
-        }
+        <!-- 主要内容区 -->
+        <main class="layout-content">
+            <!-- 双栏布局：配置表单 & 摄像头列表 -->
+            <div class="camera-layout">
+                <!-- 配置表单 - 固定宽度 -->
+                <div class="camera-form-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">添加/编辑摄像头</h2>
+                        </div>
 
-        .card {
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            padding: 16px;
-            flex: 1;
-        }
+                        <form class="space-y-4">
+                            <div class="form-group">
+                                <label for="id" class="form-label">ID（唯一标识）</label>
+                                <input id="id" type="text" class="form-input" placeholder="例如: cam0">
+                            </div>
 
-        label {
-            display: block;
-            font-size: 12px;
-            color: #6b7280;
-            margin: 8px 0 4px;
-        }
+                            <div class="form-group">
+                                <label for="name" class="form-label">名称</label>
+                                <input id="name" type="text" class="form-input" placeholder="例如: 大门口 USB0">
+                            </div>
 
-        input,
-        select {
-            width: 100%;
-            padding: 8px;
-            border: 1px solid #d1d5db;
-            border-radius: 6px;
-            font-size: 14px;
-        }
+                            <div class="form-group">
+                                <label for="source" class="form-label">来源</label>
+                                <input id="source" type="text" class="form-input"
+                                    placeholder="0 或 rtsp://user:pass@ip:554/stream">
+                            </div>
 
-        button {
-            padding: 8px 12px;
-            border: 0;
-            border-radius: 6px;
-            background: #2563eb;
-            color: white;
-            cursor: pointer;
-        }
+                            <div class="form-group">
+                                <label for="resolution" class="form-label">分辨率（可选）</label>
+                                <input id="resolution" type="text" class="form-input" placeholder="1280x720">
+                            </div>
 
-        button.secondary {
-            background: #6b7280;
-        }
+                            <div class="form-group">
+                                <label for="fps" class="form-label">帧率（可选）</label>
+                                <input id="fps" type="number" class="form-input" min="1" max="120" placeholder="20">
+                            </div>
 
-        button.danger {
-            background: #dc2626;
-        }
+                            <div class="form-group">
+                                <label for="regions_file" class="form-label">区域文件（可选）</label>
+                                <input id="regions_file" type="text" class="form-input"
+                                    placeholder="config/regions_site_sink.json">
+                            </div>
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 14px;
-        }
+                            <div class="flex gap-2">
+                                <button type="button" class="btn btn-primary flex-1" onclick="createCam()">创建</button>
+                                <button type="button" class="btn btn-secondary flex-1" onclick="updateCam()">更新</button>
+                            </div>
 
-        th,
-        td {
-            border-bottom: 1px solid #e5e7eb;
-            padding: 8px;
-            text-align: left;
-        }
+                            <div class="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+                                <strong>提示：</strong>更新时只需填写要修改的字段，未填写的字段保留原值。
+                            </div>
+                        </form>
+                    </div>
+                </div>
 
-        tr:hover {
-            background: #f9fafb;
-        }
+                <!-- 摄像头列表 - 占满剩余空间 -->
+                <div class="camera-table-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">已配置摄像头</h2>
+                        </div>
 
-        .actions {
-            display: flex;
-            gap: 8px;
-        }
+                        <div class="table-container">
+                            <table class="table" id="cameraTable">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>名称</th>
+                                        <th>来源</th>
+                                        <th>分辨率</th>
+                                        <th>FPS</th>
+                                        <th>状态</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="cameraTableBody">
+                                    <tr>
+                                        <td colspan="7" class="text-center text-gray-500 py-8">正在加载摄像头列表...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
 
-        .muted {
-            color: #6b7280;
-            font-size: 12px;
-        }
+                        <div class="mt-4 p-3 bg-gray-50 rounded-lg">
+                            <div class="text-sm text-gray-600">
+                                <strong>配置文件：</strong> <code>config/cameras.yaml</code>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+    </div>
+    </main>
+    </div>
 
-        .hint {
-            font-size: 12px;
-            color: #374151;
-            margin-top: 8px;
-        }
-    </style>
     <script>
+        // API 调用封装
         async function api(path, options = {}) {
-            const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...options });
-            if (!res.ok) { throw new Error('HTTP ' + res.status); }
+            const res = await fetch(path, {
+                headers: { 'Content-Type': 'application/json' },
+                ...options
+            });
+            if (!res.ok) {
+                throw new Error('HTTP ' + res.status);
+            }
             const ct = res.headers.get('content-type') || '';
             return ct.includes('application/json') ? res.json() : res.text();
         }
 
+        // 加载摄像头列表
         async function loadList() {
             try {
                 const data = await api('/api/v1/cameras');
-                const tbody = document.querySelector('#tbl tbody');
-                tbody.innerHTML = '';
-                (data.cameras || []).forEach(cam => {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-            <td>${cam.id || ''}</td>
-            <td>${cam.name || ''}</td>
-            <td class="muted">${cam.source || ''}</td>
-            <td>${cam.resolution || ''}</td>
-            <td>${cam.fps ?? ''}</td>
-            <td class="muted">${cam.regions_file || ''}</td>
-            <td class="actions">
-              <button class="secondary" onclick='fillForm(${JSON.stringify(cam)})'>编辑</button>
-              <button class="danger" onclick='delCam(${JSON.stringify(cam.id)})'>删除</button>
-            </td>
-          `;
-                    tbody.appendChild(tr);
-                });
+                const tbody = document.getElementById('cameraTableBody');
+
+                if (!data.cameras || data.cameras.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-gray-500 py-8">暂无配置的摄像头</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = data.cameras.map(cam => `
+                    <tr>
+                        <td class="font-mono text-sm">${cam.id || ''}</td>
+                        <td>${cam.name || ''}</td>
+                        <td class="font-mono text-xs text-gray-600 truncate max-w-xs" title="${cam.source || ''}">${cam.source || ''}</td>
+                        <td class="text-sm">${cam.resolution || '-'}</td>
+                        <td class="text-sm">${cam.fps ?? '-'}</td>
+                        <td><span class="badge badge-gray" id="status-${cam.id}">检测中</span></td>
+                        <td>
+                            <div class="flex gap-1 flex-wrap">
+                                <button class="btn btn-sm btn-secondary" onclick='fillForm(${JSON.stringify(cam)})'>编辑</button>
+                                <button class="btn btn-sm btn-primary" onclick='startCam(${JSON.stringify(cam.id)})'>启动</button>
+                                <button class="btn btn-sm btn-secondary" onclick='stopCam(${JSON.stringify(cam.id)})'>停止</button>
+                                <button class="btn btn-sm btn-danger" onclick='delCam(${JSON.stringify(cam.id)})'>删除</button>
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+
+                await refreshStatus();
             } catch (e) {
-                alert('加载失败: ' + e.message);
+                console.error('加载摄像头列表失败:', e);
+                showMessage('加载失败: ' + e.message, 'error');
             }
         }
 
-        function val(id) { return document.getElementById(id).value.trim(); }
-        function setVal(id, v) { document.getElementById(id).value = v ?? ''; }
+        // 表单值获取/设置
+        function val(id) {
+            return document.getElementById(id).value.trim();
+        }
 
+        function setVal(id, v) {
+            document.getElementById(id).value = v ?? '';
+        }
+
+        // 填充表单
         function fillForm(cam) {
             setVal('id', cam.id);
             setVal('name', cam.name);
@@ -141,34 +184,7 @@
             setVal('regions_file', cam.regions_file || '');
         }
 
-        async function createCam() {
-            const payload = collectPayload(true);
-            try {
-                await api('/api/v1/cameras', { method: 'POST', body: JSON.stringify(payload) });
-                await loadList();
-                alert('已创建');
-            } catch (e) { alert('创建失败: ' + e.message); }
-        }
-
-        async function updateCam() {
-            const payload = collectPayload(false);
-            const id = val('id');
-            if (!id) return alert('请先填写 id');
-            try {
-                await api('/api/v1/cameras/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify(payload) });
-                await loadList();
-                alert('已更新');
-            } catch (e) { alert('更新失败: ' + e.message); }
-        }
-
-        async function delCam(id) {
-            if (!confirm('确认删除摄像头 ' + id + ' ?')) return;
-            try {
-                await api('/api/v1/cameras/' + encodeURIComponent(id), { method: 'DELETE' });
-                await loadList();
-            } catch (e) { alert('删除失败: ' + e.message); }
-        }
-
+        // 收集表单数据
         function collectPayload(requireId) {
             const id = val('id');
             const name = val('name');
@@ -176,70 +192,135 @@
             const resolution = val('resolution');
             const fps = val('fps');
             const regions_file = val('regions_file');
-            if (requireId && !id) throw new Error('id 不能为空');
-            if (!name) throw new Error('name 不能为空');
-            if (!source) throw new Error('source 不能为空');
+
+            if (requireId && !id) throw new Error('ID 不能为空');
+            if (!name) throw new Error('名称 不能为空');
+            if (!source) throw new Error('来源 不能为空');
+
             const payload = { id, name, source };
             if (resolution) payload.resolution = resolution;
             if (fps) payload.fps = Number(fps);
             if (regions_file) payload.regions_file = regions_file;
+
             return payload;
         }
 
-        window.addEventListener('DOMContentLoaded', loadList);
+        // 创建摄像头
+        async function createCam() {
+            try {
+                const payload = collectPayload(true);
+                await api('/api/v1/cameras', { method: 'POST', body: JSON.stringify(payload) });
+                await loadList();
+                clearForm();
+                showMessage('摄像头创建成功', 'success');
+            } catch (e) {
+                showMessage('创建失败: ' + e.message, 'error');
+            }
+        }
+
+        // 更新摄像头
+        async function updateCam() {
+            try {
+                const payload = collectPayload(false);
+                const id = val('id');
+                if (!id) return showMessage('请先填写 ID', 'error');
+
+                await api('/api/v1/cameras/' + encodeURIComponent(id), {
+                    method: 'PUT',
+                    body: JSON.stringify(payload)
+                });
+                await loadList();
+                clearForm();
+                showMessage('摄像头更新成功', 'success');
+            } catch (e) {
+                showMessage('更新失败: ' + e.message, 'error');
+            }
+        }
+
+        // 删除摄像头
+        async function delCam(id) {
+            if (!confirm('确认删除摄像头 ' + id + ' ?')) return;
+            try {
+                await api('/api/v1/cameras/' + encodeURIComponent(id), { method: 'DELETE' });
+                await loadList();
+                showMessage('摄像头删除成功', 'success');
+            } catch (e) {
+                showMessage('删除失败: ' + e.message, 'error');
+            }
+        }
+
+        // 摄像头控制
+        async function startCam(id) {
+            try {
+                await api('/api/v1/cameras/' + encodeURIComponent(id) + '/start', { method: 'POST' });
+                await refreshStatus();
+                showMessage('摄像头启动成功', 'success');
+            } catch (e) {
+                showMessage('启动失败: ' + e.message, 'error');
+            }
+        }
+
+        async function stopCam(id) {
+            try {
+                await api('/api/v1/cameras/' + encodeURIComponent(id) + '/stop', { method: 'POST' });
+                await refreshStatus();
+                showMessage('摄像头停止成功', 'success');
+            } catch (e) {
+                showMessage('停止失败: ' + e.message, 'error');
+            }
+        }
+
+        // 刷新状态
+        async function refreshStatus() {
+            const tbody = document.getElementById('cameraTableBody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+
+            for (const tr of rows) {
+                const id = tr.children[0]?.textContent?.trim();
+                if (!id) continue;
+
+                try {
+                    const s = await api('/api/v1/cameras/' + encodeURIComponent(id) + '/status');
+                    const badge = tr.querySelector(`#status-${CSS.escape(id)}`);
+                    if (badge) {
+                        if (s.running) {
+                            badge.className = 'badge badge-success';
+                            badge.textContent = `运行中 (PID ${s.pid})`;
+                        } else {
+                            badge.className = 'badge badge-gray';
+                            badge.textContent = '已停止';
+                        }
+                    }
+                } catch (e) {
+                    // 状态获取失败，保持原样
+                }
+            }
+        }
+
+        // 清空表单
+        function clearForm() {
+            ['id', 'name', 'source', 'resolution', 'fps', 'regions_file'].forEach(id => setVal(id, ''));
+        }
+
+        // 消息提示
+        function showMessage(message, type = 'info') {
+            // 简单的消息提示
+            if (type === 'error') {
+                alert('❌ ' + message);
+            } else if (type === 'success') {
+                alert('✅ ' + message);
+            } else {
+                alert('ℹ️ ' + message);
+            }
+        }
+
+        // 页面初始化
+        window.addEventListener('DOMContentLoaded', () => {
+            loadList();
+            // 每5秒刷新状态
+            setInterval(refreshStatus, 5000);
+        });
     </script>
-</head>
-
-<body>
-    <h1>摄像头配置管理</h1>
-    <div class="row">
-        <div class="card" style="max-width: 440px;">
-            <h2 style="font-size:16px; margin-top:0;">表单</h2>
-            <label for="id">ID（唯一）</label>
-            <input id="id" placeholder="例如 cam0" />
-
-            <label for="name">名称</label>
-            <input id="name" placeholder="例如 大门口 USB0" />
-
-            <label for="source">来源（USB 索引或 rtsp://）</label>
-            <input id="source" placeholder="0 或 rtsp://user:pass@ip:554/stream" />
-
-            <label for="resolution">分辨率（可选）</label>
-            <input id="resolution" placeholder="1280x720" />
-
-            <label for="fps">帧率（可选）</label>
-            <input id="fps" type="number" min="1" max="120" placeholder="20" />
-
-            <label for="regions_file">区域文件（可选）</label>
-            <input id="regions_file" placeholder="config/regions_site_sink.json" />
-
-            <div class="actions" style="margin-top:12px;">
-                <button onclick="createCam()">创建</button>
-                <button class="secondary" onclick="updateCam()">更新</button>
-            </div>
-            <div class="hint">更新时只需填写要修改的字段，未填写的字段保留原值。</div>
-        </div>
-
-        <div class="card">
-            <h2 style="font-size:16px; margin-top:0;">已配置摄像头</h2>
-            <table id="tbl">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>名称</th>
-                        <th>来源</th>
-                        <th>分辨率</th>
-                        <th>FPS</th>
-                        <th>区域文件</th>
-                        <th>操作</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-            <div class="muted" style="margin-top:8px;">数据存储于 <code>config/cameras.yaml</code></div>
-        </div>
-    </div>
 </body>
 
 </html>
-

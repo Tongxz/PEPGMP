@@ -1,929 +1,149 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>人体行为检测系统</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .header {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            padding: 1rem 2rem;
-            text-align: center;
-            color: white;
-            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
-        }
-
-        .header h1 {
-            font-size: 2.5rem;
-            margin-bottom: 0.5rem;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-        }
-
-        .header p {
-            font-size: 1.1rem;
-            opacity: 0.9;
-        }
-
-        .container {
-            flex: 1;
-            display: flex;
-            gap: 2rem;
-            padding: 2rem;
-            max-width: 1400px;
-            margin: 0 auto;
-            width: 100%;
-        }
-
-        .upload-section {
-            flex: 1;
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 20px;
-            padding: 2rem;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-            backdrop-filter: blur(10px);
-        }
-
-        .realtime-section {
-            flex: 1;
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 20px;
-            padding: 2rem;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-            backdrop-filter: blur(10px);
-        }
-
-        .section-title {
-            font-size: 1.5rem;
-            color: #333;
-            margin-bottom: 1.5rem;
-            text-align: center;
-            font-weight: 600;
-        }
-
-        .upload-area {
-            border: 3px dashed #667eea;
-            border-radius: 15px;
-            padding: 3rem 2rem;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            background: linear-gradient(45deg, #f8f9ff, #e8ecff);
-        }
-
-        .upload-area:hover {
-            border-color: #764ba2;
-            background: linear-gradient(45deg, #e8ecff, #f8f9ff);
-            transform: translateY(-2px);
-        }
-
-        .upload-area.dragover {
-            border-color: #764ba2;
-            background: linear-gradient(45deg, #e8ecff, #f0f2ff);
-        }
-
-        .upload-icon {
-            font-size: 3rem;
-            color: #667eea;
-            margin-bottom: 1rem;
-        }
-
-        .upload-text {
-            font-size: 1.1rem;
-            color: #666;
-            margin-bottom: 0.5rem;
-        }
-
-        .upload-formats {
-            font-size: 0.9rem;
-            color: #888;
-            margin-bottom: 1rem;
-        }
-
-        .file-input {
-            display: none;
-        }
-
-        .file-type-selector {
-            display: flex;
-            justify-content: center;
-            gap: 2rem;
-            margin-bottom: 2rem;
-            padding: 1rem;
-            background: linear-gradient(45deg, #f8f9ff, #e8ecff);
-            border-radius: 15px;
-        }
-
-        .detection-type-selector {
-            margin-bottom: 2rem;
-            padding: 1.5rem;
-            background: linear-gradient(45deg, #fff8f0, #f0f8ff);
-            border-radius: 15px;
-            border: 2px solid #e8ecff;
-        }
-
-        .detection-options {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            justify-items: center;
-            margin-bottom: 1rem;
-        }
-
-        .checkbox-option {
-            display: flex;
-            align-items: center;
-            padding: 0.75rem 1rem;
-            background: white;
-            border: 2px solid #e9ecef;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .checkbox-option:hover {
-            border-color: #667eea;
-            background: #f0f8ff;
-        }
-
-        .checkbox-option input[type="checkbox"] {
-            margin-right: 0.5rem;
-            transform: scale(1.2);
-            accent-color: #667eea;
-        }
-
-        .checkbox-option input[type="checkbox"]:checked + .checkbox-label {
-            color: #667eea;
-            font-weight: 600;
-        }
-
-        .checkbox-label {
-            font-size: 0.9rem;
-            color: #495057;
-            transition: color 0.3s ease;
-        }
-
-        .select-all-container {
-            display: flex;
-            justify-content: center;
-            gap: 1rem;
-            margin-top: 1rem;
-        }
-
-        .btn-secondary {
-            background: rgba(102, 126, 234, 0.1);
-            color: #667eea;
-            border: 1px solid #667eea;
-            padding: 0.5rem 1rem;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            min-width: 80px;
-        }
-
-        .btn-secondary:hover {
-            background: #667eea;
-            color: white;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-        }
-
-        .radio-option {
-            display: flex;
-            align-items: center;
-            cursor: pointer;
-            padding: 0.8rem 1.5rem;
-            border-radius: 25px;
-            background: white;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            transition: all 0.3s ease;
-        }
-
-        .radio-option:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-        }
-
-        .radio-option input[type="radio"] {
-            margin-right: 0.5rem;
-            accent-color: #667eea;
-        }
-
-        .radio-option input[type="radio"]:checked + .radio-label {
-            color: #667eea;
-            font-weight: 600;
-        }
-
-        .radio-label {
-            font-size: 1rem;
-            color: #666;
-            transition: all 0.3s ease;
-        }
-
-        .btn {
-            background: linear-gradient(45deg, #667eea, #764ba2);
-            color: white;
-            border: none;
-            padding: 12px 30px;
-            border-radius: 25px;
-            cursor: pointer;
-            font-size: 1rem;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-        }
-
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
-        }
-
-        .btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .video-container {
-            position: relative;
-            background: #000;
-            border-radius: 15px;
-            overflow: hidden;
-            margin-bottom: 1rem;
-        }
-
-        .video-element {
-            width: 100%;
-            height: 300px;
-            object-fit: cover;
-        }
-
-        .canvas-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            pointer-events: none;
-        }
-
-        .result-container {
-            margin-top: 1.5rem;
-            padding: 1.5rem;
-            background: linear-gradient(45deg, #f8f9ff, #e8ecff);
-            border-radius: 15px;
-            border-left: 4px solid #667eea;
-        }
-
-        .result-image {
-            width: 100%;
-            border-radius: 10px;
-            margin-bottom: 1rem;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-        }
-
-        .annotated-image-container {
-            margin: 20px 0;
-            padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 15px;
-            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
-            color: white;
-        }
-
-        .image-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-
-        .image-header h4 {
-            margin: 0;
-            color: white;
-            font-size: 18px;
-            font-weight: 600;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
-        }
-
-        .image-controls {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-
-        .image-controls .btn-secondary {
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            backdrop-filter: blur(10px);
-        }
-
-        .image-controls .btn-secondary:hover {
-            background: rgba(255, 255, 255, 0.3);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-        }
-
-        .image-wrapper {
-            position: relative;
-            background: white;
-            border-radius: 12px;
-            padding: 15px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-        }
-
-        .result-image.enhanced-annotation {
-            width: 100%;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            position: relative;
-        }
-
-        .result-image.enhanced-annotation:hover {
-            transform: scale(1.02);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-        }
-
-        .result-image.fullscreen {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) scale(1);
-            max-width: 90vw;
-            max-height: 90vh;
-            z-index: 10000;
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-        }
-
-        .image-overlay {
-            position: absolute;
-            bottom: 15px;
-            right: 15px;
-            background: rgba(0, 0, 0, 0.8);
-            border-radius: 8px;
-            padding: 12px;
-            backdrop-filter: blur(10px);
-        }
-
-        .annotation-legend {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            font-size: 12px;
-        }
-
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: white;
-        }
-
-        .legend-color {
-            width: 12px;
-            height: 12px;
-            border-radius: 2px;
-            border: 1px solid rgba(255,255,255,0.3);
-        }
-
-        .legend-color.compliant {
-            background: #10b981;
-        }
-
-        .legend-color.non-compliant {
-            background: #ef4444;
-        }
-
-        .legend-note {
-            color: #d1d5db;
-            font-style: italic;
-            margin-top: 4px;
-            font-size: 11px;
-        }
-
-        /* 通知动画 */
-        @keyframes slideIn {
-            from {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-
-        @keyframes slideOut {
-            from {
-                transform: translateX(0);
-                opacity: 1;
-            }
-            to {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-        }
-
-        /* 全屏时的背景遮罩 */
-        .result-image.fullscreen::before {
-            content: '';
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(0, 0, 0, 0.8);
-            z-index: -1;
-        }
-
-        .detection-info {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-top: 1rem;
-        }
-
-        .info-card {
-            background: white;
-            padding: 1rem;
-            border-radius: 10px;
-            text-align: center;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-
-        .info-value {
-            font-size: 2rem;
-            font-weight: bold;
-            color: #2563eb;
-            margin-bottom: 0.5rem;
-        }
-
-        .compliance-good {
-            color: #16a34a !important;
-        }
-
-        .compliance-medium {
-            color: #ea580c !important;
-        }
-
-        .compliance-poor {
-            color: #dc2626 !important;
-        }
-
-        .info-value.good {
-            color: #27ae60;
-        }
-
-        .info-value.warning {
-            color: #f39c12;
-        }
-
-        .info-value.danger {
-            color: #e74c3c;
-        }
-
-        .info-label {
-            color: #666;
-            font-size: 0.9rem;
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-top: 1rem;
-        }
-
-        .stat-card {
-            background: white;
-            padding: 1rem;
-            border-radius: 10px;
-            text-align: center;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-
-        .stat-value {
-            font-size: 2.5em;
-            font-weight: 700;
-            color: #2c3e50;
-            margin-bottom: 10px;
-        }
-
-        .stat-value.good {
-            color: #27ae60;
-        }
-
-        .stat-value.warning {
-            color: #f39c12;
-        }
-
-        .stat-value.danger {
-            color: #e74c3c;
-        }
-
-        .stat-label {
-            color: #666;
-            font-size: 0.9rem;
-        }
-
-        .detection {
-            margin: 5px 0;
-            padding: 8px;
-            background: #f8f9fa;
-            border-radius: 5px;
-            font-size: 0.9em;
-        }
-
-        .detection.compliant {
-            background: #d4edda;
-            border-left: 4px solid #28a745;
-        }
-
-        .detection.non-compliant {
-            background: #f8d7da;
-            border-left: 4px solid #dc3545;
-        }
-
-        .summary {
-            display: flex;
-            gap: 15px;
-            margin: 10px 0;
-            font-size: 0.9em;
-        }
-
-        .with-hairnet {
-            color: #28a745;
-            font-weight: 600;
-        }
-
-        .without-hairnet {
-            color: #dc3545;
-            font-weight: 600;
-        }
-
-        .compliance {
-            padding: 4px 8px;
-            border-radius: 12px;
-            font-size: 0.8em;
-            font-weight: 600;
-        }
-
-        .compliance.good {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        /* 行为检测详情样式 */
-        .behavior-details {
-            margin-top: 1rem;
-            padding: 1rem;
-            background: #f8f9fa;
-            border-radius: 8px;
-            border: 1px solid #e9ecef;
-        }
-
-        .person-behavior {
-            margin-bottom: 1rem;
-            padding: 0.8rem;
-            background: white;
-            border-radius: 6px;
-            border-left: 4px solid #007bff;
-        }
-
-        .person-behavior:last-child {
-            margin-bottom: 0;
-        }
-
-        .behavior-list {
-            margin-top: 0.5rem;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-        }
-
-        .behavior-item {
-            display: inline-block;
-            padding: 0.3rem 0.6rem;
-            background: #e9ecef;
-            border-radius: 15px;
-            font-size: 0.85rem;
-            font-weight: 500;
-        }
-
-        .behavior-item:contains('✅') {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .behavior-item:contains('❌') {
-            background: #f8d7da;
-            color: #721c24;
-        }
-
-        .behavior-item:contains('🧼') {
-            background: #cce5ff;
-            color: #004085;
-        }
-
-        .behavior-item:contains('🧴') {
-            background: #fff3cd;
-            color: #856404;
-        }
-
-        .no-detections {
-            text-align: center;
-            color: #6c757d;
-            font-style: italic;
-            padding: 1rem;
-        }
-
-        .compliance.warning {
-            background: #fff3cd;
-            color: #856404;
-        }
-
-        .status {
-            padding: 0.5rem 1rem;
-            border-radius: 20px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            text-align: center;
-            margin: 1rem 0;
-        }
-
-        .status.success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-
-        .status.error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-
-        .status.info {
-            background: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
-        }
-
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-right: 10px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .controls {
-            display: flex;
-            gap: 1rem;
-            justify-content: center;
-            margin: 1.5rem 0;
-        }
-
-        .record-options {
-            margin: 1rem 0;
-            padding: 1rem;
-            background: linear-gradient(45deg, #f8f9ff, #e8ecff);
-            border-radius: 10px;
-            border-left: 4px solid #667eea;
-        }
-
-        .record-checkbox {
-            display: flex;
-            align-items: center;
-            cursor: pointer;
-            font-size: 1rem;
-            color: #333;
-        }
-
-        .record-checkbox input[type="checkbox"] {
-            margin-right: 0.8rem;
-            transform: scale(1.2);
-            accent-color: #667eea;
-        }
-
-        .record-label {
-            font-weight: 500;
-            transition: color 0.3s ease;
-        }
-
-        .record-checkbox:hover .record-label {
-            color: #667eea;
-        }
-
-        .video-download-container {
-            margin: 1.5rem 0;
-            padding: 1.5rem;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 15px;
-            color: white;
-            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
-        }
-
-        .download-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-
-        .download-header h4 {
-            margin: 0;
-            font-size: 18px;
-            font-weight: 600;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
-        }
-
-        .download-info {
-            font-size: 14px;
-            opacity: 0.9;
-        }
-
-        .download-btn {
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            padding: 12px 24px;
-            border-radius: 25px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            backdrop-filter: blur(10px);
-            width: 100%;
-        }
-
-        .download-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0,0,0,0.2);
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                flex-direction: column;
-                padding: 1rem;
-            }
-
-            .header h1 {
-                font-size: 2rem;
-            }
-
-            .detection-info {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="/frontend/nav.css">
+    <link rel="stylesheet" href="/frontend/theme.css">
 </head>
+
 <body>
-    <div class="header">
-        <h1>🤖 人体行为检测系统</h1>
-        <p>基于深度学习的实时人体检测与分析平台</p>
-    </div>
+    <script defer src="/frontend/nav.js"></script>
 
-    <div class="container">
-        <!-- 图像/视频上传检测区域 -->
-        <div class="upload-section">
-            <h2 class="section-title">📷 图像/视频检测</h2>
+    <div class="layout-container">
+        <!-- 页面头部 -->
+        <header class="layout-header">
+            <h1>🤖 人体行为检测系统</h1>
+            <p>基于深度学习的实时人体检测与分析平台</p>
+        </header>
 
-            <!-- 文件类型选择 -->
-            <div class="file-type-selector">
-                <label class="radio-option">
-                    <input type="radio" name="fileType" value="image" checked>
-                    <span class="radio-label">📷 图片检测</span>
-                </label>
-                <label class="radio-option">
-                    <input type="radio" name="fileType" value="video">
-                    <span class="radio-label">🎬 视频检测</span>
-                </label>
-            </div>
-
-            <!-- 综合检测说明 -->
-            <div class="detection-info-section">
-                <h3 style="text-align: center; margin-bottom: 1rem; color: #333; font-size: 1.1rem;">🔍 综合检测功能</h3>
-                <div class="detection-features" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5rem; margin-bottom: 1rem; text-align: center;">
-                    <div class="feature-item" style="padding: 0.5rem; background: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef;">
-                        <span style="font-size: 1.2rem;">👥</span>
-                        <div style="font-size: 0.85rem; color: #666;">人体检测</div>
+        <!-- 主要内容区 -->
+        <main class="layout-content">
+            <!-- 功能介绍 -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title text-center">🔍 综合检测功能</h2>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="text-center">
+                        <div class="text-xl mb-2">👥</div>
+                        <div class="text-sm text-gray-600">人体检测</div>
                     </div>
-                    <div class="feature-item" style="padding: 0.5rem; background: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef;">
-                        <span style="font-size: 1.2rem;">🧢</span>
-                        <div style="font-size: 0.85rem; color: #666;">发网检测</div>
+                    <div class="text-center">
+                        <div class="text-xl mb-2">🧢</div>
+                        <div class="text-sm text-gray-600">发网检测</div>
                     </div>
-                    <div class="feature-item" style="padding: 0.5rem; background: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef;">
-                        <span style="font-size: 1.2rem;">🧼</span>
-                        <div style="font-size: 0.85rem; color: #666;">洗手检测</div>
+                    <div class="text-center">
+                        <div class="text-xl mb-2">🧼</div>
+                        <div class="text-sm text-gray-600">洗手检测</div>
                     </div>
-                    <div class="feature-item" style="padding: 0.5rem; background: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef;">
-                        <span style="font-size: 1.2rem;">🧴</span>
-                        <div style="font-size: 0.85rem; color: #666;">消毒检测</div>
+                    <div class="text-center">
+                        <div class="text-xl mb-2">🧴</div>
+                        <div class="text-sm text-gray-600">消毒检测</div>
                     </div>
                 </div>
-                <p style="text-align: center; color: #666; font-size: 0.9rem; margin: 0;">一次检测，全面分析 - 自动识别人体、发网佩戴、洗手和消毒行为</p>
+                <p class="text-center text-gray-600 text-sm mt-4">
+                    一次检测，全面分析 - 自动识别人体、发网佩戴、洗手和消毒行为
+                </p>
             </div>
 
-            <div class="upload-area" id="uploadArea">
-                <div class="upload-icon">📁</div>
-                <div class="upload-text" id="uploadText">点击或拖拽图片到此处</div>
-                <div class="upload-formats" id="uploadFormats">支持 JPG、PNG、GIF 格式</div>
-                <input type="file" id="fileInput" class="file-input" accept="image/*">
-            </div>
+            <!-- 双栏布局：上传检测 & 实时检测 -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- 图像/视频上传检测 -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">📷 图像/视频检测</h2>
+                    </div>
 
-            <div class="controls">
-                <button class="btn" id="uploadBtn">选择文件</button>
-                <button class="btn" id="detectBtn" disabled>开始检测</button>
-            </div>
+                    <!-- 文件类型选择 -->
+                    <div class="flex justify-center gap-4 mb-6">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="fileType" value="image" checked class="text-primary">
+                            <span>📷 图片检测</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="fileType" value="video" class="text-primary">
+                            <span>🎬 视频检测</span>
+                        </label>
+                    </div>
 
-            <!-- 视频录制选项 -->
-            <div class="record-options" id="recordOptions" style="display: none;">
-                <label class="record-checkbox">
-                    <input type="checkbox" id="recordProcess">
-                    <span class="checkmark"></span>
-                    <span class="record-label">📹 录制检测过程（生成带标注的视频）</span>
-                </label>
-            </div>
+                    <!-- 上传区域 -->
+                    <div id="uploadArea"
+                        class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer transition-colors hover:border-primary hover:bg-gray-50">
+                        <div class="text-4xl mb-4">📁</div>
+                        <div id="uploadText" class="text-lg mb-2">点击或拖拽文件到此处</div>
+                        <div id="uploadFormats" class="text-sm text-gray-600 mb-4">支持 JPG、PNG、GIF 格式</div>
+                        <input type="file" id="fileInput" class="hidden" accept="image/*">
+                    </div>
 
-            <div id="uploadStatus"></div>
-            <div id="uploadResult"></div>
-        </div>
+                    <!-- 控制按钮 -->
+                    <div class="flex gap-3 justify-center mt-6">
+                        <button class="btn btn-secondary" id="uploadBtn">选择文件</button>
+                        <button class="btn btn-primary" id="detectBtn" disabled>开始检测</button>
+                    </div>
 
-        <!-- 实时检测区域 -->
-        <div class="realtime-section">
-            <h2 class="section-title">📹 实时检测</h2>
+                    <!-- 录制选项 -->
+                    <div id="recordOptions" class="mt-4 p-4 bg-gray-50 rounded-lg" style="display: none;">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" id="recordProcess" class="text-primary">
+                            <span class="text-sm">📹 录制检测过程（生成带标注的视频）</span>
+                        </label>
+                    </div>
 
-            <div class="video-container">
-                <video id="videoElement" class="video-element" autoplay muted></video>
-                <canvas id="canvasOverlay" class="canvas-overlay"></canvas>
-            </div>
-
-            <div class="controls">
-                <button class="btn" id="startBtn">开启摄像头</button>
-                <button class="btn" id="stopBtn" disabled>停止检测</button>
-            </div>
-
-            <div id="realtimeStatus"></div>
-            <div id="realtimeResult"></div>
-
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-value" id="totalDetections">0</div>
-                    <div class="stat-label">总检测次数</div>
+                    <!-- 状态和结果显示 -->
+                    <div id="uploadStatus" class="mt-4"></div>
+                    <div id="uploadResult" class="mt-4"></div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="totalPersons">0</div>
-                    <div class="stat-label">检测总人数</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="totalWithHairnet">0</div>
-                    <div class="stat-label">佩戴发网人数</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="complianceRate">0.0%</div>
-                    <div class="stat-label">发网合规率</div>
+
+                <!-- 实时检测 -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">📹 实时检测</h2>
+                    </div>
+
+                    <!-- 视频容器 -->
+                    <div class="relative bg-gray-900 rounded-lg overflow-hidden mb-4" style="aspect-ratio: 16/9;">
+                        <video id="videoElement" class="w-full h-full object-cover" autoplay muted></video>
+                        <canvas id="canvasOverlay" class="absolute inset-0 pointer-events-none"></canvas>
+                    </div>
+
+                    <!-- 控制按钮 -->
+                    <div class="flex gap-3 justify-center mb-6">
+                        <button class="btn btn-primary" id="startBtn">开启摄像头</button>
+                        <button class="btn btn-secondary" id="stopBtn" disabled>停止检测</button>
+                    </div>
+
+                    <!-- 实时状态 -->
+                    <div id="realtimeStatus" class="mb-4"></div>
+                    <div id="realtimeResult" class="mb-4"></div>
+
+                    <!-- 统计卡片 -->
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="text-center p-3 bg-gray-50 rounded-lg">
+                            <div id="totalDetections" class="text-xl font-bold text-primary">0</div>
+                            <div class="text-xs text-gray-600">总检测次数</div>
+                        </div>
+                        <div class="text-center p-3 bg-gray-50 rounded-lg">
+                            <div id="totalPersons" class="text-xl font-bold text-primary">0</div>
+                            <div class="text-xs text-gray-600">检测总人数</div>
+                        </div>
+                        <div class="text-center p-3 bg-gray-50 rounded-lg">
+                            <div id="totalWithHairnet" class="text-xl font-bold text-success">0</div>
+                            <div class="text-xs text-gray-600">佩戴发网人数</div>
+                        </div>
+                        <div class="text-center p-3 bg-gray-50 rounded-lg">
+                            <div id="complianceRate" class="text-xl font-bold text-success">0.0%</div>
+                            <div class="text-xs text-gray-600">发网合规率</div>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
+        </main>
     </div>
 
     <script src="/frontend/app.js"></script>
 </body>
+
 </html>

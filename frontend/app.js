@@ -274,7 +274,7 @@ class HumanDetectionApp {
         let resultHtml = `
             <div class="comprehensive-results-container">
                 <h3 style="text-align: center; margin-bottom: 1.5rem; color: #333;">🔍 综合检测结果</h3>
-                <div class="detection-result-section" style="margin-bottom: 2rem; padding: 1.5rem; background: #f8f9fa; border-radius: 12px; border-left: 4px solid #667eea;">
+                <div class="detection-result-section" style="margin-bottom: 2rem; padding: 1.5rem; background: #f8f9fa; border-radius: 12px; border-left: 4px solid #3A7AFE;">
                     ${comprehensiveHtml}
                 </div>
             </div>
@@ -312,15 +312,15 @@ class HumanDetectionApp {
         html += `<div class="info-label" style="font-size: 0.85rem; color: #666;">👥 人体检测</div>`;
         html += `</div>`;
         html += `<div class="info-card" style="text-align: center; padding: 1rem; background: white; border-radius: 8px; border: 1px solid #e9ecef;">`;
-        html += `<div class="info-value" style="font-size: 1.5rem; font-weight: bold; color: #28a745;">${personsWithHairnet}</div>`;
+        html += `<div class="info-value" style="font-size: 1.5rem; font-weight: bold; color: #52C41A;">${personsWithHairnet}</div>`;
         html += `<div class="info-label" style="font-size: 0.85rem; color: #666;">🧢 发网检测</div>`;
         html += `</div>`;
         html += `<div class="info-card" style="text-align: center; padding: 1rem; background: white; border-radius: 8px; border: 1px solid #e9ecef;">`;
-        html += `<div class="info-value" style="font-size: 1.5rem; font-weight: bold; color: #007bff;">${personsHandwashing}</div>`;
+        html += `<div class="info-value" style="font-size: 1.5rem; font-weight: bold; color: #3A7AFE;">${personsHandwashing}</div>`;
         html += `<div class="info-label" style="font-size: 0.85rem; color: #666;">🧼 洗手检测</div>`;
         html += `</div>`;
         html += `<div class="info-card" style="text-align: center; padding: 1rem; background: white; border-radius: 8px; border: 1px solid #e9ecef;">`;
-        html += `<div class="info-value" style="font-size: 1.5rem; font-weight: bold; color: #6f42c1;">${personsSanitizing}</div>`;
+        html += `<div class="info-value" style="font-size: 1.5rem; font-weight: bold; color: #722ED1;">${personsSanitizing}</div>`;
         html += `<div class="info-label" style="font-size: 0.85rem; color: #666;">🧴 消毒检测</div>`;
         html += `</div>`;
         html += '</div>';
@@ -329,7 +329,7 @@ class HumanDetectionApp {
         const imageData = result.annotated_image || result.image_url;
         if (imageData) {
             html += '<div class="detection-image" style="text-align: center; margin-bottom: 1.5rem;">';
-            html += `<h4 style="color: #667eea; margin-bottom: 1rem;">检测结果图像</h4>`;
+            html += `<h4 style="color: #3A7AFE; margin-bottom: 1rem;">检测结果图像</h4>`;
             // 如果是base64数据，添加data URL前缀
             const imageSrc = imageData.startsWith('data:') ? imageData : `data:image/jpeg;base64,${imageData}`;
             html += `<img src="${imageSrc}" alt="综合检测结果" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">`;
@@ -339,10 +339,10 @@ class HumanDetectionApp {
         // 显示详细检测信息
         if (result.detections && result.detections.length > 0) {
             html += '<div class="detection-details" style="background: white; padding: 1rem; border-radius: 8px; border: 1px solid #e9ecef;">';
-            html += `<h4 style="color: #667eea; margin-bottom: 1rem;">检测详情</h4>`;
+            html += `<h4 style="color: #3A7AFE; margin-bottom: 1rem;">检测详情</h4>`;
             html += '<ul style="list-style: none; padding: 0; margin: 0;">';
             result.detections.forEach((detection, index) => {
-                const confidenceColor = detection.confidence > 0.8 ? '#28a745' : detection.confidence > 0.6 ? '#ffc107' : '#dc3545';
+                const confidenceColor = detection.confidence > 0.8 ? '#52C41A' : detection.confidence > 0.6 ? '#FAAD14' : '#FF4D4F';
                 html += `<li style="padding: 0.5rem 0; border-bottom: 1px solid #f8f9fa; display: flex; justify-content: space-between;">`;
                 html += `<span>${detection.class}</span>`;
                 html += `<span style="color: ${confidenceColor}; font-weight: bold;">置信度 ${(detection.confidence * 100).toFixed(1)}%</span>`;
@@ -374,15 +374,15 @@ class HumanDetectionApp {
         html += `<div class="info-label" style="font-size: 0.85rem; color: #666;">👥 人体检测</div>`;
         html += `</div>`;
         html += `<div class="info-card" style="text-align: center; padding: 1rem; background: white; border-radius: 8px; border: 1px solid #e9ecef;">`;
-        html += `<div class="info-value" style="font-size: 1.5rem; font-weight: bold; color: #28a745;">${personsWithHairnet}</div>`;
+        html += `<div class="info-value" style="font-size: 1.5rem; font-weight: bold; color: #52C41A;">${personsWithHairnet}</div>`;
         html += `<div class="info-label" style="font-size: 0.85rem; color: #666;">🧢 发网检测</div>`;
         html += `</div>`;
         html += `<div class="info-card" style="text-align: center; padding: 1rem; background: white; border-radius: 8px; border: 1px solid #e9ecef;">`;
-        html += `<div class="info-value" style="font-size: 1.5rem; font-weight: bold; color: #007bff;">${personsHandwashing}</div>`;
+        html += `<div class="info-value" style="font-size: 1.5rem; font-weight: bold; color: #3A7AFE;">${personsHandwashing}</div>`;
         html += `<div class="info-label" style="font-size: 0.85rem; color: #666;">🧼 洗手检测</div>`;
         html += `</div>`;
         html += `<div class="info-card" style="text-align: center; padding: 1rem; background: white; border-radius: 8px; border: 1px solid #e9ecef;">`;
-        html += `<div class="info-value" style="font-size: 1.5rem; font-weight: bold; color: #6f42c1;">${personsSanitizing}</div>`;
+        html += `<div class="info-value" style="font-size: 1.5rem; font-weight: bold; color: #722ED1;">${personsSanitizing}</div>`;
         html += `<div class="info-label" style="font-size: 0.85rem; color: #666;">🧴 消毒检测</div>`;
         html += `</div>`;
         html += '</div>';
@@ -393,7 +393,7 @@ class HumanDetectionApp {
 
         if (videoUrl) {
             html += '<div class="detection-video" style="text-align: center; margin-bottom: 1.5rem;">';
-            html += `<h4 style="color: #667eea; margin-bottom: 1rem;">🎬 检测结果视频</h4>`;
+            html += `<h4 style="color: #3A7AFE; margin-bottom: 1rem;">🎬 检测结果视频</h4>`;
             html += `<video controls style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">`;
             html += `<source src="${videoUrl}" type="video/mp4">`;
             html += '您的浏览器不支持视频播放。';
@@ -412,7 +412,7 @@ class HumanDetectionApp {
         if (result.processing_info) {
             const info = result.processing_info;
             html += '<div class="processing-info" style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem;">';
-            html += `<h4 style="color: #667eea; margin-bottom: 1rem;">📊 处理信息</h4>`;
+            html += `<h4 style="color: #3A7AFE; margin-bottom: 1rem;">📊 处理信息</h4>`;
             html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5rem;">';
             if (info.total_frames) {
                 html += `<div><strong>总帧数:</strong> ${info.total_frames}</div>`;
@@ -433,10 +433,10 @@ class HumanDetectionApp {
         // 显示详细检测信息
         if (result.detections && result.detections.length > 0) {
             html += '<div class="detection-details" style="background: white; padding: 1rem; border-radius: 8px; border: 1px solid #e9ecef;">';
-            html += `<h4 style="color: #667eea; margin-bottom: 1rem;">检测详情</h4>`;
+            html += `<h4 style="color: #3A7AFE; margin-bottom: 1rem;">检测详情</h4>`;
             html += '<ul style="list-style: none; padding: 0; margin: 0;">';
             result.detections.forEach((detection, index) => {
-                const confidenceColor = detection.confidence > 0.8 ? '#28a745' : detection.confidence > 0.6 ? '#ffc107' : '#dc3545';
+                const confidenceColor = detection.confidence > 0.8 ? '#52C41A' : detection.confidence > 0.6 ? '#FAAD14' : '#FF4D4F';
                 html += `<li style="padding: 0.5rem 0; border-bottom: 1px solid #f8f9fa; display: flex; justify-content: space-between;">`;
                 html += `<span>${detection.class}</span>`;
                 html += `<span style="color: ${confidenceColor}; font-weight: bold;">置信度 ${(detection.confidence * 100).toFixed(1)}%</span>`;
@@ -530,15 +530,15 @@ class HumanDetectionApp {
                     <div class="info-label" style="font-size: 0.85rem; color: #666;">检测人数</div>
                 </div>
                 <div class="info-card" style="text-align: center; padding: 1rem; background: white; border-radius: 8px; border: 1px solid #e9ecef;">
-                    <div class="info-value" style="font-size: 1.5rem; font-weight: bold; color: #28a745;">${personsWithHairnet}</div>
+                    <div class="info-value" style="font-size: 1.5rem; font-weight: bold; color: #52C41A;">${personsWithHairnet}</div>
                     <div class="info-label" style="font-size: 0.85rem; color: #666;">佩戴发网</div>
                 </div>
                 <div class="info-card" style="text-align: center; padding: 1rem; background: white; border-radius: 8px; border: 1px solid #e9ecef;">
-                    <div class="info-value" style="font-size: 1.5rem; font-weight: bold; color: #dc3545;">${personsWithoutHairnet}</div>
+                    <div class="info-value" style="font-size: 1.5rem; font-weight: bold; color: #FF4D4F;">${personsWithoutHairnet}</div>
                     <div class="info-label" style="font-size: 0.85rem; color: #666;">未佩戴发网</div>
                 </div>
                 <div class="info-card" style="text-align: center; padding: 1rem; background: white; border-radius: 8px; border: 1px solid #e9ecef;">
-                    <div class="info-value" style="font-size: 1.5rem; font-weight: bold; color: ${complianceRate >= 0.8 ? '#28a745' : complianceRate >= 0.5 ? '#ffc107' : '#dc3545'};">${(complianceRate * 100).toFixed(1)}%</div>
+                    <div class="info-value" style="font-size: 1.5rem; font-weight: bold; color: ${complianceRate >= 0.8 ? '#52C41A' : complianceRate >= 0.5 ? '#FAAD14' : '#FF4D4F'};">${(complianceRate * 100).toFixed(1)}%</div>
                     <div class="info-label" style="font-size: 0.85rem; color: #666;">合规率</div>
                 </div>
                 <div class="info-card" style="text-align: center; padding: 1rem; background: white; border-radius: 8px; border: 1px solid #e9ecef;">
@@ -561,7 +561,7 @@ class HumanDetectionApp {
                 <div class="behavior-status" style="font-size: 3rem; margin-bottom: 1rem;">
                     ${detected ? '✅' : '❌'}
                 </div>
-                <div class="behavior-text" style="font-size: 1.2rem; margin-bottom: 1rem; color: ${detected ? '#28a745' : '#dc3545'};">
+                <div class="behavior-text" style="font-size: 1.2rem; margin-bottom: 1rem; color: ${detected ? '#52C41A' : '#FF4D4F'};">
                     ${detected ? `检测到${behaviorName}行为` : `未检测到${behaviorName}行为`}
                 </div>
                 <div class="confidence-info" style="font-size: 0.9rem; color: #666;">
@@ -578,7 +578,7 @@ class HumanDetectionApp {
 
         return `
             <div class="region-result" style="text-align: center; padding: 2rem;">
-                <div class="region-count" style="font-size: 2rem; margin-bottom: 1rem; color: #667eea;">
+                <div class="region-count" style="font-size: 2rem; margin-bottom: 1rem; color: #3A7AFE;">
                     ${regions.length}
                 </div>
                 <div class="region-text" style="font-size: 1.1rem; color: #333;">
@@ -998,7 +998,7 @@ class HumanDetectionApp {
                     this.showStatus('realtimeStatus', `❌ ${data.message}`, 'error');
                 } else if (data.type === 'ping') {
                     // 响应心跳
-                    this.websocket.send(JSON.stringify({type: 'pong'}));
+                    this.websocket.send(JSON.stringify({ type: 'pong' }));
                 }
             } catch (error) {
                 console.error('WebSocket消息解析错误:', error);
@@ -1118,7 +1118,7 @@ class HumanDetectionApp {
         `;
 
         // 根据类型设置背景色
-        switch(type) {
+        switch (type) {
             case 'success':
                 notification.style.backgroundColor = '#10b981';
                 break;
@@ -1379,7 +1379,7 @@ class HumanDetectionApp {
             const canvas = this.canvasOverlay;
             const ctx = canvas.getContext('2d');
             const image = new Image();
-            image.onload = function() {
+            image.onload = function () {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
             };

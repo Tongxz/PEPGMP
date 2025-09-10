@@ -5,434 +5,286 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>区域配置 - 发网检测系统</title>
+    <link rel="stylesheet" href="/frontend/nav.css">
+    <link rel="stylesheet" href="/frontend/theme.css">
+    <script defer src="/frontend/nav.js"></script>
+</head>
+
+<body>
+    <div class="layout-container">
+        <!-- 页面头部 -->
+        <header class="layout-header">
+            <h1>🎯 区域配置管理</h1>
+            <p>绘制监控区域，配置检测规则，实现智能化区域管理</p>
+        </header>
+
+        <!-- 主要内容区 -->
+        <main class="layout-content">
+            <!-- 双栏布局：配置面板 & 画布区域 -->
+            <div class="region-layout">
+                <!-- 左侧配置面板 - 固定宽度 -->
+                <div class="region-sidebar-section space-y-6">
+                    <!-- 背景图像上传 -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">📷 背景图像</h3>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="backgroundImage" class="form-label">选择背景图像</label>
+                            <input type="file" id="backgroundImage" accept="image/*" class="form-input">
+                        </div>
+
+                        <button class="btn btn-secondary btn-sm w-full" onclick="clearBackground()">清除背景</button>
+
+                        <div class="mt-4 text-xs text-gray-600 space-y-1">
+                            <div><strong>画布尺寸:</strong> <span id="canvasSizeText">-</span></div>
+                            <div><strong>背景图尺寸:</strong> <span id="bgSizeText">-</span></div>
+                            <div><strong>铺放方式:</strong> <span id="fitModeText">contain(自适应)</span></div>
+                        </div>
+                    </div>
+
+                    <!-- 新建区域 -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">🏗️ 新建区域</h3>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="regionName" class="form-label">区域名称</label>
+                            <input type="text" id="regionName" class="form-input" placeholder="例如：入口区域">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="regionType" class="form-label">区域类型</label>
+                            <select id="regionType" class="form-select">
+                                <option value="entrance">入口区域</option>
+                                <option value="work_area">工作区域</option>
+                                <option value="restricted">限制区域</option>
+                                <option value="monitoring">监控区域</option>
+                                <option value="custom">自定义</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="regionDescription" class="form-label">区域描述</label>
+                            <textarea id="regionDescription" rows="3" class="form-textarea"
+                                placeholder="描述区域的用途和特点"></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">检测规则</label>
+                            <div class="space-y-2">
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" id="requireHairnet" checked class="text-primary">
+                                    <span class="text-sm">必须佩戴发网</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" id="limitOccupancy" class="text-primary">
+                                    <span class="text-sm">人数限制</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" id="timeRestriction" class="text-primary">
+                                    <span class="text-sm">时间限制</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group" id="occupancyConfig" style="display: none;">
+                            <label for="maxOccupancy" class="form-label">最大人数</label>
+                            <input type="number" id="maxOccupancy" min="1" value="5" class="form-input">
+                        </div>
+
+                        <button class="btn btn-primary w-full" onclick="startDrawing()">开始绘制区域</button>
+                    </div>
+
+                    <!-- 区域列表 -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">📋 区域列表</h3>
+                        </div>
+                        <div id="regionList" class="space-y-3 max-h-80 overflow-y-auto">
+                            <!-- 区域项目将在这里动态生成 -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右侧画布区域 - 占满剩余空间 -->
+                <div class="region-canvas-section">
+                    <div class="card">
+                        <!-- 画布控制栏 -->
+                        <div class="flex flex-wrap gap-2 mb-4 p-4 bg-gray-50 rounded-lg">
+                            <button class="btn btn-primary btn-sm" onclick="startDrawing()">🖊️ 绘制区域</button>
+                            <button class="btn btn-secondary btn-sm" onclick="clearCanvas()">🗑️ 清空画布</button>
+                            <button class="btn btn-success btn-sm" onclick="saveRegions()">💾 保存配置</button>
+                            <button class="btn btn-secondary btn-sm" onclick="loadRegions()">📂 加载配置</button>
+                            <button class="btn btn-secondary btn-sm" onclick="exportConfig()">📤 导出配置</button>
+                        </div>
+
+                        <!-- 画布容器 -->
+                        <div class="relative border-2 border-gray-200 rounded-lg overflow-hidden bg-gray-50"
+                            style="min-height: 500px;">
+                            <canvas id="regionCanvas" width="800" height="600"
+                                class="block cursor-crosshair w-full h-full"></canvas>
+                        </div>
+
+                        <!-- 操作说明 -->
+                        <div class="mt-4">
+                            <div class="card card-compact bg-gray-50">
+                                <h4 class="font-semibold mb-2">📊 操作说明</h4>
+                                <ul class="text-sm text-gray-600 space-y-1">
+                                    <li><strong>绘制区域：</strong>点击"开始绘制区域"按钮，然后在画布上点击创建多边形顶点</li>
+                                    <li><strong>完成绘制：</strong>双击或右键完成当前区域的绘制</li>
+                                    <li><strong>编辑区域：</strong>点击区域列表中的"编辑"按钮可修改区域属性</li>
+                                    <li><strong>删除区域：</strong>点击区域列表中的"删除"按钮可移除区域</li>
+                                    <li><strong>保存配置：</strong>完成配置后记得保存到服务器</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 通知组件 -->
+    <div id="notification"
+        class="fixed top-4 right-4 px-4 py-2 rounded-lg shadow-lg transform translate-x-full transition-transform duration-300 z-50">
+    </div>
+
+    <script src="region_config.js"></script>
+
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
-        }
-
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
-        }
-
-        .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-            font-weight: 300;
-        }
-
-        .header p {
-            font-size: 1.1em;
-            opacity: 0.9;
-        }
-
-        .main-content {
-            display: flex;
-            min-height: 600px;
-        }
-
-        .sidebar {
-            width: 350px;
-            background: #f8f9fa;
-            border-right: 1px solid #e9ecef;
-            padding: 20px;
-            overflow-y: auto;
-        }
-
-        .canvas-area {
-            flex: 1;
-            padding: 20px;
-            background: #fff;
-        }
-
-        .section {
-            margin-bottom: 25px;
-            background: white;
-            border-radius: 10px;
-            padding: 20px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-        }
-
-        .section h3 {
-            color: #333;
-            margin-bottom: 15px;
-            font-size: 1.2em;
-            border-bottom: 2px solid #667eea;
-            padding-bottom: 8px;
-        }
-
-        .form-group {
-            margin-bottom: 15px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: 500;
-            color: #555;
-        }
-
-        .form-group input,
-        .form-group select,
-        .form-group textarea {
-            width: 100%;
-            padding: 10px;
-            border: 2px solid #e9ecef;
-            border-radius: 8px;
-            font-size: 14px;
-            transition: border-color 0.3s;
-        }
-
-        .form-group input:focus,
-        .form-group select:focus,
-        .form-group textarea:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .btn {
-            padding: 12px 24px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            transition: all 0.3s;
-            margin: 5px;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-        }
-
-        .btn-secondary {
-            background: #6c757d;
-            color: white;
-        }
-
-        .btn-secondary:hover {
-            background: #5a6268;
-        }
-
-        .btn-danger {
-            background: #dc3545;
-            color: white;
-        }
-
-        .btn-danger:hover {
-            background: #c82333;
-        }
-
-        .btn-success {
-            background: #28a745;
-            color: white;
-        }
-
-        .btn-success:hover {
-            background: #218838;
-        }
-
-        .canvas-container {
-            position: relative;
-            border: 2px solid #e9ecef;
-            border-radius: 10px;
-            overflow: hidden;
-            background: #f8f9fa;
-        }
-
-        #regionCanvas {
-            display: block;
-            cursor: crosshair;
-        }
-
-        .canvas-controls {
-            margin-bottom: 20px;
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-
-        .region-list {
-            max-height: 300px;
-            overflow-y: auto;
-        }
-
+        /* 区域列表项样式 */
         .region-item {
-            background: #f8f9fa;
-            border: 1px solid #e9ecef;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 10px;
-            transition: all 0.3s;
+            padding: 12px;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-lg);
+            background: var(--white);
+            transition: all 0.2s ease;
         }
 
         .region-item:hover {
-            background: #e9ecef;
-            transform: translateX(5px);
+            border-color: var(--primary);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
         }
 
         .region-item.active {
-            border-color: #667eea;
-            background: #f0f4ff;
+            border-color: var(--primary);
+            background: rgba(0, 92, 180, 0.05);
         }
 
         .region-item h4 {
-            color: #333;
-            margin-bottom: 8px;
-            font-size: 1.1em;
+            margin: 0 0 4px 0;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--gray-900);
         }
 
         .region-item p {
-            color: #666;
-            font-size: 0.9em;
-            margin-bottom: 5px;
+            margin: 0 0 8px 0;
+            font-size: 0.8rem;
+            color: var(--gray-600);
         }
 
         .region-actions {
             display: flex;
-            gap: 5px;
-            margin-top: 10px;
-        }
-
-        .region-actions .btn {
-            padding: 6px 12px;
-            font-size: 12px;
-            margin: 0;
+            gap: 4px;
+            flex-wrap: wrap;
         }
 
         .status-indicator {
             display: inline-block;
-            width: 10px;
-            height: 10px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
-            margin-right: 8px;
+            margin-right: 6px;
         }
 
         .status-active {
-            background: #28a745;
+            background: var(--success);
         }
 
         .status-inactive {
-            background: #dc3545;
+            background: var(--error);
         }
 
-        .rule-config {
-            background: #f8f9fa;
-            border-radius: 8px;
-            padding: 15px;
-            margin-top: 15px;
-        }
-
-        .rule-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px 0;
-            border-bottom: 1px solid #e9ecef;
-        }
-
-        .rule-item:last-child {
-            border-bottom: none;
-        }
-
-        .notification {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 15px 20px;
-            border-radius: 8px;
-            color: white;
-            font-weight: 500;
-            z-index: 1000;
-            transform: translateX(400px);
-            transition: transform 0.3s;
-        }
-
+        /* 通知样式 */
         .notification.show {
             transform: translateX(0);
         }
 
         .notification.success {
-            background: #28a745;
+            background: var(--success);
+            color: white;
         }
 
         .notification.error {
-            background: #dc3545;
+            background: var(--error);
+            color: white;
         }
 
         .notification.warning {
-            background: #ffc107;
-            color: #333;
+            background: var(--warning);
+            color: white;
         }
 
-        .checkbox-group {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
-            margin-top: 10px;
+        /* 人数限制配置显示/隐藏 */
+        #limitOccupancy:checked~* #occupancyConfig {
+            display: block !important;
         }
 
-        .checkbox-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
+        /* 响应式优化 */
+        @media (max-width: 1023px) {
 
-        .checkbox-item input[type="checkbox"] {
-            width: auto;
-        }
-
-        @media (max-width: 768px) {
-            .main-content {
-                flex-direction: column;
+            .lg\:col-span-1,
+            .lg\:col-span-3 {
+                grid-column: span 1;
             }
 
-            .sidebar {
-                width: 100%;
-            }
-
-            .canvas-controls {
-                justify-content: center;
+            .region-item {
+                padding: 8px;
             }
         }
     </style>
-</head>
 
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🎯 区域配置管理</h1>
-            <p>绘制监控区域，配置检测规则，实现智能化区域管理</p>
-        </div>
+    <script>
+        // 人数限制复选框事件
+        document.getElementById('limitOccupancy').addEventListener('change', function () {
+            const occupancyConfig = document.getElementById('occupancyConfig');
+            occupancyConfig.style.display = this.checked ? 'block' : 'none';
+        });
 
-        <div class="main-content">
-            <div class="sidebar">
-                <!-- 图像上传区域 -->
-                <div class="section">
-                    <h3>📷 背景图像</h3>
-                    <div class="form-group">
-                        <label for="backgroundImage">选择背景图像</label>
-                        <input type="file" id="backgroundImage" accept="image/*">
-                    </div>
-                    <button class="btn btn-secondary" onclick="clearBackground()">清除背景</button>
-                    <div style="margin-top:12px;color:#555;line-height:1.6;">
-                        <div><strong>画布尺寸:</strong> <span id="canvasSizeText">-</span></div>
-                        <div><strong>背景图尺寸:</strong> <span id="bgSizeText">-</span></div>
-                        <div><strong>铺放方式:</strong> <span id="fitModeText">contain(自适应)</span></div>
-                    </div>
-                </div>
+        // 简单的通知函数（如果 region_config.js 中没有定义）
+        window.showNotification = window.showNotification || function (message, type = 'info') {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `fixed top-4 right-4 px-4 py-2 rounded-lg shadow-lg transition-transform duration-300 z-50 notification ${type}`;
+            notification.classList.add('show');
 
-                <!-- 区域配置 -->
-                <div class="section">
-                    <h3>🏗️ 新建区域</h3>
-                    <div class="form-group">
-                        <label for="regionName">区域名称</label>
-                        <input type="text" id="regionName" placeholder="例如：入口区域">
-                    </div>
-                    <div class="form-group">
-                        <label for="regionType">区域类型</label>
-                        <select id="regionType">
-                            <option value="entrance">入口区域</option>
-                            <option value="work_area">工作区域</option>
-                            <option value="restricted">限制区域</option>
-                            <option value="monitoring">监控区域</option>
-                            <option value="custom">自定义</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="regionDescription">区域描述</label>
-                        <textarea id="regionDescription" rows="3" placeholder="描述区域的用途和特点"></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>检测规则</label>
-                        <div class="checkbox-group">
-                            <div class="checkbox-item">
-                                <input type="checkbox" id="requireHairnet" checked>
-                                <label for="requireHairnet">必须佩戴发网</label>
-                            </div>
-                            <div class="checkbox-item">
-                                <input type="checkbox" id="limitOccupancy">
-                                <label for="limitOccupancy">人数限制</label>
-                            </div>
-                            <div class="checkbox-item">
-                                <input type="checkbox" id="timeRestriction">
-                                <label for="timeRestriction">时间限制</label>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="form-group" id="occupancyConfig" style="display: none;">
-                        <label for="maxOccupancy">最大人数</label>
-                        <input type="number" id="maxOccupancy" min="1" value="5">
-                    </div>
-                    <button class="btn btn-primary" onclick="startDrawing()">开始绘制区域</button>
-                </div>
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        };
 
-                <!-- 区域列表 -->
-                <div class="section">
-                    <h3>📋 区域列表</h3>
-                    <div id="regionList" class="region-list">
-                        <!-- 区域项目将在这里动态生成 -->
-                    </div>
-                </div>
-            </div>
+        // 画布尺寸响应式调整
+        function adjustCanvasSize() {
+            const canvas = document.getElementById('regionCanvas');
+            const container = canvas.parentElement;
+            const rect = container.getBoundingClientRect();
 
-            <div class="canvas-area">
-                <div class="canvas-controls">
-                    <button class="btn btn-primary" onclick="startDrawing()">🖊️ 绘制区域</button>
-                    <button class="btn btn-secondary" onclick="clearCanvas()">🗑️ 清空画布</button>
-                    <button class="btn btn-success" onclick="saveRegions()">💾 保存配置</button>
-                    <button class="btn btn-secondary" onclick="loadRegions()">📂 加载配置</button>
-                    <button class="btn btn-secondary" onclick="exportConfig()">📤 导出配置</button>
-                </div>
+            canvas.width = Math.max(600, rect.width - 40);
+            canvas.height = Math.max(400, rect.height - 40);
 
-                <div class="canvas-container">
-                    <canvas id="regionCanvas" width="800" height="600"></canvas>
-                </div>
+            // 更新画布尺寸显示
+            document.getElementById('canvasSizeText').textContent = `${canvas.width}x${canvas.height}`;
+        }
 
-                <div class="section">
-                    <h3>📊 操作说明</h3>
-                    <ul style="color: #666; line-height: 1.6;">
-                        <li><strong>绘制区域：</strong>点击"开始绘制区域"按钮，然后在画布上点击创建多边形顶点</li>
-                        <li><strong>完成绘制：</strong>双击或右键完成当前区域的绘制</li>
-                        <li><strong>编辑区域：</strong>点击区域列表中的"编辑"按钮可修改区域属性</li>
-                        <li><strong>删除区域：</strong>点击区域列表中的"删除"按钮可移除区域</li>
-                        <li><strong>保存配置：</strong>完成配置后记得保存到服务器</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 通知组件 -->
-    <div id="notification" class="notification"></div>
-
-    <script src="region_config.js"></script>
+        // 页面加载完成后调整画布大小
+        window.addEventListener('DOMContentLoaded', adjustCanvasSize);
+        window.addEventListener('resize', adjustCanvasSize);
+    </script>
 </body>
 
 </html>
