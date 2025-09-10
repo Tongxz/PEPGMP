@@ -43,8 +43,10 @@ class CaptureService:
         event_type = getattr(event, "type", context.get("type", "event"))
         track_id = int(getattr(event, "track_id", context.get("track_id", -1)))
         ts = float(getattr(event, "ts", time.time()))
+        camera_id = str(context.get("camera_id") or "unknown")
         event_id = f"{int(ts)}_{event_type}_tid{track_id}"
-        event_dir = os.path.join(self.output_dir, event_id)
+        # 目录按 camera_id 分层，便于多路管理
+        event_dir = os.path.join(self.output_dir, camera_id, event_id)
         os.makedirs(event_dir, exist_ok=True)
 
         # 元数据
@@ -55,6 +57,7 @@ class CaptureService:
             "evidence": getattr(event, "evidence", context.get("evidence", {})) or {},
             "region": context.get("region"),
             "has_hairnet": context.get("has_hairnet"),
+            "camera_id": camera_id,
         }
         with open(os.path.join(event_dir, "metadata.json"), "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False, indent=2)

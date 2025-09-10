@@ -11,6 +11,7 @@ Human Behavior Detection System Main Entry Point
 import argparse
 import sys
 from pathlib import Path
+import os
 
 # 添加src目录到Python路径
 src_path = Path(__file__).parent / "src"
@@ -41,7 +42,7 @@ def main():
 
     parser.add_argument(
         "--mode",
-        choices=["detection", "api", "training", "demo"],
+        choices=["detection", "api", "training", "demo", "supervisor"],
         default="detection",
         help="运行模式 (默认: detection)",
     )
@@ -89,6 +90,7 @@ def main():
     parser.add_argument("--cascade-enable", action="store_true", help="启用级联二次检测")
     parser.add_argument("--log-interval", type=int, default=None, help="日志限流间隔（帧）")
     parser.add_argument("--osd-regions", action="store_true", help="在窗口叠加显示已加载的区域多边形与名称")
+    parser.add_argument("--camera-id", type=str, default=None, help="当前检测进程的摄像头标识（用于事件/指标打标）")
 
     args = parser.parse_args()
 
@@ -119,6 +121,11 @@ def main():
             run_training(args, logger)
         elif args.mode == "demo":
             run_demo(args, logger)
+        elif args.mode == "supervisor":
+            try:
+                run_supervisor(args, logger)
+            except NameError:
+                logger.error("supervisor 模式暂未实现，请稍后再试")
         else:
             logger.error(f"未知的运行模式: {args.mode}")
             sys.exit(1)
@@ -160,11 +167,30 @@ def run_detection(args, logger):
         logger.error(f"加载/合并配置失败: {e}")
         return
 
-    # 2) 统一设备选择
+    # 2) 统一设备选择（结合硬件自适应）
     try:
+        # 若未显式指定 device/imgsz/weights，则用硬件探测补齐
+        auto_device = (args.device is None) or (str(args.device).lower() == "auto")
+        auto_imgsz = (args.imgsz is None) or (str(args.imgsz).lower() == "auto")
+        auto_weights = (args.human_weights is None)
+        if auto_device or auto_imgsz or auto_weights:
+            try:
+                from src.utils.hardware_probe import decide_policy
+                pol = decide_policy(preferred_profile=args.profile, user_device=args.device, user_imgsz=args.imgsz)
+                if auto_device:
+                    args.device = pol.get("device")
+                if auto_imgsz:
+                    args.imgsz = pol.get("imgsz")
+                if auto_weights and pol.get("human_weights"):
+                    args.human_weights = pol.get("human_weights")
+                # 环境变量注入（线程数等）
+                for k, v in (pol.get("env") or {}).items():
+                    os.environ[str(k)] = str(v)
+                logger.info(f"Auto policy applied: {pol}")
+            except Exception as _e:
+                logger.debug(f"hardware_probe skipped: {_e}")
         from config.model_config import ModelConfig
         mc = ModelConfig()
-        # 如 CLI 指定 device 覆盖
         dev_req = (args.device or None)
         device = mc.select_device(requested=dev_req)
         logger.info(f"Device selected: {device}")
@@ -613,6 +639,7 @@ def run_detection(args, logger):
                                     "track_id": ev.track_id,
                                     "ts": ev.ts,
                                     "evidence": ev.evidence,
+                                    "camera_id": (args.camera_id or None),
                                 }, ensure_ascii=False) + "\n")
                                 # 抓拍输出
                                 try:
@@ -628,6 +655,7 @@ def run_detection(args, logger):
                                                 "track_id": ev.track_id,
                                                 "ts": ev.ts,
                                                 "evidence": ev.evidence,
+                                                "camera_id": (args.camera_id or None),
                                             }
                                             break
                                     # 使用 annotated 以便有可视叠加；若为 None 则使用原帧
@@ -698,6 +726,24 @@ def run_api_server(args, logger):
         logger.error(f"无法导入API模块或uvicorn: {e}")
         logger.info("请确保已安装uvicorn: pip install uvicorn")
 
+
+def run_supervisor(args, logger):
+    """托管 cameras.yaml 中的所有摄像头检测进程。"""
+    try:
+        from src.services.process_manager import get_process_manager
+    except Exception as e:
+        logger.error(f"无法导入进程管理器: {e}")
+        return
+    pm = get_process_manager()
+    res = pm.start_all()
+    logger.info(f"Supervisor started cameras: {res}")
+    try:
+        while True:
+            time.sleep(1.0)
+    except KeyboardInterrupt:
+        logger.info("收到中断信号，准备停止所有摄像头...")
+        pm.stop_all()
+        logger.info("已停止全部摄像头进程。")
 
 def run_training(args, logger):
     """
