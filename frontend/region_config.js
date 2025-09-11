@@ -589,21 +589,42 @@ class RegionConfigManager {
         };
 
         // 确认删除
-        const handleConfirm = () => {
+        const handleConfirm = async () => {
             modal.classList.remove('show');
 
-            // 执行删除
-            this.regions.splice(regionIndex, 1);
+            try {
+                // 先从服务器删除
+                const response = await fetch(`/api/v1/management/regions/${encodeURIComponent(regionId)}`, {
+                    method: 'DELETE'
+                });
 
-            if (this.selectedRegionId === regionId) {
-                this.selectedRegionId = null;
-            }
+                if (response.ok) {
+                    // 服务器删除成功，再从本地删除
+                    this.regions.splice(regionIndex, 1);
 
-            this.updateRegionList();
-            this.redrawCanvas();
+                    if (this.selectedRegionId === regionId) {
+                        this.selectedRegionId = null;
+                    }
 
-            if (showNotification) {
-                this.showNotification(`区域 "${region.name}" 已删除`, 'success');
+                    this.updateRegionList();
+                    this.redrawCanvas();
+
+                    if (showNotification) {
+                        this.showNotification(`区域 "${region.name}" 已删除`, 'success');
+                    }
+                } else {
+                    // 服务器删除失败
+                    const errorText = await response.text();
+                    console.error('删除区域失败:', response.status, errorText);
+                    if (showNotification) {
+                        this.showNotification(`删除区域失败: ${response.status}`, 'error');
+                    }
+                }
+            } catch (error) {
+                console.error('删除区域时发生错误:', error);
+                if (showNotification) {
+                    this.showNotification(`删除区域时发生错误: ${error.message}`, 'error');
+                }
             }
 
             // 清理事件监听器
