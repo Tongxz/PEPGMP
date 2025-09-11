@@ -146,12 +146,22 @@ class RegionConfigManager {
         this.tempPoint = null;
         this.canvas.style.cursor = 'crosshair';
         this.showNotification('开始绘制区域，双击或右键完成', 'success');
+
+        // 更新画布状态指示器
+        if (window.updateCanvasStatus) {
+            window.updateCanvasStatus('🖊️ 绘制中... 点击添加顶点，双击完成');
+        }
     }
 
     finishDrawing() {
         if (!this.isDrawing || this.drawingPoints.length < 3) {
             this.showNotification('至少需要3个点才能形成区域', 'error');
             return;
+        }
+
+        // 更新画布状态指示器
+        if (window.updateCanvasStatus) {
+            window.updateCanvasStatus('✅ 区域创建完成');
         }
 
         const regionData = this.getRegionFormData();

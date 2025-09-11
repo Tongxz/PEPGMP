@@ -780,7 +780,9 @@ body {
 .region-layout {
     display: flex;
     flex-direction: column;
-    gap: var(--space-6);
+    gap: var(--space-4);
+    height: calc(100vh - 180px);
+    /* 固定高度，确保左右一致 */
 }
 
 .region-sidebar-section {
@@ -789,6 +791,9 @@ body {
 
 .region-canvas-section {
     width: 100%;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
 }
 
 /* 大屏幕下的双栏布局 */
@@ -796,14 +801,15 @@ body {
     .region-layout {
         flex-direction: row;
         align-items: stretch;
-        /* 两列等高 */
+        gap: var(--space-6);
     }
 
     .region-sidebar-section {
-        width: 320px;
+        width: 380px;
         flex-shrink: 0;
         overflow-y: auto;
-        max-height: calc(100vh - 300px);
+        height: 100%;
+        /* 与父容器高度一致 */
     }
 
     .region-canvas-section {
@@ -811,6 +817,8 @@ body {
         min-width: 0;
         display: flex;
         flex-direction: column;
+        height: 100%;
+        /* 与父容器高度一致 */
     }
 
     /* 画布卡片占满高度 */
@@ -818,12 +826,84 @@ body {
         flex: 1;
         display: flex;
         flex-direction: column;
-        min-height: 0;
+        height: 100%;
+        /* 明确设置高度 */
     }
 
     /* 画布容器适应高度 */
     .region-canvas-section canvas {
-        max-height: calc(100vh - 400px);
+        width: 100%;
+        height: 100%;
         object-fit: contain;
+    }
+    
+    /* 画布容器父元素适应 */
+    .region-canvas-section .flex-1 {
+        flex: 1;
+        min-height: 500px;
+        /* 确保最小高度 */
+    }
+}
+
+/* 区域配置页面增强样式 */
+.custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary-300) var(--gray-100);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: var(--gray-100);
+    border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--primary-300);
+    border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-400);
+}
+
+/* 画布状态指示器动画 */
+#canvasStatus {
+    transition: all 0.3s ease;
+    backdrop-filter: blur(4px);
+}
+
+#canvasStatus:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* 渐变背景增强 */
+.bg-primary-light {
+    background: linear-gradient(135deg, var(--primary-50), var(--primary-100));
+}
+
+.border-primary-200 {
+    border-color: var(--primary-200);
+}
+
+.text-primary-800 {
+    color: var(--primary-800);
+}
+
+/* 响应式网格优化 */
+@media (max-width: 1023px) {
+    .region-layout {
+        gap: var(--space-4);
+    }
+
+    .region-sidebar-section {
+        max-height: none;
+    }
+
+    .grid.grid-cols-1.lg\:grid-cols-2 {
+        grid-template-columns: 1fr;
     }
 }
