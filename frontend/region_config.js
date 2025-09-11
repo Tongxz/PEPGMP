@@ -36,6 +36,22 @@ class RegionConfigManager {
         this.updateRegionList();
     }
 
+    // 坐标转换辅助函数：将鼠标坐标转换为画布坐标
+    getCanvasCoordinates(event) {
+        const rect = this.canvas.getBoundingClientRect();
+        // 计算鼠标在显示区域的相对位置
+        const mouseX = event.clientX - rect.left;
+        const mouseY = event.clientY - rect.top;
+
+        // 转换为画布实际坐标
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+        const x = Math.round(mouseX * scaleX);
+        const y = Math.round(mouseY * scaleY);
+
+        return { x, y, mouseX, mouseY, scaleX, scaleY };
+    }
+
     initEventListeners() {
         // 画布事件
         this.canvas.addEventListener('click', this.handleCanvasClick.bind(this));
@@ -85,18 +101,16 @@ class RegionConfigManager {
     handleCanvasClick(event) {
         if (!this.isDrawing) return;
 
-        const rect = this.canvas.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
+        const coords = this.getCanvasCoordinates(event);
+        console.log(`Click: mouse(${coords.mouseX.toFixed(1)}, ${coords.mouseY.toFixed(1)}) -> canvas(${coords.x}, ${coords.y}), scale(${coords.scaleX.toFixed(2)}, ${coords.scaleY.toFixed(2)})`);
 
-        this.drawingPoints.push({ x, y });
+        this.drawingPoints.push({ x: coords.x, y: coords.y });
         this.redrawCanvas();
     }
 
     handleCanvasMouseMove(event) {
-        const rect = this.canvas.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
+        const coords = this.getCanvasCoordinates(event);
+        const { x, y } = coords;
 
         if (this.isDrawing) {
             this.tempPoint = { x, y };
@@ -503,9 +517,8 @@ class RegionConfigManager {
     // 画布按下：进入顶点拖动
     handleCanvasMouseDown(event) {
         if (!this.isVertexEditing) return;
-        const rect = this.canvas.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
+        const coords = this.getCanvasCoordinates(event);
+        const { x, y } = coords;
         const idx = this.findNearestVertexIndex(x, y, 10);
         if (idx !== -1) {
             this.isVertexDragging = true;
