@@ -22,89 +22,77 @@
         <main class="layout-content">
             <!-- 双栏布局：配置面板 & 画布区域 -->
             <div class="region-layout">
-                <!-- 左侧配置面板 - 固定宽度 -->
-                <div class="region-sidebar-section" style="gap: 1rem;">
-                    <!-- 背景图像上传 -->
-                    <div class="card">
-                        <div class="card-header">
-                            <h3 class="card-title">📷 背景图像</h3>
+                <!-- 左侧配置面板 - Tabbed -->
+                <div class="region-sidebar-section">
+                    <div class="card"
+                        style="padding: 0; overflow: hidden; display: flex; flex-direction: column; height: 100%;">
+                        <div class="tab-nav">
+                            <button class="tab-link active" data-tab="tab-edit">🏗️ 区域编辑</button>
+                            <button class="tab-link" data-tab="tab-list">📋 区域列表</button>
+                            <button class="tab-link" data-tab="tab-image">📷 图像设置</button>
                         </div>
-
-                        <div class="form-group">
-                            <label for="backgroundImage" class="form-label">选择背景图像</label>
-                            <input type="file" id="backgroundImage" accept="image/*" class="form-input">
-                        </div>
-
-                        <button class="btn btn-secondary btn-sm w-full" onclick="clearBackground()">清除背景</button>
-
-                        <div class="mt-4 text-xs text-gray-600 space-y-1">
-                            <div><strong>画布尺寸:</strong> <span id="canvasSizeText">-</span></div>
-                            <div><strong>背景图尺寸:</strong> <span id="bgSizeText">-</span></div>
-                            <div><strong>铺放方式:</strong> <span id="fitModeText">contain(自适应)</span></div>
-                        </div>
-                    </div>
-
-                    <!-- 新建区域 -->
-                    <div class="card">
-                        <div class="card-header">
-                            <h3 class="card-title">🏗️ 新建区域</h3>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="regionName" class="form-label">区域名称</label>
-                            <input type="text" id="regionName" class="form-input" placeholder="例如：入口区域">
-                        </div>
-
-                        <div class="form-group">
-                            <label for="regionType" class="form-label">区域类型</label>
-                            <select id="regionType" class="form-select">
-                                <option value="entrance">入口区域</option>
-                                <option value="work_area">工作区域</option>
-                                <option value="restricted">限制区域</option>
-                                <option value="monitoring">监控区域</option>
-                                <option value="custom">自定义</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="regionDescription" class="form-label">区域描述</label>
-                            <textarea id="regionDescription" rows="3" class="form-textarea"
-                                placeholder="描述区域的用途和特点"></textarea>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">检测规则</label>
-                            <div class="space-y-2">
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" id="requireHairnet" checked class="text-primary">
-                                    <span class="text-sm">必须佩戴发网</span>
-                                </label>
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" id="limitOccupancy" class="text-primary">
-                                    <span class="text-sm">人数限制</span>
-                                </label>
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" id="timeRestriction" class="text-primary">
-                                    <span class="text-sm">时间限制</span>
-                                </label>
+                        <div class="tab-content-container">
+                            <div id="tab-image" class="tab-content">
+                                <div class="form-group">
+                                    <label for="backgroundImage" class="form-label">选择背景图像</label>
+                                    <input type="file" id="backgroundImage" accept="image/*" class="form-input">
+                                </div>
+                                <button class="btn btn-secondary btn-sm w-full"
+                                    onclick="clearBackground()">清除背景</button>
+                                <div class="mt-4 text-xs text-gray-600 space-y-1">
+                                    <div><strong>画布尺寸:</strong> <span id="canvasSizeText">-</span></div>
+                                    <div><strong>背景图尺寸:</strong> <span id="bgSizeText">-</span></div>
+                                    <div><strong>铺放方式:</strong> <span id="fitModeText">contain(自适应)</span></div>
+                                </div>
                             </div>
-                        </div>
-
-                        <div class="form-group" id="occupancyConfig" style="display: none;">
-                            <label for="maxOccupancy" class="form-label">最大人数</label>
-                            <input type="number" id="maxOccupancy" min="1" value="5" class="form-input">
-                        </div>
-
-                        <button class="btn btn-primary w-full" onclick="startDrawing()">🖊️ 开始绘制区域</button>
-                    </div>
-
-                    <!-- 区域列表 -->
-                    <div class="card">
-                        <div class="card-header">
-                            <h3 class="card-title">📋 区域列表</h3>
-                        </div>
-                        <div id="regionList" class="space-y-3 max-h-96 overflow-y-auto custom-scrollbar">
-                            <!-- 区域项目将在这里动态生成 -->
+                            <div id="tab-edit" class="tab-content active">
+                                <div class="form-group">
+                                    <label for="regionName" class="form-label">区域名称</label>
+                                    <input type="text" id="regionName" class="form-input" placeholder="例如：入口区域">
+                                </div>
+                                <div class="form-group">
+                                    <label for="regionType" class="form-label">区域类型</label>
+                                    <select id="regionType" class="form-select">
+                                        <option value="entrance">入口区域</option>
+                                        <option value="work_area">工作区域</option>
+                                        <option value="restricted">限制区域</option>
+                                        <option value="monitoring">监控区域</option>
+                                        <option value="custom">自定义</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="regionDescription" class="form-label">区域描述</label>
+                                    <textarea id="regionDescription" rows="3" class="form-textarea"
+                                        placeholder="描述区域的用途和特点"></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">检测规则</label>
+                                    <div class="space-y-2">
+                                        <label class="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" id="requireHairnet" checked class="text-primary">
+                                            <span class="text-sm">必须佩戴发网</span>
+                                        </label>
+                                        <label class="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" id="limitOccupancy" class="text-primary">
+                                            <span class="text-sm">人数限制</span>
+                                        </label>
+                                        <label class="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" id="timeRestriction" class="text-primary">
+                                            <span class="text-sm">时间限制</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="form-group" id="occupancyConfig" style="display: none;">
+                                    <label for="maxOccupancy" class="form-label">最大人数</label>
+                                    <input type="number" id="maxOccupancy" min="1" value="5" class="form-input">
+                                </div>
+                                <button class="btn btn-primary w-full" onclick="startDrawing()">🖊️ 开始绘制区域</button>
+                            </div>
+                            <div id="tab-list" class="tab-content">
+                                <div id="regionList" class="space-y-3 max-h-96 overflow-y-auto custom-scrollbar">
+                                    <!-- 区域项目将在这里动态生成 -->
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -113,20 +101,19 @@
                 <div class="region-canvas-section">
                     <div class="card">
                         <!-- 画布控制栏 -->
-                        <div
-                            class="flex justify-between items-center mb-4 p-4 bg-primary-light rounded-lg border border-primary-200">
+                        <div class="flex justify-between items-center mb-4">
                             <div class="flex gap-2">
-                                <button class="btn btn-secondary btn-sm" onclick="clearCanvas()">🗑️ 清空</button>
-                                <button class="btn btn-secondary btn-sm" onclick="loadRegions()">📂 加载</button>
-                                <button class="btn btn-secondary btn-sm" onclick="exportConfig()">📤 导出</button>
+                                <button class="btn btn-secondary" onclick="clearCanvas()">🗑️ 清空</button>
+                                <button class="btn btn-secondary" onclick="loadRegions()" id="loadRegionsBtn">📂 加载</button>
+                                <button class="btn btn-secondary" onclick="exportConfig()">📤 导出</button>
                             </div>
-                            <button class="btn btn-success btn-sm" onclick="saveRegions()">💾 保存配置</button>
+                            <button class="btn btn-success" onclick="saveRegions()">💾 保存配置</button>
                         </div>
 
                         <!-- 画布容器 -->
-                        <div class="relative border-2 border-primary-200 rounded-lg overflow-hidden bg-white shadow-inner flex-1"
-                            style="min-height: 500px;">
-                            <canvas id="regionCanvas" width="800" height="600"
+                        <div
+                            class="relative border-2 border-primary-200 rounded-lg overflow-hidden bg-white shadow-inner flex-1">
+                            <canvas id="regionCanvas" width="800" height="450"
                                 class="block cursor-crosshair w-full h-full"></canvas>
                             <!-- 画布状态指示器 -->
                             <div id="canvasStatus"
@@ -188,6 +175,27 @@
     <script src="region_config.js"></script>
 
     <style>
+        /* 修复：左右分栏改为顶部对齐，避免高度互相影响 */
+        .region-layout {
+            align-items: flex-start;
+        }
+
+        /* 修复：为输入框添加常驻边框 */
+        .form-input,
+        .form-select,
+        .form-textarea {
+            border: 1px solid #e5e7eb;
+            /* gray-200 */
+        }
+
+        /* 保持焦点样式 */
+        .form-input:focus,
+        .form-select:focus,
+        .form-textarea:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(0, 92, 180, 0.2);
+        }
+
         /* 区域列表项样式 */
         .region-item {
             padding: 12px;
@@ -268,6 +276,53 @@
             display: block !important;
         }
 
+        /* Tab 标签页样式 */
+        .tab-nav {
+            display: flex;
+            border-bottom: 1px solid var(--gray-200);
+            background-color: var(--gray-50, #f9fafb);
+        }
+
+        .tab-link {
+            padding: 0.75rem 1rem;
+            cursor: pointer;
+            background: none;
+            border: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--gray-600);
+            border-bottom: 2px solid transparent;
+            margin-bottom: -1px;
+            flex-grow: 1;
+            text-align: center;
+        }
+
+        .tab-link:hover {
+            color: var(--primary);
+            background-color: var(--gray-100, #f3f4f6);
+        }
+
+        .tab-link.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+            font-weight: 600;
+            background-color: var(--white);
+        }
+
+        .tab-content-container {
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 1.5rem;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
         /* 响应式优化 */
         @media (max-width: 1023px) {
 
@@ -305,15 +360,26 @@
         function adjustCanvasSize() {
             const canvas = document.getElementById('regionCanvas');
             const container = canvas.parentElement;
+            if (!container) return;
             const rect = container.getBoundingClientRect();
 
-            canvas.width = Math.max(600, rect.width - 40);
-            canvas.height = Math.max(400, rect.height - 40);
+            // 仅在没有背景图时应用响应式尺寸
+            if (!window.regionManager || !window.regionManager.backgroundImage) {
+                const containerWidth = rect.width;
+                // 基于容器宽度，按16:9计算高度
+                const newWidth = Math.max(300, containerWidth);
+                const newHeight = Math.round(newWidth * (9 / 16));
 
-            // 更新画布尺寸显示
-            document.getElementById('canvasSizeText').textContent = `${canvas.width}x${canvas.height}`;
+                if (canvas.width !== newWidth || canvas.height !== newHeight) {
+                    canvas.width = newWidth;
+                    canvas.height = newHeight;
+                }
+            }
 
-            // 如果regionManager存在，重新绘制
+            if (document.getElementById('canvasSizeText')) {
+                document.getElementById('canvasSizeText').textContent = `${canvas.width}x${canvas.height}`;
+            }
+
             if (window.regionManager) {
                 window.regionManager.redraw();
             }
@@ -330,6 +396,76 @@
         // 页面加载完成后调整画布大小
         window.addEventListener('DOMContentLoaded', adjustCanvasSize);
         window.addEventListener('resize', adjustCanvasSize);
+
+        // 调试函数 - 检查加载按钮是否正常工作
+        function debugLoadRegions() {
+            console.log('debugLoadRegions called');
+            console.log('regionManager:', window.regionManager);
+            if (window.regionManager) {
+                window.regionManager.loadRegions();
+            } else {
+                console.error('regionManager not initialized');
+                alert('regionManager未初始化，请刷新页面重试');
+            }
+        }
+
+        // 覆盖全局loadRegions函数以添加调试
+        function loadRegions() {
+            console.log('loadRegions called');
+            debugLoadRegions();
+        }
+
+        // --- 增强脚本 ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // 为加载按钮添加备用事件监听器
+            const loadBtn = document.getElementById('loadRegionsBtn');
+            if (loadBtn) {
+                loadBtn.addEventListener('click', function(e) {
+                    console.log('Load button clicked via event listener');
+                    e.preventDefault();
+                    loadRegions();
+                });
+                console.log('Load button event listener attached');
+            } else {
+                console.error('Load button not found');
+            }
+            const tabLinks = document.querySelectorAll('.tab-link');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            function switchTab(tabId) {
+                tabLinks.forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.tab === tabId);
+                });
+                tabContents.forEach(content => {
+                    content.classList.toggle('active', content.id === tabId);
+                });
+            }
+
+            tabLinks.forEach(button => {
+                button.addEventListener('click', () => {
+                    switchTab(button.dataset.tab);
+                });
+            });
+
+            setTimeout(() => {
+                if (window.regionManager) {
+                    const originalEditRegion = window.regionManager.editRegion.bind(window.regionManager);
+                    window.regionManager.editRegion = function (regionId) {
+                        originalEditRegion(regionId);
+                        switchTab('tab-edit');
+                        const formElement = document.getElementById('regionName');
+                        if (formElement) {
+                            formElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    };
+
+                    window.regionManager.regions = [];
+                    window.regionManager.updateRegionList();
+                    window.regionManager.redrawCanvas();
+                    console.log("Canvas has been cleared on startup.");
+                }
+            }, 100);
+        });
     </script>
 </body>
 

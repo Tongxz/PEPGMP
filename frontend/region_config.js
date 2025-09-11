@@ -682,7 +682,7 @@ class RegionConfigManager {
         try {
             // 显示加载状态
             this.showNotification('正在从服务器加载区域配置...', 'info');
-            
+
             const response = await fetch('/api/v1/management/regions');
             if (response.ok) {
                 const lst = await response.json();
@@ -723,7 +723,7 @@ class RegionConfigManager {
 
                 this.updateRegionList();
                 this.redrawCanvas();
-                
+
                 if (this.regions.length === 0) {
                     this.showNotification('服务器暂无保存的区域配置', 'warning');
                 } else {
@@ -734,7 +734,7 @@ class RegionConfigManager {
             }
         } catch (error) {
             console.error('Load error:', error);
-            
+
             // 更详细的错误信息
             let errorMessage = '加载失败';
             if (error.message.includes('Failed to fetch')) {
@@ -746,7 +746,7 @@ class RegionConfigManager {
             } else {
                 errorMessage = `加载失败: ${error.message}`;
             }
-            
+
             this.showNotification(errorMessage, 'error');
         }
     }
@@ -876,7 +876,14 @@ function saveRegions() {
 }
 
 function loadRegions() {
-    regionManager.loadRegions();
+    console.log('Global loadRegions called');
+    if (regionManager) {
+        console.log('Calling regionManager.loadRegions()');
+        regionManager.loadRegions();
+    } else {
+        console.error('regionManager not available');
+        alert('系统未初始化完成，请稍后重试或刷新页面');
+    }
 }
 
 function exportConfig() {
@@ -886,5 +893,14 @@ function exportConfig() {
 // 初始化
 let regionManager;
 document.addEventListener('DOMContentLoaded', () => {
-    regionManager = new RegionConfigManager();
+    try {
+        console.log('Starting RegionConfigManager initialization...');
+        regionManager = new RegionConfigManager();
+        // 将regionManager设置为全局变量，方便调试
+        window.regionManager = regionManager;
+        console.log('RegionConfigManager initialized successfully:', regionManager);
+    } catch (error) {
+        console.error('Failed to initialize RegionConfigManager:', error);
+        alert('初始化失败: ' + error.message);
+    }
 });
