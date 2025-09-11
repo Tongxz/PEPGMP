@@ -148,7 +148,7 @@
                         <td class="text-sm">${cam.fps ?? '-'}</td>
                         <td><span class="badge badge-gray" id="status-${cam.id}">检测中</span></td>
                         <td>
-                            <div class="flex gap-1 flex-wrap">
+                            <div class="camera-actions">
                                 <button class="btn btn-sm btn-secondary" onclick='fillForm(${JSON.stringify(cam)})'>编辑</button>
                                 <button class="btn btn-sm btn-primary" onclick='startCam(${JSON.stringify(cam.id)})'>启动</button>
                                 <button class="btn btn-sm btn-secondary" onclick='stopCam(${JSON.stringify(cam.id)})'>停止</button>
@@ -321,6 +321,94 @@
             setInterval(refreshStatus, 5000);
         });
     </script>
+
+    <style>
+        /* 摄像头操作按钮样式 */
+        .camera-actions {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: flex-start;
+        }
+
+        .camera-actions button {
+            flex-shrink: 0;
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            min-width: 44px;
+            white-space: nowrap;
+        }
+
+        /* 响应式优化 */
+        @media (max-width: 1024px) {
+            .camera-actions {
+                gap: 4px;
+            }
+            
+            .camera-actions button {
+                font-size: 0.7rem;
+                padding: 3px 6px;
+                min-width: 40px;
+            }
+        }
+
+        /* 修复表格中其他Tailwind类名 */
+        .font-mono {
+            font-family: monospace;
+        }
+
+        .text-xs {
+            font-size: 0.75rem;
+        }
+
+        .text-sm {
+            font-size: 0.875rem;
+        }
+
+        .text-gray-600 {
+            color: var(--gray-600);
+        }
+
+        .truncate {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .max-w-xs {
+            max-width: 20rem;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .text-gray-500 {
+            color: var(--gray-500);
+        }
+
+        .py-8 {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+        }
+
+        .mt-4 {
+            margin-top: 1rem;
+        }
+
+        .p-3 {
+            padding: 0.75rem;
+        }
+
+        .bg-gray-50 {
+            background-color: var(--gray-50);
+        }
+
+        .rounded-lg {
+            border-radius: var(--radius-lg);
+        }
+    </style>
 </body>
 
 </html>
