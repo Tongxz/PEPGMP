@@ -104,8 +104,10 @@
         width: 100%;
         max-width: 1400px;
         margin: 0 auto;
-        padding: var(--space-2) var(--space-3); /* 减少上下内边距 */
-        min-height: calc(100vh - 56px); /* 改为最小高度，允许内容撑高 */
+        padding: var(--space-2) var(--space-3);
+        /* 减少上下内边距 */
+        min-height: calc(100vh - 56px);
+        /* 改为最小高度，允许内容撑高 */
         display: flex;
         flex-direction: column;
     }
@@ -137,23 +139,31 @@
     .layout-header {
         background: var(--text-primary);
         color: var(--white);
-        padding: var(--space-2) var(--space-3); /* 减少内边距 */
-        border-radius: var(--radius-md); /* 减小圆角 */
+        padding: var(--space-2) var(--space-3);
+        /* 减少内边距 */
+        border-radius: var(--radius-md);
+        /* 减小圆角 */
         text-align: center;
-        margin-bottom: var(--space-2); /* 减少底部间距 */
-        flex-shrink: 0; /* 防止头部被压缩 */
+        margin-bottom: var(--space-2);
+        /* 减少底部间距 */
+        flex-shrink: 0;
+        /* 防止头部被压缩 */
     }
 
     .layout-header h1 {
-        font-size: 1.25rem; /* 进一步减小标题 */
+        font-size: 1.25rem;
+        /* 进一步减小标题 */
         font-weight: 600;
-        margin: 0; /* 移除底部间距 */
+        margin: 0;
+        /* 移除底部间距 */
     }
 
     .layout-header p {
-        font-size: 0.8rem; /* 减小副标题 */
+        font-size: 0.8rem;
+        /* 减小副标题 */
         opacity: 0.9;
-        margin: 0; /* 移除间距 */
+        margin: 0;
+        /* 移除间距 */
     }
 
     /* 页面内容区 */
@@ -161,7 +171,8 @@
         flex: 1;
         display: flex;
         flex-direction: column;
-        gap: var(--space-2); /* 进一步减少间距 */
+        gap: var(--space-2);
+        /* 进一步减少间距 */
     }
 
     /* 栅格系统 */
@@ -268,20 +279,25 @@
     .card {
         background: var(--white);
         border: 1px solid var(--border-color);
-        border-radius: var(--radius-md); /* 减小圆角 */
-        padding: var(--space-3); /* 减少内边距 */
+        border-radius: var(--radius-md);
+        /* 减小圆角 */
+        padding: var(--space-3);
+        /* 减少内边距 */
         box-shadow: var(--shadow-sm);
         min-width: 0;
         /* 防止内容溢出 */
     }
 
     .card-compact {
-        padding: var(--space-2); /* 更紧凑 */
+        padding: var(--space-2);
+        /* 更紧凑 */
     }
 
     .card-header {
-        margin-bottom: var(--space-2); /* 减少间距 */
-        padding-bottom: var(--space-2); /* 减少内边距 */
+        margin-bottom: var(--space-2);
+        /* 减少间距 */
+        padding-bottom: var(--space-2);
+        /* 减少内边距 */
         border-bottom: 1px solid var(--gray-200);
     }
 
@@ -747,7 +763,8 @@
     .camera-layout {
         display: flex;
         flex-direction: column;
-        gap: var(--space-3); /* 减少间距 */
+        gap: var(--space-3);
+        /* 减少间距 */
     }
 
     .camera-form-section {
@@ -838,7 +855,8 @@
     .region-layout {
         display: flex;
         flex-direction: column;
-        gap: var(--space-2); /* 减少间距 */
+        gap: var(--space-2);
+        /* 减少间距 */
     }
 
     /* region-layout 的直接子组件高度统一 */
