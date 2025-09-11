@@ -446,9 +446,9 @@ class RegionConfigManager {
                 <p><strong>规则:</strong> ${rulesText}</p>
                 <p><strong>描述:</strong> ${region.description || '无描述'}</p>
                 <div class="region-actions">
-                    <button class="btn btn-primary" onclick="regionManager.selectRegion('${region.id}')">选择</button>
+                    <button class="btn btn-info" onclick="regionManager.selectRegion('${region.id}')">选择</button>
                     <button class="btn btn-secondary" onclick="regionManager.editRegion('${region.id}')">编辑</button>
-                    <button class="btn ${region.isActive ? 'btn-secondary' : 'btn-success'}"
+                    <button class="btn ${region.isActive ? 'btn-warning' : 'btn-success'}"
                             onclick="regionManager.toggleRegion('${region.id}')">
                         ${region.isActive ? '禁用' : '启用'}
                     </button>
@@ -571,19 +571,67 @@ class RegionConfigManager {
         const regionIndex = this.regions.findIndex(r => r.id === regionId);
         if (regionIndex === -1) return;
 
-        const regionName = this.regions[regionIndex].name;
-        this.regions.splice(regionIndex, 1);
+        const region = this.regions[regionIndex];
+        const modal = document.getElementById('deleteConfirmModal');
+        const regionNameSpan = document.getElementById('deleteRegionName');
+        const cancelBtn = document.getElementById('cancelDelete');
+        const confirmBtn = document.getElementById('confirmDelete');
 
-        if (this.selectedRegionId === regionId) {
-            this.selectedRegionId = null;
-        }
+        // 显示确认对话框
+        regionNameSpan.textContent = region.name;
+        modal.classList.add('show');
 
-        this.updateRegionList();
-        this.redrawCanvas();
+        // 取消删除
+        const handleCancel = () => {
+            modal.classList.remove('show');
+            cancelBtn.removeEventListener('click', handleCancel);
+            confirmBtn.removeEventListener('click', handleConfirm);
+        };
 
-        if (showNotification) {
-            this.showNotification(`区域 "${regionName}" 已删除`, 'success');
-        }
+        // 确认删除
+        const handleConfirm = () => {
+            modal.classList.remove('show');
+
+            // 执行删除
+            this.regions.splice(regionIndex, 1);
+
+            if (this.selectedRegionId === regionId) {
+                this.selectedRegionId = null;
+            }
+
+            this.updateRegionList();
+            this.redrawCanvas();
+
+            if (showNotification) {
+                this.showNotification(`区域 "${region.name}" 已删除`, 'success');
+            }
+
+            // 清理事件监听器
+            cancelBtn.removeEventListener('click', handleCancel);
+            confirmBtn.removeEventListener('click', handleConfirm);
+        };
+
+        // 添加事件监听器
+        cancelBtn.addEventListener('click', handleCancel);
+        confirmBtn.addEventListener('click', handleConfirm);
+
+        // ESC键取消
+        const handleEscape = (e) => {
+            if (e.key === 'Escape') {
+                handleCancel();
+                document.removeEventListener('keydown', handleEscape);
+            }
+        };
+        document.addEventListener('keydown', handleEscape);
+
+        // 点击背景取消
+        const handleBackgroundClick = (e) => {
+            if (e.target === modal) {
+                handleCancel();
+                modal.removeEventListener('click', handleBackgroundClick);
+            }
+        };
+        modal.addEventListener('click', handleBackgroundClick);
     }
 
     async clearCanvas() {
