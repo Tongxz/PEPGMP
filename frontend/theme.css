@@ -781,19 +781,26 @@ body {
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
-    height: calc(100vh - 180px);
-    /* 固定高度，确保左右一致 */
+    flex: 1;
+    /* 占满父容器(.layout-content)的剩余空间 */
+    min-height: 0;
+    /* 确保flex子项可以收缩 */
 }
 
+/* region-layout 的直接子组件高度统一 */
 .region-sidebar-section {
     width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    /* 移除height: 100%，让align-items: stretch自动处理 */
 }
 
 .region-canvas-section {
     width: 100%;
-    flex: 1;
     display: flex;
     flex-direction: column;
+    /* 移除height: 100%，让align-items: stretch自动处理 */
 }
 
 /* 大屏幕下的双栏布局 */
@@ -801,6 +808,7 @@ body {
     .region-layout {
         flex-direction: row;
         align-items: stretch;
+        /* 强制子组件高度一致 */
         gap: var(--space-6);
     }
 
@@ -808,17 +816,19 @@ body {
         width: 380px;
         flex-shrink: 0;
         overflow-y: auto;
-        height: 100%;
-        /* 与父容器高度一致 */
+        /* 重置所有可能冲突的高度设置 */
+        height: auto !important;
+        max-height: none !important;
+        min-height: 0 !important;
     }
 
     .region-canvas-section {
         flex: 1;
         min-width: 0;
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-        /* 与父容器高度一致 */
+        /* 重置所有可能冲突的高度设置 */
+        height: auto !important;
+        max-height: none !important;
+        min-height: 0 !important;
     }
 
     /* 画布卡片占满高度 */
@@ -826,8 +836,7 @@ body {
         flex: 1;
         display: flex;
         flex-direction: column;
-        height: 100%;
-        /* 明确设置高度 */
+        /* 让flex: 1自动占满父容器高度 */
     }
 
     /* 画布容器适应高度 */
@@ -836,7 +845,7 @@ body {
         height: 100%;
         object-fit: contain;
     }
-    
+
     /* 画布容器父元素适应 */
     .region-canvas-section .flex-1 {
         flex: 1;
@@ -849,6 +858,40 @@ body {
 .custom-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: var(--primary-300) var(--gray-100);
+}
+
+/* 左侧面板卡片分配 - 大屏幕 */
+@media (min-width: 1280px) {
+    .region-sidebar-section>.card:nth-child(1) {
+        /* 背景图像卡片 - 固定大小 */
+        flex-shrink: 0;
+    }
+
+    .region-sidebar-section>.card:nth-child(2) {
+        /* 新建区域卡片 - 固定大小 */
+        flex-shrink: 0;
+    }
+
+    .region-sidebar-section>.card:nth-child(3) {
+        /* 区域列表卡片 - 占满剩余空间 */
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        /* 确保可以收缩 */
+    }
+
+    .region-sidebar-section>.card:nth-child(3)>.card-header {
+        flex-shrink: 0;
+        /* 标题固定 */
+    }
+
+    .region-sidebar-section>.card:nth-child(3)>#regionList {
+        flex: 1;
+        overflow-y: auto;
+        min-height: 200px;
+        /* 确保列表可滚动并占满剩余空间 */
+    }
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -893,14 +936,24 @@ body {
     color: var(--primary-800);
 }
 
-/* 响应式网格优化 */
+/* 移动端响应式布局 */
 @media (max-width: 1023px) {
     .region-layout {
         gap: var(--space-4);
+        height: auto;
+        /* 移动端不强制固定高度 */
+        align-items: stretch;
+        /* 确保子组件宽度一致 */
     }
 
     .region-sidebar-section {
-        max-height: none;
+        height: auto;
+        /* 移动端自然高度 */
+    }
+
+    .region-canvas-section {
+        height: auto;
+        /* 移动端自然高度 */
     }
 
     .grid.grid-cols-1.lg\:grid-cols-2 {
