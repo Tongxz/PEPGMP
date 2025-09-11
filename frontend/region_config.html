@@ -104,7 +104,8 @@
                         <div class="flex justify-between items-center mb-4">
                             <div class="flex gap-2">
                                 <button class="btn btn-secondary" onclick="clearCanvas()">🗑️ 清空</button>
-                                <button class="btn btn-secondary" onclick="loadRegions()" id="loadRegionsBtn">📂 加载</button>
+                                <button class="btn btn-secondary" onclick="loadRegions()" id="loadRegionsBtn">📂
+                                    加载</button>
                                 <button class="btn btn-secondary" onclick="exportConfig()">📤 导出</button>
                             </div>
                             <button class="btn btn-success" onclick="saveRegions()">💾 保存配置</button>
@@ -232,7 +233,21 @@
         .region-actions {
             display: flex;
             gap: 4px;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
+            /* 保持按钮在一行 */
+            align-items: center;
+            justify-content: flex-start;
+            white-space: nowrap;
+            /* 防止内容换行 */
+        }
+        
+        .region-actions button {
+            flex-shrink: 0;
+            /* 防止按钮被压缩 */
+            font-size: 0.75rem;
+            /* 稍微减小字体确保按钮不会太宽 */
+            padding: 4px 8px;
+            /* 调整按钮内边距 */
         }
 
         .status-indicator {
@@ -420,7 +435,7 @@
             // 为加载按钮添加备用事件监听器
             const loadBtn = document.getElementById('loadRegionsBtn');
             if (loadBtn) {
-                loadBtn.addEventListener('click', function(e) {
+                loadBtn.addEventListener('click', function (e) {
                     console.log('Load button clicked via event listener');
                     e.preventDefault();
                     loadRegions();
