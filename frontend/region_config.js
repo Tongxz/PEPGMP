@@ -901,7 +901,8 @@ class RegionConfigManager {
     showNotification(message, type = 'success') {
         const notification = document.getElementById('notification');
         notification.textContent = message;
-        notification.className = `notification ${type} show`;
+        notification.className = `notification-toast ${type}`;
+        notification.classList.add('show');
 
         setTimeout(() => {
             notification.classList.remove('show');
