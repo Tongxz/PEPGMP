@@ -1,83 +1,77 @@
 /* === 统一设计系统 === */
 
-/* AI 系统前端色彩规范 V3.0 - 专业现代配色 */
+/* AI 系统前端色彩规范 V4.0 - 优雅专业配色 */
 :root {
-    /* 主色体系 */
-    --primary: #3A7AFE;
-    /* 主色（品牌色，核心按钮/高亮） */
+    /* 品牌主色 */
+    --primary: #3570E8;
     --primary-light: #E8F1FE;
-    /* 主色浅色（hover/浅背景） */
     --primary-dark: #2D62D8;
-    /* 主色深色（active/深背景） */
 
-    /* 辅助色体系 */
-    --secondary: #FF7A45;
-    /* 辅助色（局部强调/次要按钮） */
-    --secondary-light: #FFF1E6;
-    /* 辅助色浅色 */
-    --secondary-dark: #D85A2D;
-    /* 辅助色深色 */
+    /* 辅助色 */
+    --secondary: #F98C4A;
+    --secondary-light: #FFF2E8;
+    --secondary-dark: #E6793C;
 
     /* 状态色 */
-    --success: #52C41A;
-    /* 成功绿 */
+    --success: #34C38F;
+    --success-dark: #2E9C76;
     --warning: #FAAD14;
-    /* 警告琥珀黄 */
+    --warning-dark: #D89614;
     --error: #FF4D4F;
-    /* 错误红 */
-    --info: #1890FF;
-    /* 信息蓝 */
+    --error-dark: #D9363E;
+    --info: #3A7AFE;
+    --info-dark: #2D62D8;
 
-    /* 中性色（背景 & 文本） */
+    /* 中性色 */
+    --gray-50: #F9FAFB;
+    --gray-100: #F2F3F5;
+    --gray-200: #E5E6EB;
+    --gray-300: #D0D3D9;
+    --gray-400: #AEB4BE;
+    --gray-500: #86909C;
+    --gray-600: #6B7785;
+    --gray-700: #4E5969;
+    --gray-800: #272E3B;
+    --gray-900: #1D1F23;
+
+    /* 通用 */
     --white: #FFFFFF;
-    /* 卡片背景 */
     --bg-primary: #F7F8FA;
-    /* 主背景（页面底色） */
-    --border-color: #E5E6EB;
-    /* 分割线/边框 */
+    --border-color: var(--gray-200);
 
-    /* 文本色 */
-    --text-primary: #1D1F23;
-    /* 主文本（标题/正文） */
-    --text-secondary: #4E5969;
-    /* 次要文本（说明/次级信息） */
-    --text-placeholder: #86909C;
-    /* 占位符文本 */
-
-    /* 特殊用色 */
+    /* 特殊色 */
     --highlight: #722ED1;
-    /* 强调色（少量标签/图表强调） */
-    --shadow: rgba(0, 0, 0, 0.08);
+
     /* 阴影 */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.15);
+    --shadow-xl: 0 8px 16px rgba(0, 0, 0, 0.2);
+    --shadow-inset: inset 0 2px 4px rgba(0, 0, 0, 0.06);
+
+    /* 圆角 */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --radius-xl: 12px;
 
     /* 间距系统 */
-    --space-1: 4px;
-    --space-2: 8px;
-    --space-3: 12px;
-    --space-4: 16px;
-    --space-5: 20px;
-    --space-6: 24px;
-    --space-8: 32px;
-    --space-10: 40px;
-    --space-12: 48px;
-    --space-16: 64px;
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.25rem;
+    --space-6: 1.5rem;
+    --space-8: 2rem;
+    --space-10: 2.5rem;
+    --space-12: 3rem;
+    --space-16: 4rem;
 
-    /* 圆角系统 */
-    --radius-sm: 6px;
-    --radius-md: 8px;
-    --radius-lg: 12px;
-    --radius-xl: 16px;
-
-    /* 阴影系统 */
-    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-
-    /* 响应式断点 */
-    --breakpoint-sm: 640px;
-    --breakpoint-md: 768px;
-    --breakpoint-lg: 1024px;
-    --breakpoint-xl: 1280px;
+    /* 兼容性变量映射 - 保持向后兼容 */
+    --text-primary: var(--gray-900);
+    --text-secondary: var(--gray-700);
+    --text-placeholder: var(--gray-500);
+    --shadow: var(--shadow-md);
 }
 
 /* === 全局重置 === */
@@ -312,8 +306,44 @@ body {
     color: var(--white);
 }
 
+.btn-info {
+    background: var(--info);
+    color: var(--white);
+}
+
+.btn-info:hover:not(:disabled) {
+    background: var(--primary-dark);
+    /* 使用主色深色作为hover */
+}
+
+.btn-highlight {
+    background: var(--highlight);
+    color: var(--white);
+}
+
+.btn-highlight:hover:not(:disabled) {
+    background: #5a1fa8;
+    /* 深紫hover */
+}
+
+.btn-warning {
+    background: var(--warning);
+    color: var(--white);
+}
+
+.btn-warning:hover:not(:disabled) {
+    background: #E6A200;
+    /* 深琥珀黄hover */
+}
+
 .btn-danger:hover:not(:disabled) {
-    background: #D8393B;
+    background: #D23B3B;
+    /* 深红hover，保持质感 */
+}
+
+.btn-success:hover:not(:disabled) {
+    background: #3BA366;
+    /* 深绿hover，现代感 */
 }
 
 .btn-success {
