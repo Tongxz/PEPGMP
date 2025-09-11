@@ -103,8 +103,8 @@
                         <!-- 画布控制栏 -->
                         <div class="flex justify-between items-center mb-4">
                             <div class="flex gap-2">
-                                <button class="btn btn-secondary" onclick="clearCanvas()">🗑️ 清空</button>
-                                <button class="btn btn-secondary" onclick="loadRegions()" id="loadRegionsBtn">📂
+                                <button class="btn btn-warning" onclick="clearCanvas()">🗑️ 清空</button>
+                                <button class="btn btn-info" onclick="loadRegions()" id="loadRegionsBtn">📂
                                     加载</button>
                                 <button class="btn btn-secondary" onclick="exportConfig()">📤 导出</button>
                             </div>
@@ -232,22 +232,45 @@
 
         .region-actions {
             display: flex;
-            gap: 4px;
-            flex-wrap: nowrap;
-            /* 保持按钮在一行 */
+            gap: 3px;
+            flex-wrap: wrap;
+            /* 允许按钮换行 */
             align-items: center;
             justify-content: flex-start;
-            white-space: nowrap;
-            /* 防止内容换行 */
+            margin-top: 8px;
         }
-        
+
         .region-actions button {
-            flex-shrink: 0;
-            /* 防止按钮被压缩 */
-            font-size: 0.75rem;
-            /* 稍微减小字体确保按钮不会太宽 */
-            padding: 4px 8px;
-            /* 调整按钮内边距 */
+            flex: 0 0 auto;
+            /* 按钮不伸缩，保持原始大小 */
+            font-size: 0.65rem;
+            /* 再次减小字体 */
+            padding: 2px 5px;
+            /* 进一步减小内边距 */
+            min-width: 32px;
+            /* 减小最小宽度 */
+            height: 22px;
+            /* 固定按钮高度 */
+            line-height: 1.1;
+            /* 调整行高 */
+            border-radius: 3px;
+            /* 更小的圆角 */
+            font-weight: 500;
+            /* 稍微加粗字体以提高可读性 */
+        }
+
+        /* 在小屏幕上进一步优化 */
+        @media (max-width: 1279px) {
+            .region-actions {
+                gap: 2px;
+            }
+            
+            .region-actions button {
+                font-size: 0.6rem;
+                padding: 2px 4px;
+                min-width: 28px;
+                height: 20px;
+            }
         }
 
         .status-indicator {
