@@ -680,6 +680,9 @@ class RegionConfigManager {
 
     async loadRegions() {
         try {
+            // 显示加载状态
+            this.showNotification('正在从服务器加载区域配置...', 'info');
+            
             const response = await fetch('/api/v1/management/regions');
             if (response.ok) {
                 const lst = await response.json();
@@ -720,13 +723,31 @@ class RegionConfigManager {
 
                 this.updateRegionList();
                 this.redrawCanvas();
-                this.showNotification('区域配置已从服务器加载', 'success');
+                
+                if (this.regions.length === 0) {
+                    this.showNotification('服务器暂无保存的区域配置', 'warning');
+                } else {
+                    this.showNotification(`成功加载 ${this.regions.length} 个区域配置`, 'success');
+                }
             } else {
                 throw new Error('加载失败');
             }
         } catch (error) {
             console.error('Load error:', error);
-            this.showNotification('加载失败，请检查网络连接', 'error');
+            
+            // 更详细的错误信息
+            let errorMessage = '加载失败';
+            if (error.message.includes('Failed to fetch')) {
+                errorMessage = '网络连接失败，请检查代理设置或服务器状态';
+            } else if (error.message.includes('502')) {
+                errorMessage = '服务器网关错误，请检查代理配置';
+            } else if (error.message.includes('404')) {
+                errorMessage = 'API接口不存在，请联系管理员';
+            } else {
+                errorMessage = `加载失败: ${error.message}`;
+            }
+            
+            this.showNotification(errorMessage, 'error');
         }
     }
 
