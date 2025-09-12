@@ -87,6 +87,11 @@ def main():
     parser.add_argument("--device", type=str, default=None, help="cpu|cuda|mps（优先级: CLI>ENV>auto)")
     parser.add_argument("--imgsz", type=int, default=None, help="YOLO 输入尺寸（覆盖配置）")
     parser.add_argument("--human-weights", type=str, default=None, help="YOLO 人体检测权重路径（覆盖配置）")
+    
+    # 性能优化相关 CLI
+    parser.add_argument("--no-window", action="store_true", help="禁用可视化窗口，仅输出统计信息（提高性能）")
+    parser.add_argument("--osd-minimal", action="store_true", help="最小化OSD绘制，减少可视化开销")
+    parser.add_argument("--frame-skip", type=int, default=0, help="跳帧数量，0表示不跳帧（默认: 0）")
     parser.add_argument("--cascade-enable", action="store_true", help="启用级联二次检测")
     parser.add_argument("--log-interval", type=int, default=None, help="日志限流间隔（帧）")
     parser.add_argument("--osd-regions", action="store_true", help="在窗口叠加显示已加载的区域多边形与名称")
@@ -169,26 +174,49 @@ def run_detection(args, logger):
 
     # 2) 统一设备选择（结合硬件自适应）
     try:
-        # 若未显式指定 device/imgsz/weights，则用硬件探测补齐
-        auto_device = (args.device is None) or (str(args.device).lower() == "auto")
-        auto_imgsz = (args.imgsz is None) or (str(args.imgsz).lower() == "auto")
-        auto_weights = (args.human_weights is None)
-        if auto_device or auto_imgsz or auto_weights:
-            try:
-                from src.utils.hardware_probe import decide_policy
-                pol = decide_policy(preferred_profile=args.profile, user_device=args.device, user_imgsz=args.imgsz)
-                if auto_device:
-                    args.device = pol.get("device")
-                if auto_imgsz:
-                    args.imgsz = pol.get("imgsz")
-                if auto_weights and pol.get("human_weights"):
-                    args.human_weights = pol.get("human_weights")
-                # 环境变量注入（线程数等）
-                for k, v in (pol.get("env") or {}).items():
-                    os.environ[str(k)] = str(v)
-                logger.info(f"Auto policy applied: {pol}")
-            except Exception as _e:
-                logger.debug(f"hardware_probe skipped: {_e}")
+        # 新增：自适应性能优化
+        try:
+            from src.utils.adaptive_optimizer import apply_adaptive_optimizations
+            adaptive_config = apply_adaptive_optimizations()
+            
+            # 应用自适应配置（如果用户未手动指定）
+            auto_device = (args.device is None) or (str(args.device).lower() == "auto")
+            auto_imgsz = (args.imgsz is None) or (str(args.imgsz).lower() == "auto")
+            auto_weights = (args.human_weights is None)
+            
+            if auto_device:
+                args.device = "cuda" if adaptive_config.get("enable_amp") else "cpu"
+            if auto_imgsz:
+                args.imgsz = adaptive_config.get("imgsz", 416)
+            if auto_weights:
+                recommended_model = adaptive_config.get("model_recommendations", {}).get("human_model", "yolov8s.pt")
+                args.human_weights = f"models/yolo/{recommended_model}"
+            
+            logger.info(f"自适应优化已启用: {adaptive_config['description']}")
+            logger.info(f"推荐配置 - 设备: {args.device}, 图像尺寸: {args.imgsz}, 模型: {args.human_weights}")
+            
+        except Exception as e:
+            logger.debug(f"自适应优化跳过: {e}")
+            # 回退到原有的硬件探测逻辑
+            auto_device = (args.device is None) or (str(args.device).lower() == "auto")
+            auto_imgsz = (args.imgsz is None) or (str(args.imgsz).lower() == "auto")
+            auto_weights = (args.human_weights is None)
+            if auto_device or auto_imgsz or auto_weights:
+                try:
+                    from src.utils.hardware_probe import decide_policy
+                    pol = decide_policy(preferred_profile=args.profile, user_device=args.device, user_imgsz=args.imgsz)
+                    if auto_device:
+                        args.device = pol.get("device")
+                    if auto_imgsz:
+                        args.imgsz = pol.get("imgsz")
+                    if auto_weights and pol.get("human_weights"):
+                        args.human_weights = pol.get("human_weights")
+                    # 环境变量注入（线程数等）
+                    for k, v in (pol.get("env") or {}).items():
+                        os.environ[str(k)] = str(v)
+                    logger.info(f"Auto policy applied: {pol}")
+                except Exception as _e:
+                    logger.debug(f"hardware_probe skipped: {_e}")
         from config.model_config import ModelConfig
         mc = ModelConfig()
         dev_req = (args.device or None)
@@ -244,7 +272,23 @@ def run_detection(args, logger):
             update_global_param("human_detection", "model_path", weights)
 
         human_detector = HumanDetector(model_path=weights, device=device)
-        pose_detector = PoseDetectorFactory.create(backend="mediapipe")
+        
+        # 根据配置和设备选择姿态检测后端
+        from config.unified_params import get_unified_params
+        params = get_unified_params()
+        
+        # 优先使用配置中的后端设置，如果配置为auto则根据设备选择
+        pose_backend = params.pose_detection.backend
+        if pose_backend == "auto":
+            # 自动选择：CUDA设备优先使用YOLOv8，CPU设备使用MediaPipe
+            pose_backend = "yolov8" if str(device).lower() == "cuda" else "mediapipe"
+        
+        pose_detector = PoseDetectorFactory.create(
+            backend=pose_backend,
+            device=params.pose_detection.device if params.pose_detection.device != "auto" else device
+        )
+        logger.info(f"姿态检测器后端: {pose_backend}, 设备: {device}")
+        
         behavior_recognizer = BehaviorRecognizer()
         hairnet_detector = YOLOHairnetDetector(device=device)
         cascade_cfg = effective.get("cascade", {})
@@ -371,7 +415,12 @@ def run_detection(args, logger):
 
         # 运行循环（简单可视化）
         frame_idx = 0
-        log_iv = int(effective.get("runtime", {}).get("log_interval", 120) or 0)
+        # 日志间隔控制 - CLI参数优先级最高
+        log_iv = args.log_interval if args.log_interval is not None else int(effective.get("runtime", {}).get("log_interval", 120) or 0)
+        
+        # 性能模式：减少日志频率
+        if args.no_window and log_iv == 0:
+            log_iv = 60  # 无窗口模式默认60帧间隔日志
         # 多目标跟踪器（替代简易最近邻）
         mot = MultiObjectTracker(
             max_disappeared=15,
@@ -419,8 +468,13 @@ def run_detection(args, logger):
                 except Exception:
                     pass
 
+                # 根据CLI参数控制检测和可视化行为
                 result = pipeline.detect_comprehensive(
-                    frame, enable_hairnet=True, enable_handwash=True, enable_sanitize=False
+                    frame, 
+                    enable_hairnet=True, 
+                    enable_handwash=True, 
+                    enable_sanitize=False,
+                    # 可考虑未来添加: osd_minimal=args.osd_minimal
                 )
 
                 annotated = result.annotated_image if result.annotated_image is not None else frame
@@ -674,19 +728,40 @@ def run_detection(args, logger):
                     )
                     # 打印当前帧 track 与 region 概要
                     try:
-                        by_region = {}
-                        for _p in uod_persons:
-                            rn = _p.get('region') or 'None'
-                            by_region[rn] = by_region.get(rn, 0) + 1
-                        logger.info(f"活跃目标={len(uod_persons)} 分布={by_region}")
+                        # 按区域分组统计 - 降到DEBUG级别减少日志开销
+                        if logger.isEnabledFor(_logging.DEBUG):
+                            by_region = {}
+                            for _p in uod_persons:
+                                rn = _p.get('region') or 'None'
+                                by_region[rn] = by_region.get(rn, 0) + 1
+                            logger.debug(f"活跃目标={len(uod_persons)} 分布={by_region}")
                     except Exception:
                         pass
 
-                # 展示窗口（放在绘制之后）
-                cv2.imshow("HBD - Main", annotated)
-
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break
+                # 展示窗口（放在绘制之后）- 可选择禁用以提高性能
+                if not args.no_window:
+                    cv2.imshow("HBD - Main", annotated)
+                    
+                    key = cv2.waitKey(1) & 0xFF
+                    if key == ord('q') or key == 27:  # 'q' 或 ESC 键退出
+                        break
+                    
+                    # 检查窗口是否被用户关闭（点击X按钮）
+                    try:
+                        if cv2.getWindowProperty("HBD - Main", cv2.WND_PROP_VISIBLE) < 1:
+                            logger.info("检测到窗口被关闭，正在退出...")
+                            break
+                    except cv2.error:
+                        # 窗口已被销毁
+                        logger.info("窗口已被销毁，正在退出...")
+                        break
+                else:
+                    # 无窗口模式，检查键盘中断
+                    import msvcrt
+                    if msvcrt.kbhit():
+                        key = msvcrt.getch()
+                        if key == b'q':
+                            break
         finally:
             cap.release()
             cv2.destroyAllWindows()

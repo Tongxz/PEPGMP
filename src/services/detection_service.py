@@ -100,13 +100,29 @@ def initialize_detection_services():
         
         detector = HumanDetector()
         behavior_recognizer = BehaviorRecognizer()
-        mediapipe_pose_detector = PoseDetectorFactory.create(backend="mediapipe")
+        
+        # 根据配置和设备选择姿态检测后端
+        from config.unified_params import get_unified_params
+        from src.config.model_config import ModelConfig
+        
+        params = get_unified_params()
+        device = ModelConfig().select_device(requested=None)
+        
+        pose_backend = params.pose_detection.backend
+        if pose_backend == "auto":
+            pose_backend = "yolov8" if str(device).lower() == "cuda" else "mediapipe"
+        
+        pose_detector = PoseDetectorFactory.create(
+            backend=pose_backend,
+            device=params.pose_detection.device if params.pose_detection.device != "auto" else device
+        )
+        logger.info(f"API服务 - 姿态检测器后端: {pose_backend}, 设备: {device}")
         
         optimized_pipeline = OptimizedDetectionPipeline(
             human_detector=detector,
             hairnet_detector=YOLOHairnetDetector(),
             behavior_recognizer=behavior_recognizer,
-            pose_detector=mediapipe_pose_detector,
+            pose_detector=pose_detector,
         )
         hairnet_pipeline = YOLOHairnetDetector()
         logger.info("Detection services initialized.")

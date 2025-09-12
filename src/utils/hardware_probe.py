@@ -28,7 +28,9 @@ def _gpu_info_pynvml() -> Dict[str, Any]:
             mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
             info["gpu_name"] = name.decode("utf-8") if hasattr(name, "decode") else str(name)
             info["vram_gb"] = round(float(mem.total) / (1024 ** 3), 1)
-    except Exception:
+    except Exception as e:
+        # 如果pynvml失败，尝试使用torch获取信息
+        print(f"pynvml failed: {e}, trying torch fallback")
         pass
     return info
 
@@ -51,16 +53,22 @@ def detect_environment() -> Dict[str, Any]:
                 env["device_count"] = int(torch.cuda.device_count())
                 try:
                     env["gpu_name"] = str(torch.cuda.get_device_name(0))
-                except Exception:
+                    # 使用torch获取显存信息作为pynvml的fallback
+                    if torch.cuda.is_available():
+                        mem_info = torch.cuda.mem_get_info(0)  # (free, total)
+                        env["vram_gb"] = round(float(mem_info[1]) / (1024 ** 3), 1)
+                except Exception as e:
+                    print(f"torch GPU info failed: {e}")
                     pass
         except Exception:
             env["has_cuda"] = False
 
-    # 优先使用 pynvml 获取更准确信息
+    # 优先使用 pynvml 获取更准确信息（会覆盖torch的结果）
     nv = _gpu_info_pynvml()
     for k, v in nv.items():
         if v is not None:
             env[k] = v
+
     return env
 
 

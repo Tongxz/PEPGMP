@@ -43,7 +43,19 @@ def initialize_detection_services_for_demo():
 
         detector = HumanDetector(device=dev)
         behavior_recognizer = BehaviorRecognizer()
-        mediapipe_pose_detector = PoseDetectorFactory.create(backend="mediapipe")
+        
+        # 根据配置和设备选择姿态检测后端
+        from config.unified_params import get_unified_params
+        params = get_unified_params()
+        pose_backend = params.pose_detection.backend
+        if pose_backend == "auto":
+            pose_backend = "yolov8" if str(dev).lower() == "cuda" else "mediapipe"
+        
+        pose_detector = PoseDetectorFactory.create(
+            backend=pose_backend,
+            device=params.pose_detection.device if params.pose_detection.device != "auto" else dev
+        )
+        logger.info(f"演示程序 - 姿态检测器后端: {pose_backend}, 设备: {dev}")
         
         optimized_pipeline = OptimizedDetectionPipeline(
             human_detector=detector,
