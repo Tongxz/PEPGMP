@@ -35,7 +35,7 @@ def main():
 示例用法:
   python main.py --mode detection --source 0                    # 使用摄像头进行检测
   python main.py --mode detection --source video.mp4           # 使用视频文件进行检测
-  python main.py --mode api --port 5000                        # 启动API服务
+  python main.py --mode api --port 8000                        # 启动API服务
   python main.py --mode training --config config/train.yaml    # 训练模型
         """,
     )
@@ -67,7 +67,7 @@ def main():
 
     parser.add_argument("--output", type=str, help="输出目录路径")
 
-    parser.add_argument("--port", type=int, default=5000, help="API服务端口 (默认: 5000)")
+    parser.add_argument("--port", type=int, default=8000, help="API服务端口 (默认: 8000)")
 
     parser.add_argument(
         "--host", type=str, default="0.0.0.0", help="API服务主机 (默认: 0.0.0.0)"
@@ -365,15 +365,15 @@ def run_detection(args, logger):
             if not Path(src_str).exists():
                 # 允许 RTSP/网络流（非本地文件）
                 if not src_str.lower().startswith("rtsp://"):
-                logger.error(f"视频文件不存在: {src_str}")
-                return
+                    logger.error(f"视频文件不存在: {src_str}")
+                    return
             cap = cv2.VideoCapture(src_str)
             if not cap or not cap.isOpened():
                 if src_str.lower().startswith("rtsp://"):
                     logger.warning(f"RTSP 打开失败，稍后重试: {src_str}")
                 else:
-                logger.error(f"无法打开视频文件: {src_str}")
-                return
+                    logger.error(f"无法打开视频文件: {src_str}")
+                    return
 
         # RTSP 重连配置
         is_rtsp_source = (not src_str.isdigit()) and src_str.lower().startswith("rtsp://")
@@ -447,7 +447,7 @@ def run_detection(args, logger):
                                 continue
                     else:
                         # 本地文件/摄像头：读帧失败则退出
-                    break
+                        break
                 frame_idx += 1
 
                 # 保存首帧原始图像
@@ -761,7 +761,7 @@ def run_detection(args, logger):
                     if msvcrt.kbhit():
                         key = msvcrt.getch()
                         if key == b'q':
-                    break
+                            break
         finally:
             cap.release()
             cv2.destroyAllWindows()
