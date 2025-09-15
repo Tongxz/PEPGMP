@@ -11,8 +11,8 @@ import cv2
 import numpy as np
 
 from src.core.behavior import BehaviorRecognizer
-from src.core.detector import HumanDetector
-from src.core.pose_detector import PoseDetector
+from src.detection.detector import HumanDetector
+from src.detection.pose_detector import YOLOv8PoseDetector as PoseDetector
 from src.services.detection_service import DetectionResult
 
 

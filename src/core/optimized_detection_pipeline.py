@@ -21,10 +21,10 @@ import numpy as np
 
 from src.config.unified_params import get_unified_params
 from src.core.behavior import DeepBehaviorRecognizer
-from src.core.detector import HumanDetector
-from src.core.hairnet_detector import HairnetDetector
-from src.core.motion_analyzer import MotionAnalyzer
-from src.core.pose_detector import PoseDetectorFactory
+from src.detection.detector import HumanDetector
+from src.detection.hairnet_detector import HairnetDetector
+from src.detection.motion_analyzer import MotionAnalyzer
+from src.detection.pose_detector import PoseDetectorFactory
 from src.utils.logger import get_logger
 
 # 级联相关依赖（可选）

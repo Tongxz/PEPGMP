@@ -11,8 +11,8 @@ from src.core.optimized_detection_pipeline import (
     OptimizedDetectionPipeline,
     DetectionResult,
 )
-from src.core.yolo_hairnet_detector import YOLOHairnetDetector
-from src.core.pose_detector import PoseDetectorFactory
+from src.detection.yolo_hairnet_detector import YOLOHairnetDetector
+from src.detection.pose_detector import PoseDetectorFactory
 from src.core.tracker import MultiObjectTracker
 
 logger = logging.getLogger(__name__)
@@ -96,7 +96,7 @@ def initialize_detection_services():
     logger.info("Initializing detection services...")
     try:
         from src.core.behavior import BehaviorRecognizer
-        from src.core.detector import HumanDetector
+        from src.detection.detector import HumanDetector
         
         detector = HumanDetector()
         behavior_recognizer = BehaviorRecognizer()

@@ -10,10 +10,10 @@ import argparse
 
 # Import core detection components
 from src.core.optimized_detection_pipeline import OptimizedDetectionPipeline, DetectionResult, VideoStreamOptimizer
-from src.core.yolo_hairnet_detector import YOLOHairnetDetector
-from src.core.pose_detector import PoseDetectorFactory
+from src.detection.yolo_hairnet_detector import YOLOHairnetDetector
+from src.detection.pose_detector import PoseDetectorFactory
 from src.core.behavior import BehaviorRecognizer
-from src.core.detector import HumanDetector
+from src.detection.detector import HumanDetector
 from src.core.tracker import MultiObjectTracker # For direct script tracking
 from src.core.region import RegionManager, RegionType
 

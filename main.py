@@ -253,11 +253,11 @@ def run_detection(args, logger):
                 update_global_param("human_detection", k, hd[k])
 
         from src.core.behavior import BehaviorRecognizer
-        from src.core.detector import HumanDetector
-        from src.core.pose_detector import PoseDetectorFactory
+        from src.detection.detector import HumanDetector
+        from src.detection.pose_detector import PoseDetectorFactory
         from src.core.optimized_detection_pipeline import OptimizedDetectionPipeline
         from src.core.region import RegionManager
-        from src.core.yolo_hairnet_detector import YOLOHairnetDetector
+        from src.detection.yolo_hairnet_detector import YOLOHairnetDetector
         from src.core.tracker import MultiObjectTracker
         from src.services.process_engine import ProcessEngine, ProcessConfig, Event  # 记录用（默认关闭）
         from src.services.region_service import initialize_region_service

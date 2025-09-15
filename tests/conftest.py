@@ -91,7 +91,7 @@ def sample_empty_image():
 @pytest.fixture
 def mock_human_detector(monkeypatch):
     """模拟人体检测器"""
-    from src.core.detector import HumanDetector
+    from src.detection.detector import HumanDetector
 
     # 创建模拟检测器
     mock_detector = unittest.mock.Mock(spec=HumanDetector)
@@ -110,7 +110,7 @@ def mock_human_detector(monkeypatch):
     mock_detector.detect.side_effect = mock_detect
 
     # 替换检测器类
-    monkeypatch.setattr("src.core.detector.HumanDetector", lambda: mock_detector)
+    monkeypatch.setattr("src.detection.detector.HumanDetector", lambda: mock_detector)
 
     return mock_detector
 

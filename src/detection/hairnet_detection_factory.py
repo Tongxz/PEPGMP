@@ -19,7 +19,7 @@ sys.path.append(project_root)
 
 # 尝试导入 YOLOv8 发网检测器
 try:
-    from src.core.yolo_hairnet_detector import YOLOHairnetDetector
+    from src.detection.yolo_hairnet_detector import YOLOHairnetDetector
 
     YOLO_DETECTOR_AVAILABLE = True
 except ImportError as e:

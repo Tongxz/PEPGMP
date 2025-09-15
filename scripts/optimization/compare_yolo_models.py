@@ -16,7 +16,7 @@ from ultralytics import YOLO
 # 添加项目根目录到路径
 sys.path.append(str(Path(__file__).parent))
 
-from src.core.detector import HumanDetector
+from src.detection.detector import HumanDetector
 from src.utils.logger import get_logger
 
 # 设置日志

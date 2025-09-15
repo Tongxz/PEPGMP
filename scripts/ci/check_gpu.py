@@ -31,7 +31,7 @@ try:
     import sys
 
     sys.path.insert(0, ".")
-    from src.core.pose_detector import _gpu_enabled
+    from src.detection.pose_detector import _gpu_enabled
 
     mediapipe_mode = "GPU模式" if _gpu_enabled else "CPU模式"
     print(f"MediaPipe自动配置结果: {mediapipe_mode}")

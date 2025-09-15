@@ -11,7 +11,7 @@ __all__ = [
 
 def __getattr__(name):
     if name == 'HumanDetector':
-        from .detector import HumanDetector
+        from src.detection.detector import HumanDetector
         return HumanDetector
     elif name == 'MultiObjectTracker':
         from .tracker import MultiObjectTracker

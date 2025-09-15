@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from src.core.optimized_detection_pipeline import OptimizedDetectionPipeline
-from src.core.yolo_hairnet_detector import YOLOHairnetDetector
+from src.detection.yolo_hairnet_detector import YOLOHairnetDetector
 from src.services.detection_service import comprehensive_detection_logic
 from src.api.dependencies import get_hairnet_pipeline, get_optimized_pipeline
 

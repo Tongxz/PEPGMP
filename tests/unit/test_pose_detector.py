@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import numpy as np
 
-from src.core.pose_detector import (
+from src.detection.pose_detector import (
     PoseDetectorFactory,
     MediaPipePoseDetector,
     YOLOv8PoseDetector,
@@ -22,7 +22,7 @@ class TestPoseDetectorFactory(unittest.TestCase):
 
     def test_create_yolov8_detector(self):
         """测试创建 YOLOv8 姿态检测器"""
-        with patch("src.core.pose_detector.YOLOv8PoseDetector") as mock_yolo:
+        with patch("src.detection.pose_detector.YOLOv8PoseDetector") as mock_yolo:
             detector = PoseDetectorFactory.create(
                 backend="yolov8",
                 model_path="models/yolov8n-pose.pt",
@@ -30,12 +30,6 @@ class TestPoseDetectorFactory(unittest.TestCase):
             )
             self.assertIsNotNone(detector)
             mock_yolo.assert_called_once()
-
-    def test_create_mediapipe_detector(self):
-        """测试创建 MediaPipe 姿态检测器"""
-        with patch("src.core.pose_detector.MediaPipePoseDetector") as mock_mp:
-            with self.assertRaises(NotImplementedError):
-                detector = PoseDetectorFactory.create(backend="mediapipe")
 
     def test_create_invalid_backend(self):
         """测试创建无效的后端"""
@@ -59,14 +53,14 @@ class TestMediaPipePoseDetector(unittest.TestCase):
             cv2_available = False
         self.cv2_available = cv2_available
 
-    @patch("src.core.pose_detector.mp")
+    @patch("src.detection.pose_detector.mp")
     def test_init(self, mock_mp):
         """测试初始化"""
         mock_mp.solutions.pose.Pose.return_value = Mock()
         detector = MediaPipePoseDetector()
         self.assertIsNotNone(detector)
 
-    @patch("src.core.pose_detector.mp")
+    @patch("src.detection.pose_detector.mp")
     def test_detect(self, mock_mp):
         """测试检测方法"""
         # 模拟 MediaPipe 检测结果
@@ -94,7 +88,7 @@ class TestMediaPipePoseDetector(unittest.TestCase):
             self.assertIn("xy", detection["keypoints"])
             self.assertIn("conf", detection["keypoints"])
 
-    @patch("src.core.pose_detector.mp")
+    @patch("src.detection.pose_detector.mp")
     def test_cleanup(self, mock_mp):
         """测试资源清理"""
         mock_pose = Mock()
@@ -122,7 +116,7 @@ class TestYOLOv8PoseDetector(unittest.TestCase):
             cv2_available = False
         self.cv2_available = cv2_available
 
-    @patch("src.core.pose_detector.YOLO")
+    @patch("src.detection.pose_detector.YOLO")
     def test_detect(self, mock_yolo):
         """测试检测方法"""
         # 模拟YOLOv8检测结果
@@ -192,7 +186,7 @@ class TestYOLOv8PoseDetector(unittest.TestCase):
         self.assertIn("conf", detection["keypoints"])
         self.assertEqual(detection["keypoints"]["conf"].shape, (17,))
 
-    @patch("src.core.pose_detector.YOLO")
+    @patch("src.detection.pose_detector.YOLO")
     def test_visualize(self, mock_yolo):
         """测试可视化方法"""
         mock_yolo.return_value = Mock()

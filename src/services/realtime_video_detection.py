@@ -23,9 +23,9 @@ import logging
 from dataclasses import dataclass
 
 # 本地模块导入
-from src.core.enhanced_hand_detector import EnhancedHandDetector, DetectionMode
-from src.core.enhanced_motion_analyzer import EnhancedMotionAnalyzer
-from src.core.deep_behavior_recognizer import DeepBehaviorRecognizer
+from src.detection.enhanced_hand_detector import EnhancedHandDetector, DetectionMode
+from src.detection.enhanced_motion_analyzer import EnhancedMotionAnalyzer
+from src.detection.deep_behavior_recognizer import DeepBehaviorRecognizer
 from src.core.personalization_engine import PersonalizationEngine
 from src.core.performance_optimizer import PerformanceOptimizer
 from src.utils.logger import get_logger

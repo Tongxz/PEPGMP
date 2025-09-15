@@ -11,10 +11,10 @@ try:
 except Exception:
     joblib = None
 
-from .motion_analyzer import MotionAnalyzer
+from src.detection.motion_analyzer import MotionAnalyzer
 
 # 导入pose_detector模块以使用统一的GPU配置策略
-from .pose_detector import MEDIAPIPE_AVAILABLE, PoseDetectorFactory, _gpu_enabled
+from src.detection.pose_detector import MEDIAPIPE_AVAILABLE, PoseDetectorFactory, _gpu_enabled
 
 # 使用pose_detector中配置好的MediaPipe
 if MEDIAPIPE_AVAILABLE:
@@ -38,7 +38,7 @@ except ImportError:
     )
     from src.config.unified_params import get_unified_params
 
-from src.core.deep_behavior_recognizer import DeepBehaviorRecognizer
+from src.detection.deep_behavior_recognizer import DeepBehaviorRecognizer
 from src.utils.logger import get_logger
 
 logger = logging.getLogger(__name__)

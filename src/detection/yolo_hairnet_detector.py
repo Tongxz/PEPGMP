@@ -265,7 +265,7 @@ class YOLOHairnetDetector:
             # 如果没有提供人体检测结果，则进行人体检测
             if human_detections is None:
                 try:
-                    from src.core.detector import HumanDetector
+                    from src.detection.detector import HumanDetector
 
                     human_detector = HumanDetector()
                     human_detections = human_detector.detect(image)

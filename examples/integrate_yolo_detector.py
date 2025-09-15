@@ -28,7 +28,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(project_root)
 
 # 导入 HairnetDetectionFactory
-from src.core.hairnet_detection_factory import HairnetDetectionFactory
+from src.detection.hairnet_detection_factory import HairnetDetectionFactory
 
 
 def parse_args():

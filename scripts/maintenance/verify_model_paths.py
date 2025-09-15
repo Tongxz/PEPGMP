@@ -14,8 +14,8 @@ project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
 from src.config.unified_params import get_unified_params
-from src.core.hairnet_detection_factory import HairnetDetectionFactory
-from src.core.yolo_hairnet_detector import YOLOHairnetDetector
+from src.detection.hairnet_detection_factory import HairnetDetectionFactory
+from src.detection.yolo_hairnet_detector import YOLOHairnetDetector
 
 
 def verify_model_files():

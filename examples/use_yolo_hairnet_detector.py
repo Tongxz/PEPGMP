@@ -23,7 +23,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(project_root)
 
 # 导入 YOLOHairnetDetector
-from src.core.yolo_hairnet_detector import YOLOHairnetDetector
+from src.detection.yolo_hairnet_detector import YOLOHairnetDetector
 
 
 def parse_args():

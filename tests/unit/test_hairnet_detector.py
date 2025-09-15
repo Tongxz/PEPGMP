@@ -26,7 +26,7 @@ class MockHairnetDetector:
         return {"wearing_hairnet": True, "has_hairnet": True, "confidence": 0.85}
 
 
-from src.core.hairnet_detector import (
+from src.detection.hairnet_detector import (
     HairnetCNN,
     HairnetDetectionPipeline,
     HairnetDetector,

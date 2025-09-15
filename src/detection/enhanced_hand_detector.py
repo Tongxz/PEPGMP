@@ -15,7 +15,7 @@ from dataclasses import dataclass
 import logging
 from enum import Enum
 
-from .quality_assessor import HandDetectionQualityAssessor, QualityMetrics
+from src.core.quality_assessor import HandDetectionQualityAssessor, QualityMetrics
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)

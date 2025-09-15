@@ -3,7 +3,7 @@ from typing import Optional
 from fastapi import Request
 
 from src.core.optimized_detection_pipeline import OptimizedDetectionPipeline
-from src.core.yolo_hairnet_detector import YOLOHairnetDetector
+from src.detection.yolo_hairnet_detector import YOLOHairnetDetector
 
 
 def get_optimized_pipeline(request: Request) -> Optional[OptimizedDetectionPipeline]:

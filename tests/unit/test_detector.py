@@ -18,7 +18,7 @@ sys.path.append(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
 
-from src.core.detector import HumanDetector
+from src.detection.detector import HumanDetector
 
 
 class TestHumanDetector(unittest.TestCase):
@@ -41,7 +41,7 @@ class TestHumanDetector(unittest.TestCase):
     def test_get_device_auto(self):
         """测试自动设备选择"""
         device = self.detector._get_device("auto")
-        self.assertIn(device, ["cpu", "cuda"])
+        self.assertIn(device, ["cpu", "cuda", "mps"])
 
     def test_get_device_cpu(self):
         """测试CPU设备选择"""

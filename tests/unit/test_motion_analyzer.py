@@ -10,7 +10,7 @@ from unittest.mock import Mock
 
 import numpy as np
 
-from src.core.motion_analyzer import MotionAnalyzer, MotionTracker
+from src.detection.motion_analyzer import MotionAnalyzer, MotionTracker
 
 
 class TestMotionTracker(unittest.TestCase):
