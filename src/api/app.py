@@ -25,6 +25,7 @@ from src.api.routers import (
     metrics,
     region_management,
     statistics,
+    system,
     websocket,
 )
 from src.services import detection_service, region_service, websocket_service
@@ -86,6 +87,7 @@ app.include_router(download.router, prefix="/api/v1/download", tags=["Download"]
 app.include_router(events.router, tags=["Events"])
 app.include_router(metrics.router, tags=["Metrics"])
 app.include_router(cameras.router, tags=["Cameras"])
+app.include_router(system.router, prefix="/api/v1", tags=["System"])
 
 from fastapi.responses import RedirectResponse
 
