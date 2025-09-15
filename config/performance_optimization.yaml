@@ -1,0 +1,143 @@
+# 性能优化配置文件
+# 针对RTX 4090等高端硬件的优化设置
+
+# 批处理优化
+batch_processing:
+  enabled: true
+  batch_size: 8  # 批处理大小
+  max_wait_time: 0.016  # 最大等待时间(16ms = 60FPS)
+  dynamic_batch: true  # 动态调整批次大小
+
+# 缓存优化
+cache:
+  enabled: true
+  max_size: 100  # 最大缓存条目数
+  similarity_threshold: 0.95  # 帧相似度阈值
+  ttl: 30.0  # 缓存生存时间(秒)
+
+# 模型优化
+model_optimization:
+  # 混合精度
+  mixed_precision: true
+  fp16_enabled: true
+  
+  # 模型融合
+  model_fusion: true
+  
+  # TensorRT优化
+  tensorrt:
+    enabled: false  # 需要额外安装TensorRT
+    precision: "fp16"
+    workspace_size: 1073741824  # 1GB
+
+# 并行处理
+parallel_processing:
+  enabled: true
+  max_workers: 4  # 最大工作线程数
+  queue_size: 32  # 队列大小
+  
+  # 流水线并行
+  pipeline_parallel: true
+  decode_threads: 1
+  detect_threads: 2
+  postprocess_threads: 1
+
+# GPU优化
+gpu_optimization:
+  # 内存管理
+  memory_fraction: 0.8  # 使用80%显存
+  memory_growth: true
+  
+  # CUDA优化
+  cudnn_benchmark: true
+  cudnn_deterministic: false
+  
+  # 多流并行
+  multi_stream: true
+  stream_count: 2
+
+# 检测优化
+detection_optimization:
+  # 跳帧策略
+  frame_skip:
+    enabled: true
+    skip_interval: 2  # 每2帧处理1帧
+    
+  # 区域优化
+  roi_optimization:
+    enabled: true
+    roi_threshold: 0.1  # ROI变化阈值
+    
+  # 级联检测
+  cascade:
+    enabled: true
+    confidence_range: [0.3, 0.7]  # 触发级联的置信度范围
+
+# API模式优化
+api_optimization:
+  # WebSocket优化
+  websocket:
+    compression: true
+    max_message_size: 1048576  # 1MB
+    
+  # 异步处理
+  async_processing: true
+  
+  # 结果缓存
+  result_cache:
+    enabled: true
+    cache_duration: 5.0  # 结果缓存5秒
+
+# 性能监控
+performance_monitoring:
+  enabled: true
+  log_interval: 100  # 每100帧记录一次
+  metrics_collection: true
+  
+  # 关键指标
+  key_metrics:
+    - fps
+    - gpu_utilization
+    - memory_usage
+    - processing_time
+    - cache_hit_rate
+
+# 硬件自适应
+hardware_adaptation:
+  enabled: true
+  
+  # RTX 4090优化
+  rtx4090:
+    batch_size: 16
+    max_workers: 8
+    memory_fraction: 0.9
+    enable_tensorrt: true
+    
+  # RTX 4080优化
+  rtx4080:
+    batch_size: 12
+    max_workers: 6
+    memory_fraction: 0.8
+    enable_tensorrt: true
+    
+  # RTX 4070优化
+  rtx4070:
+    batch_size: 8
+    max_workers: 4
+    memory_fraction: 0.7
+    enable_tensorrt: false
+    
+  # CPU优化
+  cpu_only:
+    batch_size: 4
+    max_workers: 2
+    memory_fraction: 0.5
+    enable_tensorrt: false
+    use_mediapipe: true
+
+# 调试选项
+debug:
+  enabled: false
+  profile_detection: false
+  log_timing: false
+  save_intermediate: false
