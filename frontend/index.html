@@ -15,8 +15,8 @@
     <div class="layout-container">
         <!-- 页面头部 -->
         <header class="layout-header">
-            <h1>🤖 人体行为检测系统</h1>
-            <p>基于深度学习的实时人体检测与分析平台</p>
+        <h1>🤖 人体行为检测系统</h1>
+        <p>基于深度学习的实时人体检测与分析平台</p>
         </header>
 
         <!-- 主要内容区 -->
@@ -25,7 +25,7 @@
             <div class="card">
                 <div class="card-header">
                     <h2 class="card-title text-center">🔍 综合检测功能</h2>
-                </div>
+            </div>
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div class="text-center">
                         <div class="text-xl mb-2">👥</div>
@@ -55,7 +55,7 @@
                 <div class="card">
                     <div class="card-header">
                         <h2 class="card-title">📷 图像/视频检测</h2>
-                    </div>
+            </div>
 
                     <!-- 文件类型选择 -->
                     <div class="flex justify-center gap-4 mb-6">
@@ -66,8 +66,8 @@
                         <label class="flex items-center gap-2 cursor-pointer">
                             <input type="radio" name="fileType" value="video" class="text-primary">
                             <span>🎬 视频检测</span>
-                        </label>
-                    </div>
+                </label>
+            </div>
 
                     <!-- 上传区域 -->
                     <div id="uploadArea"
@@ -76,13 +76,13 @@
                         <div id="uploadText" class="text-lg mb-2">点击或拖拽文件到此处</div>
                         <div id="uploadFormats" class="text-sm text-gray-600 mb-4">支持 JPG、PNG、GIF 格式</div>
                         <input type="file" id="fileInput" class="hidden" accept="image/*">
-                    </div>
+        </div>
 
                     <!-- 控制按钮 -->
                     <div class="flex gap-3 justify-center mt-6">
                         <button class="btn btn-secondary" id="uploadBtn">选择文件</button>
                         <button class="btn btn-primary" id="detectBtn" disabled>开始检测</button>
-                    </div>
+            </div>
 
                     <!-- 录制选项 -->
                     <div id="recordOptions" class="mt-4 p-4 bg-gray-50 rounded-lg" style="display: none;">
@@ -90,7 +90,7 @@
                             <input type="checkbox" id="recordProcess" class="text-primary">
                             <span class="text-sm">📹 录制检测过程（生成带标注的视频）</span>
                         </label>
-                    </div>
+            </div>
 
                     <!-- 状态和结果显示 -->
                     <div id="uploadStatus" class="mt-4"></div>
@@ -162,7 +162,7 @@
                             <div class="text-lg mb-1">🖥️</div>
                             <div class="text-sm">系统信息</div>
                         </a>
-                    </div>
+                </div>
                 </div>
             </div>
         </main>

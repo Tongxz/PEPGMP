@@ -4,6 +4,7 @@
         { name: '摄像头配置', href: '/frontend/camera_config.html', key: 'cameras' },
         { name: '区域配置', href: '/frontend/region_config.html', key: 'regions' },
         { name: '统计看板', href: '/frontend/statistics.html', key: 'stats' },
+        { name: '系统信息', href: '/frontend/system_info.html', key: 'system' },
     ];
     const rightItems = [
         { name: '下载叠加图', href: '/api/v1/download/overlay?name=overlay_debug', key: 'overlay', target: '_blank' },
