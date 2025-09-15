@@ -15,7 +15,7 @@ behavior_recognition:
   use_advanced_detection: true
   use_mediapipe: true
   use_ml_classifier: true
-  ml_model_path: models/handwash_xgb_tmp.joblib
+  ml_model_path: models/handwash_xgb.joblib
   ml_window: 30
   ml_fusion_alpha: 0.5
 hairnet_detection:
@@ -47,19 +47,19 @@ human_detection:
   min_width: 40
   model_path: models/yolo/yolov8s.pt
   nms_threshold: 0.4
-  imgsz: 416  # 从512降到416提高吞吐量
+  imgsz: 416 # 从512降到416提高吞吐量
 pose_detection:
-  backend: yolov8  # 'yolov8' or 'mediapipe' or 'auto'
+  backend: yolov8 # 'yolov8' or 'mediapipe' or 'auto'
   device: auto
   model_path: models/yolo/yolov8n-pose.pt
   confidence_threshold: 0.5
   iou_threshold: 0.7
 detection_rules:
-  consecutive_frames: 30            # 连续满足条件帧数阈值
-  horizontal_move_std: 8.0          # 手腕水平坐标标准差阈值 (像素)
-  min_move_frequency_hz: 2.0        # 水平移动最小频率 (Hz)
-  iou_threshold: 0.5                # ROI IoU 阈值
-  ioua_threshold: 0.5               # ROI IOUA 阈值
+  consecutive_frames: 30 # 连续满足条件帧数阈值
+  horizontal_move_std: 8.0 # 手腕水平坐标标准差阈值 (像素)
+  min_move_frequency_hz: 2.0 # 水平移动最小频率 (Hz)
+  iou_threshold: 0.5 # ROI IoU 阈值
+  ioua_threshold: 0.5 # ROI IOUA 阈值
 system:
   api_timeout: 30.0
   batch_size: 8
@@ -70,8 +70,8 @@ system:
   log_level: INFO
   max_request_size: 10485760
   max_workers: 8
-  enable_amp: true  # 启用自动混合精度
-  enable_batch_processing: true  # 启用批处理优化
+  enable_amp: true # 启用自动混合精度
+  enable_batch_processing: true # 启用批处理优化
 
 # --- 新增：自适应档位与运行期配置（基础 + profiles 覆盖） ---
 inference:
@@ -85,8 +85,8 @@ runtime:
 cascade:
   enable: false
   heavy_weights: null
-  trigger_confidence_range: null  # 例如: [0.4, 0.6]
-  trigger_roi: null               # 例如: [[x1,y1],[x2,y2],...]
+  trigger_confidence_range: null # 例如: [0.4, 0.6]
+  trigger_roi: null # 例如: [[x1,y1],[x2,y2],...]
 
 # 流程合规（默认关闭，仅占位；由代码读取后决定是否启用）
 process:
@@ -101,7 +101,7 @@ process:
   region_names:
     entrance: "入口线"
     stand: "洗手站立区域"
-    sink: "洗手水池"          # 对齐现有 regions.json 中名称
+    sink: "洗手水池" # 对齐现有 regions.json 中名称
     dryer: "烘干区域"
     work: "车间入口"
 
