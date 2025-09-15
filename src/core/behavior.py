@@ -1,11 +1,12 @@
 import logging
+import os
 import time
 from collections import defaultdict, deque
 from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
-import os
+
 try:
     import joblib  # type: ignore
 except Exception:
@@ -14,7 +15,11 @@ except Exception:
 from src.detection.motion_analyzer import MotionAnalyzer
 
 # 导入pose_detector模块以使用统一的GPU配置策略
-from src.detection.pose_detector import MEDIAPIPE_AVAILABLE, PoseDetectorFactory, _gpu_enabled
+from src.detection.pose_detector import (
+    MEDIAPIPE_AVAILABLE,
+    PoseDetectorFactory,
+    _gpu_enabled,
+)
 
 # 使用pose_detector中配置好的MediaPipe
 if MEDIAPIPE_AVAILABLE:
@@ -114,18 +119,26 @@ class BehaviorRecognizer:
 
         # 可选：手部关键点时序ML分类器
         self.use_ml_classifier: bool = getattr(self.params, "use_ml_classifier", False)
-        self.ml_fusion_alpha: float = float(getattr(self.params, "ml_fusion_alpha", 0.7))
+        self.ml_fusion_alpha: float = float(
+            getattr(self.params, "ml_fusion_alpha", 0.7)
+        )
         self.ml_window: int = int(getattr(self.params, "ml_window", 30))
-        self.ml_model_path: str = str(getattr(self.params, "ml_model_path", "models/handwash_xgb.joblib"))
+        self.ml_model_path: str = str(
+            getattr(self.params, "ml_model_path", "models/handwash_xgb.joblib")
+        )
         self.ml_model = None
-        self.ml_seq_buffers: Dict[int, deque] = defaultdict(lambda: deque(maxlen=self.ml_window))
+        self.ml_seq_buffers: Dict[int, deque] = defaultdict(
+            lambda: deque(maxlen=self.ml_window)
+        )
         if self.use_ml_classifier:
             try:
                 if joblib is not None and os.path.exists(self.ml_model_path):
                     self.ml_model = joblib.load(self.ml_model_path)
                     logger.info(f"Loaded ML handwash classifier: {self.ml_model_path}")
                 else:
-                    logger.warning("ML classifier enabled but joblib missing or model file not found; disabling ML fusion")
+                    logger.warning(
+                        "ML classifier enabled but joblib missing or model file not found; disabling ML fusion"
+                    )
                     self.use_ml_classifier = False
             except Exception as e:
                 logger.warning(f"Failed to load ML classifier: {e}")
@@ -470,9 +483,17 @@ class BehaviorRecognizer:
             )
 
         # 可选：ML分类器融合
-        if self.use_ml_classifier and self.ml_model is not None and track_id is not None:
+        if (
+            self.use_ml_classifier
+            and self.ml_model is not None
+            and track_id is not None
+        ):
             try:
-                vec = self._vectorize_two_hands(enhanced_hand_regions, person_bbox, frame.shape if isinstance(frame, np.ndarray) else None)
+                vec = self._vectorize_two_hands(
+                    enhanced_hand_regions,
+                    person_bbox,
+                    frame.shape if isinstance(frame, np.ndarray) else None,
+                )
                 if vec is not None:
                     buf = self.ml_seq_buffers[track_id]
                     buf.append(vec)
@@ -481,14 +502,22 @@ class BehaviorRecognizer:
                         agg = self._aggregate_features(window_feats)
                         proba = self._predict_proba(agg)
                         if proba is not None:
-                            confidence = float(self.ml_fusion_alpha * proba + (1.0 - self.ml_fusion_alpha) * confidence)
+                            confidence = float(
+                                self.ml_fusion_alpha * proba
+                                + (1.0 - self.ml_fusion_alpha) * confidence
+                            )
             except Exception as e:
                 logger.debug(f"ML fusion skipped: {e}")
 
         return confidence
 
     # ---- ML辅助方法 ----
-    def _vectorize_two_hands(self, hand_regions: List[Dict], person_bbox: List[int], image_shape: Optional[Tuple[int, int, int]]) -> Optional[List[float]]:
+    def _vectorize_two_hands(
+        self,
+        hand_regions: List[Dict],
+        person_bbox: List[int],
+        image_shape: Optional[Tuple[int, int, int]],
+    ) -> Optional[List[float]]:
         if not hand_regions:
             return None
         x1, y1, x2, y2 = map(int, person_bbox)
@@ -506,7 +535,9 @@ class BehaviorRecognizer:
             ny = 0.0 if ny < 0 else (1.0 if ny > 1.0 else ny)
             return nx, ny
 
-        hands_sorted = sorted(hand_regions, key=lambda h: float(h.get("confidence", 0.0)), reverse=True)
+        hands_sorted = sorted(
+            hand_regions, key=lambda h: float(h.get("confidence", 0.0)), reverse=True
+        )
         vec: List[float] = []
         taken = 0
         for hreg in hands_sorted:
@@ -533,7 +564,7 @@ class BehaviorRecognizer:
             window_feats = window_feats.reshape(len(window_feats), -1)
         mean = window_feats.mean(axis=0)
         std = window_feats.std(axis=0)
-        rng = (window_feats.max(axis=0) - window_feats.min(axis=0))
+        rng = window_feats.max(axis=0) - window_feats.min(axis=0)
         return np.concatenate([mean, std, rng], axis=0).astype(np.float32)
 
     def _predict_proba(self, agg_feat: np.ndarray) -> Optional[float]:

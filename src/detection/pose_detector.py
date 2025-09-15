@@ -469,14 +469,23 @@ class MediaPipePoseDetector(BaseDetector):
                             y2 = int(bbox[3] * h)
                             bbox_px = [x1, y1, x2, y2]
                         else:
-                            bbox_px = [int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])]
+                            bbox_px = [
+                                int(bbox[0]),
+                                int(bbox[1]),
+                                int(bbox[2]),
+                                int(bbox[3]),
+                            ]
 
                         # 转换landmarks为规范化坐标列表（若存在）
                         landmarks_norm = None
-                        if hasattr(result, "landmarks") and result.landmarks is not None:
+                        if (
+                            hasattr(result, "landmarks")
+                            and result.landmarks is not None
+                        ):
                             try:
                                 landmarks_norm = [
-                                    {"x": lm.x, "y": lm.y} for lm in result.landmarks.landmark
+                                    {"x": lm.x, "y": lm.y}
+                                    for lm in result.landmarks.landmark
                                 ]
                             except Exception:
                                 landmarks_norm = None
@@ -485,11 +494,14 @@ class MediaPipePoseDetector(BaseDetector):
                             "bbox": bbox_px,
                             "confidence": float(result.confidence),
                             "class_id": 1,  # 手部类别ID
-                            "class_name": getattr(result, "hand_label", "hand") or "hand",
+                            "class_name": getattr(result, "hand_label", "hand")
+                            or "hand",
                             # 兼容两种字段：下游绘制优先使用 'landmarks'
                             "landmarks": landmarks_norm,
                             "keypoints": getattr(result, "keypoints", None),
-                            "source": str(getattr(result, "detection_source", "primary")),
+                            "source": str(
+                                getattr(result, "detection_source", "primary")
+                            ),
                         }
                         hand_detections.append(hand_detection)
 

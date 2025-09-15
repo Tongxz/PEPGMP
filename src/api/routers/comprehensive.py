@@ -3,10 +3,10 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
+from src.api.dependencies import get_hairnet_pipeline, get_optimized_pipeline
 from src.core.optimized_detection_pipeline import OptimizedDetectionPipeline
 from src.detection.yolo_hairnet_detector import YOLOHairnetDetector
 from src.services.detection_service import comprehensive_detection_logic
-from src.api.dependencies import get_hairnet_pipeline, get_optimized_pipeline
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -71,9 +71,7 @@ async def detect_image(
     contents = await file.read()
 
     try:
-        logger.info(
-            f"开始图像检测: {file.filename}, 文件大小: {len(contents)} bytes"
-        )
+        logger.info(f"开始图像检测: {file.filename}, 文件大小: {len(contents)} bytes")
 
         # 使用优化管道进行检测
         if optimized_pipeline is None:
@@ -84,14 +82,10 @@ async def detect_image(
         result = {
             "filename": file.filename,
             "detection_type": "image",
-            "results": {
-                "persons": [],
-                "behaviors": [],
-                "confidence": 0.0
-            },
-            "status": "success"
+            "results": {"persons": [], "behaviors": [], "confidence": 0.0},
+            "status": "success",
         }
-        
+
         return result
     except Exception as e:
         logger.exception(f"图像检测失败: {e}")
@@ -112,9 +106,7 @@ async def detect_hairnet(
     contents = await file.read()
 
     try:
-        logger.info(
-            f"开始发网检测: {file.filename}, 文件大小: {len(contents)} bytes"
-        )
+        logger.info(f"开始发网检测: {file.filename}, 文件大小: {len(contents)} bytes")
 
         # 使用发网检测管道
         if hairnet_pipeline is None:
@@ -128,11 +120,11 @@ async def detect_hairnet(
             "results": {
                 "hairnet_detected": False,
                 "confidence": 0.0,
-                "bounding_boxes": []
+                "bounding_boxes": [],
             },
-            "status": "success"
+            "status": "success",
         }
-        
+
         return result
     except Exception as e:
         logger.exception(f"发网检测失败: {e}")

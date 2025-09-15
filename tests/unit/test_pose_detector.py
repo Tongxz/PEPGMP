@@ -11,8 +11,8 @@ from unittest.mock import MagicMock, Mock, patch
 import numpy as np
 
 from src.detection.pose_detector import (
-    PoseDetectorFactory,
     MediaPipePoseDetector,
+    PoseDetectorFactory,
     YOLOv8PoseDetector,
 )
 
@@ -47,6 +47,7 @@ class TestMediaPipePoseDetector(unittest.TestCase):
         cv2_available = True
         try:
             import cv2
+
             # 在图像中心绘制一个白色矩形作为人体
             cv2.rectangle(self.test_image, (250, 150), (390, 400), (255, 255, 255), -1)
         except ImportError:
@@ -110,6 +111,7 @@ class TestYOLOv8PoseDetector(unittest.TestCase):
         cv2_available = True
         try:
             import cv2
+
             # 在图像中心绘制一个白色矩形作为人体
             cv2.rectangle(self.test_image, (250, 150), (390, 400), (255, 255, 255), -1)
         except ImportError:
@@ -122,7 +124,7 @@ class TestYOLOv8PoseDetector(unittest.TestCase):
         # 模拟YOLOv8检测结果
         # 1. 创建模拟的张量 (Tensor-like objects)
         #    - 使用MagicMock来模拟具有 .item() 和 .cpu().numpy() 方法的张量
-        
+
         # 模拟 box.cls[0] -> 0
         mock_cls_tensor = MagicMock()
         mock_cls_tensor.item.return_value = 0
@@ -133,7 +135,9 @@ class TestYOLOv8PoseDetector(unittest.TestCase):
 
         # 模拟 box.xyxy[0] -> np.array(...)
         mock_xyxy_tensor = MagicMock()
-        mock_xyxy_tensor.cpu.return_value.numpy.return_value = np.array([50, 50, 150, 200])
+        mock_xyxy_tensor.cpu.return_value.numpy.return_value = np.array(
+            [50, 50, 150, 200]
+        )
 
         # 模拟 keypoints.xy[0] -> np.array(...)
         mock_kpts_xy_tensor = MagicMock()
@@ -198,15 +202,14 @@ class TestYOLOv8PoseDetector(unittest.TestCase):
         # 创建模拟检测结果，包含17个关键点以避免IndexError
         kpts_xy = np.random.randint(50, 200, size=(17, 2))
         kpts_conf = np.random.uniform(0.6, 1.0, size=(17,))
-        
-        detections = [{
-            "bbox": [50, 50, 150, 200],
-            "confidence": 0.9,
-            "keypoints": {
-                "xy": kpts_xy,
-                "conf": kpts_conf
+
+        detections = [
+            {
+                "bbox": [50, 50, 150, 200],
+                "confidence": 0.9,
+                "keypoints": {"xy": kpts_xy, "conf": kpts_conf},
             }
-        }]
+        ]
 
         vis_image = detector.visualize(self.test_image, detections)
         self.assertEqual(vis_image.shape, self.test_image.shape)

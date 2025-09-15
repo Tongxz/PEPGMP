@@ -81,6 +81,7 @@ class YOLOHairnetDetector:
         if device == "auto":
             try:
                 import torch
+
                 mps_built = bool(getattr(torch.backends, "mps", None))
                 mps_available = mps_built and bool(torch.backends.mps.is_available())
                 if mps_available:

@@ -101,12 +101,16 @@ class MotionTracker:
             position_variance = 0.0
 
         # 计算运动标准差
-        horizontal_move_std = np.std(horizontal_movements) if horizontal_movements else 0.0
+        horizontal_move_std = (
+            np.std(horizontal_movements) if horizontal_movements else 0.0
+        )
         vertical_move_std = np.std(vertical_movements) if vertical_movements else 0.0
 
         # 计算运动采样频率（Hz）
         total_time = self.position_history[-1][1] - self.position_history[0][1]
-        move_frequency_hz = (len(self.position_history) - 1) / total_time if total_time > 0 else 0.0
+        move_frequency_hz = (
+            (len(self.position_history) - 1) / total_time if total_time > 0 else 0.0
+        )
 
         return {
             "avg_speed": avg_speed,
@@ -474,11 +478,11 @@ class MotionAnalyzer:
     def analyze_motion(self, track_id: int, motion_type: str = "handwashing") -> float:
         """
         分析运动模式（统一接口）
-        
+
         Args:
             track_id: 追踪目标ID
             motion_type: 运动类型 ('handwashing' 或 'sanitizing')
-            
+
         Returns:
             运动模式置信度 (0.0-1.0)
         """
@@ -487,7 +491,9 @@ class MotionAnalyzer:
         elif motion_type.lower() == "sanitizing":
             return self.analyze_sanitizing(track_id)
         else:
-            logger.warning(f"Unknown motion type: {motion_type}, defaulting to handwashing")
+            logger.warning(
+                f"Unknown motion type: {motion_type}, defaulting to handwashing"
+            )
             return self.analyze_handwashing(track_id)
 
     def cleanup(self):

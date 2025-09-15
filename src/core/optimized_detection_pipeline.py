@@ -357,7 +357,9 @@ class OptimizedDetectionPipeline:
         )
 
     # ----------------------- 级联逻辑 -----------------------
-    def _cascade_refine_persons(self, image: np.ndarray, person_detections: List[Dict]) -> List[Dict]:
+    def _cascade_refine_persons(
+        self, image: np.ndarray, person_detections: List[Dict]
+    ) -> List[Dict]:
         """按配置对指定目标进行级联重检并细化框/分数。
 
         策略：
@@ -402,7 +404,7 @@ class OptimizedDetectionPipeline:
                 if not trig_range or len(trig_range) != 2:
                     return True
                 lo, hi = float(trig_range[0]), float(trig_range[1])
-                return (lo <= float(score) <= hi)
+                return lo <= float(score) <= hi
             except Exception:
                 return True
 
@@ -465,7 +467,9 @@ class OptimizedDetectionPipeline:
                             if int(b.cls[0]) != 0:  # 仅person
                                 continue
                             conf = float(b.conf[0].cpu().numpy())
-                            bx1, by1, bx2, by2 = [float(v) for v in b.xyxy[0].cpu().numpy()]
+                            bx1, by1, bx2, by2 = [
+                                float(v) for v in b.xyxy[0].cpu().numpy()
+                            ]
                             if best is None or conf > best[0]:
                                 best = (conf, bx1, by1, bx2, by2)
                         except Exception:
@@ -484,7 +488,9 @@ class OptimizedDetectionPipeline:
                 if gx2 > gx1 and gy2 > gy1:
                     det = det.copy()
                     det["bbox"] = [gx1, gy1, gx2, gy2]
-                    det["confidence"] = max(float(det.get("confidence", 0.0)), float(conf_h))
+                    det["confidence"] = max(
+                        float(det.get("confidence", 0.0)), float(conf_h)
+                    )
                     det["cascade_refined"] = True
                     refined_cnt += 1
                 refined.append(det)
@@ -861,7 +867,9 @@ class OptimizedDetectionPipeline:
                             lab2 = cv2.merge((l2, a, b))
                             enhanced = cv2.cvtColor(lab2, cv2.COLOR_LAB2BGR)
                             # 轻度锐化
-                            kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32)
+                            kernel = np.array(
+                                [[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32
+                            )
                             sharpened = cv2.filter2D(enhanced, -1, kernel)
                             return sharpened
                         except Exception:
@@ -880,7 +888,9 @@ class OptimizedDetectionPipeline:
                         # 缩放ROI
                         scaled_w = max(1, int(round(roi_w * scale)))
                         scaled_h = max(1, int(round(roi_h * scale)))
-                        scaled_roi = cv2.resize(roi, (scaled_w, scaled_h), interpolation=cv2.INTER_CUBIC)
+                        scaled_roi = cv2.resize(
+                            roi, (scaled_w, scaled_h), interpolation=cv2.INTER_CUBIC
+                        )
                         scaled_roi = _enhance(scaled_roi)
 
                         # 调用手部检测（在缩放ROI上）
@@ -912,10 +922,12 @@ class OptimizedDetectionPipeline:
                                     py = lm.get("y", 0.0) * sh
                                     ox = px / scale  # 还原到原ROI像素
                                     oy = py / scale
-                                    mapped_landmarks.append({
-                                        "x": (x1 + ox) / image.shape[1],
-                                        "y": (y1 + oy) / image.shape[0],
-                                    })
+                                    mapped_landmarks.append(
+                                        {
+                                            "x": (x1 + ox) / image.shape[1],
+                                            "y": (y1 + oy) / image.shape[0],
+                                        }
+                                    )
                                 mapped["landmarks"] = mapped_landmarks
 
                             # 透传来源与标签（若存在）
@@ -960,7 +972,9 @@ class OptimizedDetectionPipeline:
         return estimated_regions
 
     # --- Public helper for external callers (e.g., tracking-driven pipelines) ---
-    def get_hand_regions_for_person(self, image: np.ndarray, person_bbox: List[int]) -> List[Dict]:
+    def get_hand_regions_for_person(
+        self, image: np.ndarray, person_bbox: List[int]
+    ) -> List[Dict]:
         """对外公开：根据人体框返回手部区域（可能包含landmarks与来源）"""
         return self._get_actual_hand_regions(image, person_bbox)
 
@@ -1069,7 +1083,9 @@ class OptimizedDetectionPipeline:
 
                             for finger in finger_connections:
                                 for j in range(len(finger) - 1):
-                                    if finger[j] < len(landmarks) and finger[j + 1] < len(landmarks):
+                                    if finger[j] < len(landmarks) and finger[
+                                        j + 1
+                                    ] < len(landmarks):
                                         pt1 = (
                                             int(landmarks[finger[j]]["x"] * w),
                                             int(landmarks[finger[j]]["y"] * h),

@@ -10,7 +10,8 @@ from pathlib import Path
 src_path = Path(__file__).parent / "src"
 sys.path.insert(0, str(src_path))
 
-from src.utils.hardware_probe import detect_environment, decide_policy
+from src.utils.hardware_probe import decide_policy, detect_environment
+
 
 def main():
     print("=" * 60)
@@ -34,9 +35,7 @@ def main():
     for name, device, imgsz, profile in scenarios:
         print(f"\n--- {name} ---")
         policy = decide_policy(
-            preferred_profile=profile,
-            user_device=device,
-            user_imgsz=imgsz
+            preferred_profile=profile, user_device=device, user_imgsz=imgsz
         )
 
         for key, value in policy.items():
@@ -50,6 +49,7 @@ def main():
     print("\n" + "=" * 60)
     print("✅ 调试完成")
     print("=" * 60)
+
 
 if __name__ == "__main__":
     main()
