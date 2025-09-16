@@ -1051,7 +1051,7 @@ def run_api_server(args, logger):
         import uvicorn
 
         # 直接导入 FastAPI app 实例
-        from api.app import app as fastapi_app
+        from src.api.app import app as fastapi_app
 
         uvicorn.run(
             fastapi_app,
