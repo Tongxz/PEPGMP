@@ -223,18 +223,18 @@ detection:
   device: "auto"  # auto, cuda, mps, cpu
   confidence_threshold: 0.4
   iou_threshold: 0.6
-  
+
 # GPU优化
 gpu:
   enabled: true
   batch_size: 4
   use_mixed_precision: true
-  
+
 # 安全配置
 security:
   enable_csrf: false  # 开发环境
   jwt_secret: "your-secret-key"
-  
+
 # 监控配置
 monitoring:
   enabled: true
@@ -396,7 +396,7 @@ jobs:
       - name: Run tests
         run: |
           python -m pytest
-          
+
   deploy:
     needs: test
     runs-on: ubuntu-latest

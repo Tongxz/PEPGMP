@@ -17,24 +17,24 @@ project_root = os.path.dirname(
 )
 sys.path.append(project_root)
 
+from src.api.middleware.error_middleware import setup_error_middleware
+from src.api.middleware.security_middleware import setup_security_middleware
 from src.api.routers import (
-    comprehensive,
     cameras,
+    comprehensive,
     download,
+    error_monitoring,
     events,
     metrics,
     region_management,
+    security,
     statistics,
     system,
     websocket,
-    error_monitoring,
-    security,
 )
-from src.api.middleware.error_middleware import setup_error_middleware
-from src.api.middleware.security_middleware import setup_security_middleware
+from src.monitoring.advanced_monitoring import start_monitoring, stop_monitoring
 from src.services import detection_service, region_service, websocket_service
 from src.utils.error_monitor import start_error_monitoring, stop_error_monitoring
-from src.monitoring.advanced_monitoring import start_monitoring, stop_monitoring
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -50,35 +50,37 @@ async def lifespan(app: FastAPI):
     app.state.optimized_pipeline = detection_service.optimized_pipeline
     app.state.hairnet_pipeline = detection_service.hairnet_pipeline
     # 统一区域文件来源：优先环境变量 HBD_REGIONS_FILE，其次默认 config/regions.json
-    regions_file = os.environ.get("HBD_REGIONS_FILE", os.path.join(project_root, "config", "regions.json"))
+    regions_file = os.environ.get(
+        "HBD_REGIONS_FILE", os.path.join(project_root, "config", "regions.json")
+    )
     region_service.initialize_region_service(regions_file)
-    
+
     # 启动错误监控
     try:
         start_error_monitoring()
         logger.info("错误监控已启动")
     except Exception as e:
         logger.warning(f"错误监控启动失败: {e}")
-    
+
     # 启动高级监控
     try:
         start_monitoring()
         logger.info("高级监控系统已启动")
     except Exception as e:
         logger.warning(f"高级监控启动失败: {e}")
-    
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down the application...")
-    
+
     # 停止错误监控
     try:
         stop_error_monitoring()
         logger.info("错误监控已停止")
     except Exception as e:
         logger.warning(f"错误监控停止失败: {e}")
-    
+
     # 停止高级监控
     try:
         stop_monitoring()
