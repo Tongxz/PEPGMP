@@ -89,6 +89,10 @@
 | `GET` | `/api/v1/cameras` | **相机列表**：获取已配置的摄像头列表。 |
 | `GET` | `/api/v1/system/info` | **系统信息**：获取系统硬件、软件和配置信息。 |
 | `GET` | `/metrics` | **性能指标**：为Prometheus等监控系统提供性能指标。 |
+| `GET` | `/health` | **健康检查**：检查系统健康状态，包括GPU、数据库等组件。 |
+| `GET` | `/api/v1/error-monitoring/stats` | **错误监控**：获取错误统计和监控数据。 |
+| `POST` | `/api/v1/security/auth/login` | **用户登录**：JWT认证登录（生产环境）。 |
+| `GET` | `/api/v1/security/threats` | **安全监控**：获取威胁检测记录。 |
 
 ## 4. 错误处理
 

@@ -317,8 +317,8 @@
         // 页面初始化
         window.addEventListener('DOMContentLoaded', () => {
             loadList();
-            // 每5秒刷新状态
-            setInterval(refreshStatus, 5000);
+            // 每15秒刷新状态（降低频率避免速率限制）
+            setInterval(refreshStatus, 15000);
         });
     </script>
 
