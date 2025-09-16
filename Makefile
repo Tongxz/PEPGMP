@@ -22,15 +22,26 @@ help:
 
 # 安装依赖
 install:
-	pip install -r requirements.txt
+	@echo "安装生产依赖..."
+	pip install -e ".[production]"
 
 dev-install:
-	pip install -r requirements.txt
-	pip install pytest pytest-cov pytest-mock pytest-asyncio
-	pip install black flake8 mypy isort bandit
-	pip install pre-commit
+	@echo "安装开发环境依赖..."
+	pip install -e ".[dev,test,docs]"
 	pre-commit install
-	pip install -e .
+	@echo "开发环境安装完成！"
+
+# 更新依赖
+update-deps:
+	@echo "更新依赖..."
+	pip-compile pyproject.toml --output-file requirements.lock
+	pip install --upgrade -e ".[dev,test,docs,production]"
+
+# 安全检查依赖
+security-deps:
+	@echo "检查依赖安全性..."
+	pip-audit
+	safety check
 
 # 测试
 test:

@@ -21,8 +21,8 @@ def get_fixtures_dir():
 sys.path.append(str(Path(__file__).parent))
 sys.path.append(str(Path(__file__).parent / "src"))
 
-from src.core.detector import HumanDetector
-from src.core.hairnet_detector import HairnetDetector
+from src.detection.detector import HumanDetector
+from src.detection.hairnet_detector import HairnetDetector
 
 
 def test_threshold_adjustment():

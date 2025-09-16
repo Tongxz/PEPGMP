@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>摄像头配置管理</title>
+    <link rel="stylesheet" href="/frontend/nav.css">
+    <link rel="stylesheet" href="/frontend/theme.css">
+    <script defer src="/frontend/nav.js"></script>
+</head>
+
+<body>
+    <div class="layout-container">
+        <!-- 页面头部 -->
+        <header class="layout-header">
+            <h1>📷 摄像头配置管理</h1>
+            <p>管理摄像头参数、进程状态与区域文件映射</p>
+        </header>
+
+        <!-- 主要内容区 -->
+        <main class="layout-content">
+            <!-- 双栏布局：配置表单 & 摄像头列表 -->
+            <div class="camera-layout">
+                <!-- 配置表单 - 固定宽度 -->
+                <div class="camera-form-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">添加/编辑摄像头</h2>
+                        </div>
+
+                        <form class="space-y-4">
+                            <div class="form-group">
+                                <label for="id" class="form-label">ID（唯一标识）</label>
+                                <input id="id" type="text" class="form-input" placeholder="例如: cam0">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="name" class="form-label">名称</label>
+                                <input id="name" type="text" class="form-input" placeholder="例如: 大门口 USB0">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="source" class="form-label">来源</label>
+                                <input id="source" type="text" class="form-input"
+                                    placeholder="0 或 rtsp://user:pass@ip:554/stream">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="resolution" class="form-label">分辨率（可选）</label>
+                                <input id="resolution" type="text" class="form-input" placeholder="1280x720">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="fps" class="form-label">帧率（可选）</label>
+                                <input id="fps" type="number" class="form-input" min="1" max="120" placeholder="20">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="regions_file" class="form-label">区域文件（可选）</label>
+                                <input id="regions_file" type="text" class="form-input"
+                                    placeholder="config/regions_site_sink.json">
+                            </div>
+
+                            <div class="flex gap-2">
+                                <button type="button" class="btn btn-primary flex-1" onclick="createCam()">创建</button>
+                                <button type="button" class="btn btn-secondary flex-1" onclick="updateCam()">更新</button>
+                            </div>
+
+                            <div class="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+                                <strong>提示：</strong>更新时只需填写要修改的字段，未填写的字段保留原值。
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 摄像头列表 - 占满剩余空间 -->
+                <div class="camera-table-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">已配置摄像头</h2>
+                        </div>
+
+                        <div class="table-container">
+                            <table class="table" id="cameraTable">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>名称</th>
+                                        <th>来源</th>
+                                        <th>分辨率</th>
+                                        <th>FPS</th>
+                                        <th>状态</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="cameraTableBody">
+                                    <tr>
+                                        <td colspan="7" class="text-center text-gray-500 py-8">正在加载摄像头列表...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="mt-4 p-3 bg-gray-50 rounded-lg">
+                            <div class="text-sm text-gray-600">
+                                <strong>配置文件：</strong> <code>config/cameras.yaml</code>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+    </div>
+    </main>
+    </div>
+
+    <script>
+        // API 调用封装
+        async function api(path, options = {}) {
+            const res = await fetch(path, {
+                headers: { 'Content-Type': 'application/json' },
+                ...options
+            });
+            if (!res.ok) {
+                throw new Error('HTTP ' + res.status);
+            }
+            const ct = res.headers.get('content-type') || '';
+            return ct.includes('application/json') ? res.json() : res.text();
+        }
+
+        // 加载摄像头列表
+        async function loadList() {
+            try {
+                const data = await api('/api/v1/cameras');
+                const tbody = document.getElementById('cameraTableBody');
+
+                if (!data.cameras || data.cameras.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-gray-500 py-8">暂无配置的摄像头</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = data.cameras.map(cam => `
+                    <tr>
+                        <td class="font-mono text-sm">${cam.id || ''}</td>
+                        <td>${cam.name || ''}</td>
+                        <td class="font-mono text-xs text-gray-600 truncate max-w-xs" title="${cam.source || ''}">${cam.source || ''}</td>
+                        <td class="text-sm">${cam.resolution || '-'}</td>
+                        <td class="text-sm">${cam.fps ?? '-'}</td>
+                        <td><span class="badge badge-gray" id="status-${cam.id}">检测中</span></td>
+                        <td>
+                            <div class="camera-actions">
+                                <button class="btn btn-sm btn-secondary" onclick='fillForm(${JSON.stringify(cam)})'>编辑</button>
+                                <button class="btn btn-sm btn-primary" onclick='startCam(${JSON.stringify(cam.id)})'>启动</button>
+                                <button class="btn btn-sm btn-secondary" onclick='stopCam(${JSON.stringify(cam.id)})'>停止</button>
+                                <button class="btn btn-sm btn-danger" onclick='delCam(${JSON.stringify(cam.id)})'>删除</button>
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+
+                await refreshStatus();
+            } catch (e) {
+                console.error('加载摄像头列表失败:', e);
+                showMessage('加载失败: ' + e.message, 'error');
+            }
+        }
+
+        // 表单值获取/设置
+        function val(id) {
+            return document.getElementById(id).value.trim();
+        }
+
+        function setVal(id, v) {
+            document.getElementById(id).value = v ?? '';
+        }
+
+        // 填充表单
+        function fillForm(cam) {
+            setVal('id', cam.id);
+            setVal('name', cam.name);
+            setVal('source', cam.source);
+            setVal('resolution', cam.resolution || '');
+            setVal('fps', cam.fps ?? '');
+            setVal('regions_file', cam.regions_file || '');
+        }
+
+        // 收集表单数据
+        function collectPayload(requireId) {
+            const id = val('id');
+            const name = val('name');
+            const source = val('source');
+            const resolution = val('resolution');
+            const fps = val('fps');
+            const regions_file = val('regions_file');
+
+            if (requireId && !id) throw new Error('ID 不能为空');
+            if (!name) throw new Error('名称 不能为空');
+            if (!source) throw new Error('来源 不能为空');
+
+            const payload = { id, name, source };
+            if (resolution) payload.resolution = resolution;
+            if (fps) payload.fps = Number(fps);
+            if (regions_file) payload.regions_file = regions_file;
+
+            return payload;
+        }
+
+        // 创建摄像头
+        async function createCam() {
+            try {
+                const payload = collectPayload(true);
+                await api('/api/v1/cameras', { method: 'POST', body: JSON.stringify(payload) });
+                await loadList();
+                clearForm();
+                showMessage('摄像头创建成功', 'success');
+            } catch (e) {
+                showMessage('创建失败: ' + e.message, 'error');
+            }
+        }
+
+        // 更新摄像头
+        async function updateCam() {
+            try {
+                const payload = collectPayload(false);
+                const id = val('id');
+                if (!id) return showMessage('请先填写 ID', 'error');
+
+                await api('/api/v1/cameras/' + encodeURIComponent(id), {
+                    method: 'PUT',
+                    body: JSON.stringify(payload)
+                });
+                await loadList();
+                clearForm();
+                showMessage('摄像头更新成功', 'success');
+            } catch (e) {
+                showMessage('更新失败: ' + e.message, 'error');
+            }
+        }
+
+        // 删除摄像头
+        async function delCam(id) {
+            if (!confirm('确认删除摄像头 ' + id + ' ?')) return;
+            try {
+                await api('/api/v1/cameras/' + encodeURIComponent(id), { method: 'DELETE' });
+                await loadList();
+                showMessage('摄像头删除成功', 'success');
+            } catch (e) {
+                showMessage('删除失败: ' + e.message, 'error');
+            }
+        }
+
+        // 摄像头控制
+        async function startCam(id) {
+            try {
+                await api('/api/v1/cameras/' + encodeURIComponent(id) + '/start', { method: 'POST' });
+                await refreshStatus();
+                showMessage('摄像头启动成功', 'success');
+            } catch (e) {
+                showMessage('启动失败: ' + e.message, 'error');
+            }
+        }
+
+        async function stopCam(id) {
+            try {
+                await api('/api/v1/cameras/' + encodeURIComponent(id) + '/stop', { method: 'POST' });
+                await refreshStatus();
+                showMessage('摄像头停止成功', 'success');
+            } catch (e) {
+                showMessage('停止失败: ' + e.message, 'error');
+            }
+        }
+
+        // 刷新状态
+        async function refreshStatus() {
+            const tbody = document.getElementById('cameraTableBody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+
+            for (const tr of rows) {
+                const id = tr.children[0]?.textContent?.trim();
+                if (!id) continue;
+
+                try {
+                    const s = await api('/api/v1/cameras/' + encodeURIComponent(id) + '/status');
+                    const badge = tr.querySelector(`#status-${CSS.escape(id)}`);
+                    if (badge) {
+                        if (s.running) {
+                            badge.className = 'badge badge-success';
+                            badge.textContent = `运行中 (PID ${s.pid})`;
+                        } else {
+                            badge.className = 'badge badge-gray';
+                            badge.textContent = '已停止';
+                        }
+                    }
+                } catch (e) {
+                    // 状态获取失败，保持原样
+                }
+            }
+        }
+
+        // 清空表单
+        function clearForm() {
+            ['id', 'name', 'source', 'resolution', 'fps', 'regions_file'].forEach(id => setVal(id, ''));
+        }
+
+        // 消息提示
+        function showMessage(message, type = 'info') {
+            // 简单的消息提示
+            if (type === 'error') {
+                alert('❌ ' + message);
+            } else if (type === 'success') {
+                alert('✅ ' + message);
+            } else {
+                alert('ℹ️ ' + message);
+            }
+        }
+
+        // 页面初始化
+        window.addEventListener('DOMContentLoaded', () => {
+            loadList();
+            // 每15秒刷新状态（降低频率避免速率限制）
+            setInterval(refreshStatus, 15000);
+        });
+    </script>
+
+    <style>
+        /* 摄像头操作按钮样式 */
+        .camera-actions {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: flex-start;
+        }
+
+        .camera-actions button {
+            flex-shrink: 0;
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            min-width: 44px;
+            white-space: nowrap;
+        }
+
+        /* 响应式优化 */
+        @media (max-width: 1024px) {
+            .camera-actions {
+                gap: 4px;
+            }
+
+            .camera-actions button {
+                font-size: 0.7rem;
+                padding: 3px 6px;
+                min-width: 40px;
+            }
+        }
+
+        /* 修复表格中其他Tailwind类名 */
+        .font-mono {
+            font-family: monospace;
+        }
+
+        .text-xs {
+            font-size: 0.75rem;
+        }
+
+        .text-sm {
+            font-size: 0.875rem;
+        }
+
+        .text-gray-600 {
+            color: var(--gray-600);
+        }
+
+        .truncate {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .max-w-xs {
+            max-width: 20rem;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .text-gray-500 {
+            color: var(--gray-500);
+        }
+
+        .py-8 {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+        }
+
+        .mt-4 {
+            margin-top: 1rem;
+        }
+
+        .p-3 {
+            padding: 0.75rem;
+        }
+
+        .bg-gray-50 {
+            background-color: var(--gray-50);
+        }
+
+        .rounded-lg {
+            border-radius: var(--radius-lg);
+        }
+    </style>
+</body>
+
+</html>

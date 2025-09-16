@@ -19,6 +19,25 @@ from typing import Any, Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 
+from src.config.unified_params import get_unified_params
+from src.core.behavior import DeepBehaviorRecognizer
+from src.detection.detector import HumanDetector
+from src.detection.hairnet_detector import HairnetDetector
+from src.detection.motion_analyzer import MotionAnalyzer
+from src.detection.pose_detector import PoseDetectorFactory
+from src.utils.logger import get_logger
+
+# 级联相关依赖（可选）
+try:
+    from ultralytics import YOLO as _YOLOHeavy
+except Exception:  # 发生错误时延迟到运行期再判断
+    _YOLOHeavy = None  # type: ignore
+
+try:
+    from src.config.model_config import ModelConfig as _MC
+except Exception:
+    _MC = None  # type: ignore
+
 logger = logging.getLogger(__name__)
 
 
@@ -118,9 +137,11 @@ class OptimizedDetectionPipeline:
         human_detector=None,
         hairnet_detector=None,
         behavior_recognizer=None,
+        pose_detector=None,  # 新增参数
         enable_cache: bool = True,
         cache_size: int = 100,
         cache_ttl: float = 30.0,
+        cascade_config: Optional[Dict[str, Any]] = None,
     ):
         """
         初始化优化检测管道
@@ -129,6 +150,7 @@ class OptimizedDetectionPipeline:
             human_detector: 人体检测器
             hairnet_detector: 发网检测器
             behavior_recognizer: 行为识别器
+            pose_detector: 姿态检测器实例 (可选，如果提供则使用此实例)
             enable_cache: 是否启用缓存
             cache_size: 缓存大小
             cache_ttl: 缓存生存时间
@@ -136,6 +158,26 @@ class OptimizedDetectionPipeline:
         self.human_detector = human_detector
         self.hairnet_detector = hairnet_detector
         self.behavior_recognizer = behavior_recognizer
+
+        # 初始化姿态检测器
+        if pose_detector is not None:
+            self.pose_detector = pose_detector
+            logger.info(f"姿态检测器 (外部提供) 初始化成功")
+        else:
+            try:
+                params = get_unified_params()
+                pose_backend = params.pose_detection.backend
+                pose_params = params.pose_detection
+
+                self.pose_detector = PoseDetectorFactory.create(
+                    backend=pose_backend,
+                    model_path=pose_params.model_path,
+                    device=pose_params.device,
+                )
+                logger.info(f"姿态检测器 ({pose_backend}) 初始化成功")
+            except Exception as e:
+                logger.warning(f"姿态检测器初始化失败: {e}")
+                self.pose_detector = None
 
         # 初始化缓存
         self.enable_cache = enable_cache
@@ -153,6 +195,24 @@ class OptimizedDetectionPipeline:
         }
 
         logger.info(f"优化检测管道初始化完成，缓存: {'启用' if enable_cache else '禁用'}")
+
+        # 级联相关
+        self.cascade: Dict[str, Any] = cascade_config or {}
+        self._cascade_model = None  # 惰性加载重模型
+        self.cascade_stats = {
+            "triggers": 0,
+            "refined": 0,
+            "time_total": 0.0,
+        }
+
+    def detect(self, image: np.ndarray, **kwargs) -> DetectionResult:
+        """检测方法 - detect_comprehensive的别名，保持接口兼容性"""
+        return self.detect_comprehensive(
+            image,
+            enable_hairnet=kwargs.get("enable_hairnet", True),
+            enable_handwash=kwargs.get("enable_handwash", True),
+            enable_sanitize=kwargs.get("enable_sanitize", True),
+        )
 
     def detect_comprehensive(
         self,
@@ -230,6 +290,15 @@ class OptimizedDetectionPipeline:
 
         logger.info(f"人体检测完成: 检测到 {len(person_detections)} 个人")
 
+        # 可选：级联二次检测，对边界分数段或ROI内的目标进行重检
+        try:
+            t0 = time.time()
+            person_detections = self._cascade_refine_persons(image, person_detections)
+            processing_times["cascade_refine"] = time.time() - t0
+        except Exception as e:
+            processing_times["cascade_refine"] = 0.0
+            logger.debug(f"级联细化跳过: {e}")
+
         # 阶段2: 发网检测（基于人体检测结果）
         hairnet_results = []
         if enable_hairnet and len(person_detections) > 0:
@@ -287,26 +356,197 @@ class OptimizedDetectionPipeline:
             annotated_image=annotated_image,
         )
 
-    def _detect_persons(self, image: np.ndarray) -> List[Dict]:
-        """人体检测 - 所有其他检测的基础"""
-        if self.human_detector is None:
-            logger.warning("人体检测器未初始化")
-            return []
+    # ----------------------- 级联逻辑 -----------------------
+    def _cascade_refine_persons(
+        self, image: np.ndarray, person_detections: List[Dict]
+    ) -> List[Dict]:
+        """按配置对指定目标进行级联重检并细化框/分数。
 
-        try:
-            detections = self.human_detector.detect(image)
-            return detections if detections else []
-        except Exception as e:
-            logger.error(f"人体检测失败: {e}")
-            return []
+        策略：
+        - 若 cascade.enable=False 或缺少 heavy_weights，则直接返回原结果；
+        - 若配置了 trigger_confidence_range=[lo,hi]，仅对落入区间的目标触发；
+        - 若配置了 trigger_roi（多边形），仅对中心点落入 ROI 的目标触发；
+        - 在ROI（人框或指定ROI）内使用重模型检测 person 类，取最高分，映射回全图更新 bbox/score；
+        - 记录触发次数、成功细化次数与耗时。
+        """
+
+        cfg = self.cascade or {}
+        if not bool(cfg.get("enable", False)):
+            return person_detections
+
+        heavy_weights: Optional[str] = cfg.get("heavy_weights")
+        if not heavy_weights:
+            logger.warning("级联启用但未提供 heavy_weights，跳过级联")
+            return person_detections
+
+        # 惰性加载重模型
+        if self._cascade_model is None:
+            if _YOLOHeavy is None:
+                logger.warning("未安装 ultralytics，无法执行级联重检")
+                return person_detections
+            try:
+                self._cascade_model = _YOLOHeavy(heavy_weights)
+                # 设备选择（尽量与统一策略一致）
+                if _MC is not None:
+                    dev = _MC().select_device(requested=None)
+                    if hasattr(self._cascade_model, "to"):
+                        self._cascade_model.to(dev)
+                logger.info(f"级联重模型已加载: {heavy_weights}")
+            except Exception as e:
+                logger.warning(f"级联重模型加载失败，跳过级联: {e}")
+                return person_detections
+
+        trig_range = cfg.get("trigger_confidence_range") or None
+        roi_poly = cfg.get("trigger_roi") or None  # [[x,y], ...]
+
+        def _in_range(score: float) -> bool:
+            try:
+                if not trig_range or len(trig_range) != 2:
+                    return True
+                lo, hi = float(trig_range[0]), float(trig_range[1])
+                return lo <= float(score) <= hi
+            except Exception:
+                return True
+
+        def _pt_in_poly(px: float, py: float, poly: List[List[float]]) -> bool:
+            # 射线法
+            inside = False
+            n = len(poly)
+            for i in range(n):
+                x1, y1 = poly[i]
+                x2, y2 = poly[(i + 1) % n]
+                cond = ((y1 > py) != (y2 > py)) and (
+                    px < (x2 - x1) * (py - y1) / (y2 - y1 + 1e-6) + x1
+                )
+                if cond:
+                    inside = not inside
+            return inside
+
+        refined: List[Dict] = []
+        img_h, img_w = image.shape[:2]
+        t_begin = time.time()
+        triggers = 0
+        refined_cnt = 0
+
+        for det in person_detections:
+            try:
+                bbox = det.get("bbox", [0, 0, 0, 0])
+                score = float(det.get("confidence", 1.0))
+                x1, y1, x2, y2 = [int(v) for v in bbox]
+                if x2 <= x1 or y2 <= y1:
+                    refined.append(det)
+                    continue
+
+                # 触发条件：分数区间 + ROI（可选）
+                cx = (x1 + x2) / 2.0
+                cy = (y1 + y2) / 2.0
+                if not _in_range(score):
+                    refined.append(det)
+                    continue
+                if isinstance(roi_poly, list) and len(roi_poly) >= 3:
+                    if not _pt_in_poly(cx, cy, roi_poly):
+                        refined.append(det)
+                        continue
+
+                triggers += 1
+
+                # 在人框ROI上执行重检
+                roi = image[y1:y2, x1:x2]
+                if roi.size == 0:
+                    refined.append(det)
+                    continue
+
+                res = self._cascade_model(roi)
+                best = None
+                for r in res:
+                    boxes = getattr(r, "boxes", None)
+                    if boxes is None:
+                        continue
+                    for b in boxes:
+                        try:
+                            if int(b.cls[0]) != 0:  # 仅person
+                                continue
+                            conf = float(b.conf[0].cpu().numpy())
+                            bx1, by1, bx2, by2 = [
+                                float(v) for v in b.xyxy[0].cpu().numpy()
+                            ]
+                            if best is None or conf > best[0]:
+                                best = (conf, bx1, by1, bx2, by2)
+                        except Exception:
+                            continue
+
+                if best is None:
+                    refined.append(det)
+                    continue
+
+                conf_h, bx1, by1, bx2, by2 = best
+                # 映射回全图坐标
+                gx1 = int(x1 + max(0.0, bx1))
+                gy1 = int(y1 + max(0.0, by1))
+                gx2 = int(x1 + min(float(x2 - x1), bx2))
+                gy2 = int(y1 + min(float(y2 - y1), by2))
+                if gx2 > gx1 and gy2 > gy1:
+                    det = det.copy()
+                    det["bbox"] = [gx1, gy1, gx2, gy2]
+                    det["confidence"] = max(
+                        float(det.get("confidence", 0.0)), float(conf_h)
+                    )
+                    det["cascade_refined"] = True
+                    refined_cnt += 1
+                refined.append(det)
+            except Exception:
+                refined.append(det)
+
+        self.cascade_stats["triggers"] += triggers
+        self.cascade_stats["refined"] += refined_cnt
+        self.cascade_stats["time_total"] += max(0.0, time.time() - t_begin)
+
+        if triggers:
+            logger.info(
+                f"级联：触发={triggers}, 细化={refined_cnt}, 总耗时+={time.time() - t_begin:.3f}s"
+            )
+
+        return refined
+
+    def _detect_persons(self, image: np.ndarray) -> List[Dict]:
+        """人体检测 - 所有其他检测的基础
+
+        Args:
+            image: 输入图像
+
+        Returns:
+            List[Dict]: 人体检测结果列表
+
+        Raises:
+            RuntimeError: 当人体检测器未初始化或检测失败时
+        """
+        if self.human_detector is None:
+            raise RuntimeError(
+                "人体检测器未初始化。请检查：\n" "1. 检测服务是否正确启动\n" "2. 人体检测模型文件是否存在\n" "3. 系统依赖是否完整"
+            )
+
+        detections = self.human_detector.detect(image)
+        return detections if detections else []
 
     def _detect_hairnet_for_persons(
         self, image: np.ndarray, person_detections: List[Dict]
     ) -> List[Dict]:
-        """为检测到的人员进行发网检测"""
+        """为检测到的人员进行发网检测
+
+        Args:
+            image: 输入图像
+            person_detections: 人体检测结果列表
+
+        Returns:
+            List[Dict]: 发网检测结果列表
+
+        Raises:
+            RuntimeError: 当发网检测器未初始化时
+        """
         if self.hairnet_detector is None:
-            logger.warning("发网检测器未初始化")
-            return []
+            raise RuntimeError(
+                "发网检测器未初始化。请检查：\n" "1. 检测服务是否正确启动\n" "2. 发网检测模型文件是否存在\n" "3. 系统依赖是否完整"
+            )
 
         hairnet_results = []
 
@@ -434,10 +674,12 @@ class OptimizedDetectionPipeline:
 
                 if person_region.size > 0:
                     # 使用行为识别器检测洗手行为
-                    # 需要提供手部区域信息
-                    hand_regions = self._estimate_hand_regions(bbox)
+                    # 获取实际的手部区域信息
+                    hand_regions = self._get_actual_hand_regions(image, bbox)
+
+                    # 传递完整图像帧给行为识别器以支持MediaPipe检测
                     confidence = self.behavior_recognizer.detect_handwashing(
-                        bbox, hand_regions
+                        bbox, hand_regions, track_id=i + 1, frame=image
                     )
                     is_handwashing = (
                         confidence >= self.behavior_recognizer.confidence_threshold
@@ -506,13 +748,15 @@ class OptimizedDetectionPipeline:
 
                 if person_region.size > 0:
                     # 使用行为识别器检测消毒行为
-                    # 需要提供手部区域信息
-                    hand_regions = self._estimate_hand_regions(bbox)
+                    # 获取实际的手部区域信息
+                    hand_regions = self._get_actual_hand_regions(image, bbox)
+
+                    # 传递完整图像帧给行为识别器以支持MediaPipe检测
                     confidence = self.behavior_recognizer.detect_sanitizing(
-                        bbox, hand_regions
+                        bbox, hand_regions, track_id=i + 1, frame=image
                     )
                     is_sanitizing = (
-                        confidence > self.behavior_recognizer.confidence_threshold
+                        confidence >= self.behavior_recognizer.confidence_threshold
                     )
                 else:
                     is_sanitizing = False
@@ -544,7 +788,7 @@ class OptimizedDetectionPipeline:
 
     def _estimate_hand_regions(self, person_bbox: List[int]) -> List[Dict]:
         """
-        估算人体的手部区域
+        估算人体的手部区域，优先使用姿态检测器
 
         Args:
             person_bbox: 人体边界框 [x1, y1, x2, y2]
@@ -552,6 +796,18 @@ class OptimizedDetectionPipeline:
         Returns:
             手部区域列表
         """
+        # 如果有姿态检测器，尝试使用实际的手部检测
+        if self.pose_detector is not None:
+            try:
+                # 从人体区域提取图像进行手部检测
+                x1, y1, x2, y2 = person_bbox
+                # 这里需要完整图像，所以返回估算结果
+                # 实际的手部检测在其他地方进行
+                pass
+            except Exception as e:
+                logger.debug(f"姿态检测器手部检测失败，使用估算方法: {e}")
+
+        # 使用估算方法
         x1, y1, x2, y2 = person_bbox
         width = x2 - x1
         height = y2 - y1
@@ -567,6 +823,160 @@ class OptimizedDetectionPipeline:
         right_hand_bbox = [x2 - hand_box_w, hand_y, x2, hand_y + hand_box_h]
 
         return [{"bbox": left_hand_bbox}, {"bbox": right_hand_bbox}]
+
+    def _get_actual_hand_regions(
+        self, image: np.ndarray, person_bbox: List[int]
+    ) -> List[Dict]:
+        """
+        获取实际的手部区域，优先使用姿态检测器
+
+        Args:
+            image: 完整图像
+            person_bbox: 人体边界框 [x1, y1, x2, y2]
+
+        Returns:
+            手部区域列表
+        """
+        hand_regions = []
+
+        # 如果有姿态检测器，优先在人框ROI上执行手部检测，并映射回全图坐标
+        if self.pose_detector is not None:
+            try:
+                x1, y1, x2, y2 = [int(v) for v in person_bbox]
+                # 外扩20%边距，并裁回图像范围
+                w = x2 - x1
+                h = y2 - y1
+                pad_x = int(0.2 * w)
+                pad_y = int(0.2 * h)
+                x1 = max(0, x1 - pad_x)
+                y1 = max(0, y1 - pad_y)
+                x2 = min(image.shape[1], x2 + pad_x)
+                y2 = min(image.shape[0], y2 + pad_y)
+
+                if x2 > x1 and y2 > y1:
+                    roi = image[y1:y2, x1:x2]
+                    roi_h, roi_w = roi.shape[:2]
+
+                    # 预处理：CLAHE增强亮度、轻度锐化
+                    def _enhance(img: np.ndarray) -> np.ndarray:
+                        try:
+                            lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+                            l, a, b = cv2.split(lab)
+                            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+                            l2 = clahe.apply(l)
+                            lab2 = cv2.merge((l2, a, b))
+                            enhanced = cv2.cvtColor(lab2, cv2.COLOR_LAB2BGR)
+                            # 轻度锐化
+                            kernel = np.array(
+                                [[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32
+                            )
+                            sharpened = cv2.filter2D(enhanced, -1, kernel)
+                            return sharpened
+                        except Exception:
+                            return img
+
+                    # 保证最小ROI边长，并做多尺度（1.0 和 1.25倍）
+                    min_side_target = 160
+                    base_scale = 1.0
+                    min_side = max(1, min(roi_w, roi_h))
+                    if min_side < min_side_target:
+                        base_scale = float(min_side_target) / float(min_side)
+                    scales = [base_scale, min(2.0, base_scale * 1.25)]
+
+                    detected_any = False
+                    for scale in scales:
+                        # 缩放ROI
+                        scaled_w = max(1, int(round(roi_w * scale)))
+                        scaled_h = max(1, int(round(roi_h * scale)))
+                        scaled_roi = cv2.resize(
+                            roi, (scaled_w, scaled_h), interpolation=cv2.INTER_CUBIC
+                        )
+                        scaled_roi = _enhance(scaled_roi)
+
+                        # 调用手部检测（在缩放ROI上）
+                        roi_hands = self.pose_detector.detect_hands(scaled_roi)
+
+                        for hres in roi_hands:
+                            # 读取缩放ROI内的像素bbox，并映射回全图
+                            bbox = hres.get("bbox", [0, 0, 0, 0])
+                            bx1, by1, bx2, by2 = [int(b) for b in bbox]
+                            # 先还原到原ROI坐标系
+                            ox1 = bx1 / scale
+                            oy1 = by1 / scale
+                            ox2 = bx2 / scale
+                            oy2 = by2 / scale
+                            gx1, gy1 = int(round(x1 + ox1)), int(round(y1 + oy1))
+                            gx2, gy2 = int(round(x1 + ox2)), int(round(y1 + oy2))
+
+                            mapped = {
+                                "bbox": [gx1, gy1, gx2, gy2],
+                                "confidence": float(hres.get("confidence", 0.0)),
+                            }
+
+                            # 映射关键点（hres.landmarks 相对缩放ROI的归一化坐标）
+                            if "landmarks" in hres and hres["landmarks"]:
+                                mapped_landmarks = []
+                                sw, sh = scaled_w, scaled_h
+                                for lm in hres["landmarks"]:
+                                    px = lm.get("x", 0.0) * sw  # 像素坐标（缩放ROI）
+                                    py = lm.get("y", 0.0) * sh
+                                    ox = px / scale  # 还原到原ROI像素
+                                    oy = py / scale
+                                    mapped_landmarks.append(
+                                        {
+                                            "x": (x1 + ox) / image.shape[1],
+                                            "y": (y1 + oy) / image.shape[0],
+                                        }
+                                    )
+                                mapped["landmarks"] = mapped_landmarks
+
+                            # 透传来源与标签（若存在）
+                            if "class_name" in hres:
+                                mapped["class_name"] = hres["class_name"]
+                            if "source" in hres:
+                                mapped["source"] = hres["source"]
+
+                            # 仅保留手中心在该人体框内的结果
+                            cx = (gx1 + gx2) / 2
+                            cy = (gy1 + gy2) / 2
+                            if x1 <= cx <= x2 and y1 <= cy <= y2:
+                                hand_regions.append(mapped)
+
+                if hand_regions:
+                    detected_any = True
+
+                    if detected_any:
+                        logger.debug(f"ROI手检检测到 {len(hand_regions)} 个手部区域 (多尺度/增强)")
+                        return hand_regions
+
+                # ROI为空或未检出时，退回整帧手检并过滤到该人体框
+                full_hands = self.pose_detector.detect_hands(image)
+                for hres in full_hands:
+                    bbox = hres.get("bbox", [0, 0, 0, 0])
+                    hx1, hy1, hx2, hy2 = [int(b) for b in bbox]
+                    cx = (hx1 + hx2) / 2
+                    cy = (hy1 + hy2) / 2
+                    if x1 <= cx <= x2 and y1 <= cy <= y2:
+                        hand_regions.append(hres)
+
+                if hand_regions:
+                    logger.debug(f"整帧手检过滤到 {len(hand_regions)} 个手部区域")
+                    return hand_regions
+
+            except Exception as e:
+                logger.debug(f"姿态检测器手部检测失败，使用估算方法: {e}")
+
+        # 回退到估算方法
+        estimated_regions = self._estimate_hand_regions(person_bbox)
+        logger.debug("使用估算的手部区域")
+        return estimated_regions
+
+    # --- Public helper for external callers (e.g., tracking-driven pipelines) ---
+    def get_hand_regions_for_person(
+        self, image: np.ndarray, person_bbox: List[int]
+    ) -> List[Dict]:
+        """对外公开：根据人体框返回手部区域（可能包含landmarks与来源）"""
+        return self._get_actual_hand_regions(image, person_bbox)
 
     def _create_annotated_image(
         self,
@@ -585,15 +995,7 @@ class OptimizedDetectionPipeline:
                 bbox = detection.get("bbox", [0, 0, 0, 0])
                 x1, y1, x2, y2 = map(int, bbox)
                 cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(
-                    annotated,
-                    "Person",
-                    (x1, y1 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    (0, 255, 0),
-                    1,
-                )
+                # 留空，由上层统一中文渲染
 
             # 绘制发网检测结果
             for result in hairnet_results:
@@ -602,18 +1004,100 @@ class OptimizedDetectionPipeline:
                 color = (0, 255, 0) if result.get("has_hairnet", False) else (0, 0, 255)
                 cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
 
-                text = "Hairnet" if result.get("has_hairnet", False) else "No Hairnet"
-                cv2.putText(
-                    annotated,
-                    text,
-                    (x1, y1 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.4,
-                    color,
-                    1,
-                )
+                # 留空，由上层统一中文渲染
 
-            # 可以继续添加洗手和消毒的可视化...
+            # 绘制洗手检测结果
+            for result in handwash_results:
+                if result.get("is_handwashing", False):
+                    person_bbox = result.get("person_bbox", [0, 0, 0, 0])
+                    x1, y1, x2, y2 = map(int, person_bbox)
+                    # 在人体框上方绘制洗手标签
+                    # 留空，由上层统一中文渲染
+
+            # 绘制消毒检测结果
+            for result in sanitize_results:
+                if result.get("is_sanitizing", False):
+                    person_bbox = result.get("person_bbox", [0, 0, 0, 0])
+                    x1, y1, x2, y2 = map(int, person_bbox)
+                    # 在人体框上方绘制消毒标签
+                    # 留空，由上层统一中文渲染
+
+            # 手部可视化：无论是否检测到人体，都尝试绘制手部（便于手部近景视频调试）
+            hands_count = 0
+            if self.pose_detector is not None:
+                hands_results = []
+                if hasattr(self.pose_detector, "detect_hands"):
+                    hands_results = self.pose_detector.detect_hands(image)
+
+                hands_count = len(hands_results)
+
+                # 绘制手部：优先绘制bbox与来源标签；如有关键点则再绘制骨架
+                for hand_result in hands_results:
+                    bbox = hand_result.get("bbox", [0, 0, 0, 0])
+                    hx1, hy1, hx2, hy2 = map(int, bbox)
+                    label = hand_result.get("class_name", "hand")
+                    src = hand_result.get("source", "auto")
+
+                    # 绘制手部边界框与来源
+                    cv2.rectangle(annotated, (hx1, hy1), (hx2, hy2), (255, 255, 0), 2)
+                    cv2.putText(
+                        annotated,
+                        f"Hand: {label} [{src}]",
+                        (hx1, hy1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        (255, 255, 0),
+                        2,
+                    )
+
+                    # 若有关键点则绘制骨架
+                    if "landmarks" in hand_result and hand_result["landmarks"]:
+                        landmarks = hand_result["landmarks"]
+                        h, w = image.shape[:2]
+                        for i, landmark in enumerate(landmarks):
+                            x = int(landmark["x"] * w)
+                            y = int(landmark["y"] * h)
+                            cv2.circle(annotated, (x, y), 3, (0, 255, 255), -1)
+
+                        if len(landmarks) >= 21:
+                            wrist = (
+                                int(landmarks[0]["x"] * w),
+                                int(landmarks[0]["y"] * h),
+                            )
+                            finger_bases = [5, 9, 13, 17]
+                            for base_idx in finger_bases:
+                                if base_idx < len(landmarks):
+                                    base = (
+                                        int(landmarks[base_idx]["x"] * w),
+                                        int(landmarks[base_idx]["y"] * h),
+                                    )
+                                    cv2.line(annotated, wrist, base, (0, 255, 255), 1)
+
+                            finger_connections = [
+                                [1, 2, 3, 4],
+                                [5, 6, 7, 8],
+                                [9, 10, 11, 12],
+                                [13, 14, 15, 16],
+                                [17, 18, 19, 20],
+                            ]
+
+                            for finger in finger_connections:
+                                for j in range(len(finger) - 1):
+                                    if finger[j] < len(landmarks) and finger[
+                                        j + 1
+                                    ] < len(landmarks):
+                                        pt1 = (
+                                            int(landmarks[finger[j]]["x"] * w),
+                                            int(landmarks[finger[j]]["y"] * h),
+                                        )
+                                        pt2 = (
+                                            int(landmarks[finger[j + 1]]["x"] * w),
+                                            int(landmarks[finger[j + 1]]["y"] * h),
+                                        )
+                                        cv2.line(annotated, pt1, pt2, (0, 255, 255), 1)
+
+            # 在左上角显示帧信息
+            # 顶层渲染中文信息
 
         except Exception as e:
             logger.error(f"图像注释失败: {e}")

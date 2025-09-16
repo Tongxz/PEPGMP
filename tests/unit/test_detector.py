@@ -18,7 +18,7 @@ sys.path.append(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
 
-from src.core.detector import HumanDetector
+from src.detection.detector import HumanDetector
 
 
 class TestHumanDetector(unittest.TestCase):
@@ -33,15 +33,19 @@ class TestHumanDetector(unittest.TestCase):
     def test_init(self):
         """测试初始化"""
         self.assertIsNotNone(self.detector)
-        self.assertEqual(self.detector.confidence_threshold, 0.5)
-        self.assertEqual(self.detector.iou_threshold, 0.5)
-        self.assertEqual(self.detector.min_box_area, 1500)
-        self.assertEqual(self.detector.max_box_ratio, 4.0)
+        # 置信度阈值已更新为0.4
+        self.assertEqual(self.detector.confidence_threshold, 0.4)
+        # IoU阈值已更新为0.6
+        self.assertEqual(self.detector.iou_threshold, 0.6)
+        # 最小框面积已更新为1000
+        self.assertEqual(self.detector.min_box_area, 1000)
+        # 最大框比例已更新为6.0
+        self.assertEqual(self.detector.max_box_ratio, 6.0)
 
     def test_get_device_auto(self):
         """测试自动设备选择"""
         device = self.detector._get_device("auto")
-        self.assertIn(device, ["cpu", "cuda"])
+        self.assertIn(device, ["cpu", "cuda", "mps"])
 
     def test_get_device_cpu(self):
         """测试CPU设备选择"""
@@ -148,13 +152,17 @@ class TestHumanDetector(unittest.TestCase):
         self.assertGreater(high_confidence, self.detector.confidence_threshold)
 
     def test_model_fallback(self):
-        """测试模型加载失败时的回退机制"""
+        """测试模型加载失败时抛出异常"""
         # 创建一个模型为None的检测器
         detector_with_no_model = HumanDetector()
         detector_with_no_model.model = None
 
-        detections = detector_with_no_model.detect(self.test_image)
-        self.assertIsInstance(detections, list)
+        # 测试应该抛出RuntimeError
+        with self.assertRaises(RuntimeError) as context:
+            detector_with_no_model.detect(self.test_image)
+
+        # 更新错误消息检查以匹配实际错误消息
+        self.assertIn("YOLO模型未正确加载", str(context.exception))
 
     def tearDown(self):
         """测试后清理"""

@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系统信息 - 手部行为检测系统</title>
+    <link rel="stylesheet" href="/frontend/theme.css">
+    <link rel="stylesheet" href="/frontend/nav.css">
+    <script defer src="/frontend/nav.js"></script>
+    <style>
+        .system-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: var(--space-4);
+            margin-bottom: var(--space-4);
+        }
+
+        .info-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: var(--space-3);
+        }
+
+        .info-table th,
+        .info-table td {
+            padding: var(--space-2) var(--space-3);
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .info-table th {
+            background-color: var(--gray-50);
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .info-table td {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-1);
+            padding: var(--space-1) var(--space-2);
+            border-radius: var(--radius-sm);
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .status-healthy {
+            background-color: var(--success-light, #e8f5e8);
+            color: var(--success-dark, #2e7d32);
+        }
+
+        .status-warning {
+            background-color: var(--warning-light, #fff8e1);
+            color: var(--warning-dark, #f57c00);
+        }
+
+        .status-error {
+            background-color: var(--error-light, #ffebee);
+            color: var(--error-dark, #c62828);
+        }
+
+        .config-section {
+            margin-top: var(--space-4);
+        }
+
+        .config-file {
+            background-color: var(--gray-50);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: var(--space-3);
+            margin-bottom: var(--space-3);
+        }
+
+        .config-file h4 {
+            margin: 0 0 var(--space-2) 0;
+            color: var(--text-primary);
+        }
+
+        .config-meta {
+            display: flex;
+            gap: var(--space-4);
+            margin-bottom: var(--space-2);
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .refresh-btn {
+            position: fixed;
+            bottom: var(--space-4);
+            right: var(--space-4);
+            z-index: 1000;
+        }
+
+        .loading {
+            text-align: center;
+            padding: var(--space-8);
+            color: var(--text-secondary);
+        }
+
+        .error-message {
+            background-color: var(--error-light, #ffebee);
+            border: 1px solid var(--error, #f44336);
+            border-radius: var(--radius-md);
+            padding: var(--space-3);
+            color: var(--error-dark, #c62828);
+            margin: var(--space-4) 0;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background-color: var(--gray-200);
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            margin-top: var(--space-1);
+        }
+
+        .progress-fill {
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+
+        .progress-low {
+            background-color: var(--success);
+        }
+
+        .progress-medium {
+            background-color: var(--warning);
+        }
+
+        .progress-high {
+            background-color: var(--error);
+        }
+
+        .json-viewer {
+            background-color: var(--gray-900);
+            color: var(--gray-100);
+            padding: var(--space-3);
+            border-radius: var(--radius-md);
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- 主容器 -->
+    <div class="layout-container">
+        <!-- 页面头部 -->
+        <div class="layout-header">
+            <h1>系统信息</h1>
+            <p>查看当前服务器的硬件配置、运行状态和系统配置</p>
+        </div>
+
+        <!-- 内容区域 -->
+        <div class="layout-content">
+            <!-- 加载中状态 -->
+            <div id="loadingState" class="loading">
+                <div>正在加载系统信息...</div>
+            </div>
+
+            <!-- 错误信息 -->
+            <div id="errorMessage" class="error-message" style="display: none;">
+            </div>
+
+            <!-- 系统信息网格 -->
+            <div id="systemContent" class="system-grid" style="display: none;">
+                <!-- 系统健康状态卡片 -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>系统健康状态</h3>
+                    </div>
+                    <div id="healthStatus">
+                        <!-- 健康状态内容将动态加载 -->
+                    </div>
+                </div>
+
+                <!-- 硬件信息卡片 -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>硬件信息</h3>
+                    </div>
+                    <div id="hardwareInfo">
+                        <!-- 硬件信息内容将动态加载 -->
+                    </div>
+                </div>
+
+                <!-- 资源使用率卡片 -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>资源使用率</h3>
+                    </div>
+                    <div id="resourceUsage">
+                        <!-- 资源使用率内容将动态加载 -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- 配置信息区域 -->
+            <div id="configSection" class="config-section" style="display: none;">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>系统配置</h3>
+                        <p>当前服务器的配置文件状态和环境信息</p>
+                    </div>
+                    <div id="configContent">
+                        <!-- 配置内容将动态加载 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 刷新按钮 -->
+    <button id="refreshBtn" class="btn btn-primary refresh-btn" onclick="loadSystemInfo()">
+        🔄 刷新
+    </button>
+
+    <script>
+        let autoRefreshTimer = null;
+
+        // 页面加载时获取系统信息
+        document.addEventListener('DOMContentLoaded', function () {
+            loadSystemInfo();
+            // 启动自动刷新（每30秒）
+            startAutoRefresh();
+        });
+
+        async function loadSystemInfo() {
+            try {
+                showLoading();
+                hideError();
+
+                // 并行获取系统信息、健康状态和配置信息
+                const [systemInfo, healthInfo, configInfo] = await Promise.all([
+                    fetchWithTimeout('/api/v1/system/info'),
+                    fetchWithTimeout('/api/v1/system/health'),
+                    fetchWithTimeout('/api/v1/system/config')
+                ]);
+
+                // 渲染系统信息
+                renderSystemInfo(systemInfo);
+                renderHealthStatus(healthInfo);
+                renderConfigInfo(configInfo);
+
+                showSystemContent();
+            } catch (error) {
+                console.error('加载系统信息失败:', error);
+                showError('加载系统信息失败: ' + error.message);
+            }
+        }
+
+        async function fetchWithTimeout(url, timeout = 10000) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+            try {
+                const response = await fetch(url, {
+                    signal: controller.signal,
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    }
+                });
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                return await response.json();
+            } catch (error) {
+                clearTimeout(timeoutId);
+                if (error.name === 'AbortError') {
+                    throw new Error('请求超时');
+                }
+                throw error;
+            }
+        }
+
+        function renderSystemInfo(data) {
+            const hardwareInfo = document.getElementById('hardwareInfo');
+            const resourceUsage = document.getElementById('resourceUsage');
+
+            // 硬件信息表格
+            hardwareInfo.innerHTML = `
+                <table class="info-table">
+                    <tr><th>操作系统</th><td>${data.system.platform}</td></tr>
+                    <tr><th>系统版本</th><td>${data.system.system} ${data.system.version}</td></tr>
+                    <tr><th>架构</th><td>${data.system.architecture.join(', ')}</td></tr>
+                    <tr><th>处理器</th><td>${data.system.processor || 'N/A'}</td></tr>
+                    <tr><th>主机名</th><td>${data.system.hostname}</td></tr>
+                    <tr><th>Python版本</th><td>${data.system.python_version}</td></tr>
+                    <tr><th>CPU核心数</th><td>${data.cpu.count} (物理: ${data.cpu.physical_count || 'N/A'})</td></tr>
+                    ${data.cpu.current_frequency ? `<tr><th>CPU频率</th><td>${data.cpu.current_frequency.toFixed(0)} MHz</td></tr>` : ''}
+                </table>
+            `;
+
+            // 资源使用率
+            resourceUsage.innerHTML = `
+                <div style="margin-bottom: var(--space-3);">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: var(--space-1);">
+                        <span>CPU使用率</span>
+                        <span>${data.cpu.usage_percent.toFixed(1)}%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill ${getProgressClass(data.cpu.usage_percent)}" 
+                             style="width: ${data.cpu.usage_percent}%"></div>
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: var(--space-3);">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: var(--space-1);">
+                        <span>内存使用率</span>
+                        <span>${data.memory.percentage.toFixed(1)}%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill ${getProgressClass(data.memory.percentage)}" 
+                             style="width: ${data.memory.percentage}%"></div>
+                    </div>
+                    <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: var(--space-1);">
+                        ${formatBytes(data.memory.used)} / ${formatBytes(data.memory.total)}
+                    </div>
+                </div>
+                
+                <div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: var(--space-1);">
+                        <span>磁盘使用率</span>
+                        <span>${data.disk.percentage.toFixed(1)}%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill ${getProgressClass(data.disk.percentage)}" 
+                             style="width: ${data.disk.percentage}%"></div>
+                    </div>
+                    <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: var(--space-1);">
+                        ${formatBytes(data.disk.used)} / ${formatBytes(data.disk.total)}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderHealthStatus(data) {
+            const healthStatus = document.getElementById('healthStatus');
+
+            let statusClass = '';
+            let statusText = '';
+            let statusIcon = '';
+
+            switch (data.status) {
+                case 'healthy':
+                    statusClass = 'status-healthy';
+                    statusText = '系统健康';
+                    statusIcon = '✅';
+                    break;
+                case 'warning':
+                    statusClass = 'status-warning';
+                    statusText = '警告状态';
+                    statusIcon = '⚠️';
+                    break;
+                case 'error':
+                    statusClass = 'status-error';
+                    statusText = '错误状态';
+                    statusIcon = '❌';
+                    break;
+                default:
+                    statusClass = 'status-warning';
+                    statusText = '未知状态';
+                    statusIcon = '❓';
+            }
+
+            let issuesHtml = '';
+            if (data.issues && data.issues.length > 0) {
+                issuesHtml = `
+                    <div style="margin-top: var(--space-3);">
+                        <h4>发现的问题:</h4>
+                        <ul style="margin: var(--space-2) 0; padding-left: var(--space-4);">
+                            ${data.issues.map(issue => `<li>${issue}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+
+            healthStatus.innerHTML = `
+                <div class="status-indicator ${statusClass}">
+                    ${statusIcon} ${statusText}
+                </div>
+                ${issuesHtml}
+                <div style="margin-top: var(--space-3); font-size: 0.9rem; color: var(--text-secondary);">
+                    最后检查: ${new Date(data.timestamp).toLocaleString('zh-CN')}
+                </div>
+            `;
+        }
+
+        function renderConfigInfo(data) {
+            const configContent = document.getElementById('configContent');
+
+            let configFilesHtml = '';
+            for (const [name, info] of Object.entries(data.config_files)) {
+                const exists = info.exists;
+                const statusIcon = exists ? '✅' : '❌';
+                const statusText = exists ? '存在' : '不存在';
+
+                configFilesHtml += `
+                    <div class="config-file">
+                        <h4>${name} ${statusIcon}</h4>
+                        <div class="config-meta">
+                            <span>状态: ${statusText}</span>
+                            ${exists ? `<span>大小: ${formatBytes(info.size)}</span>` : ''}
+                            ${exists && info.modified_time ? `<span>修改时间: ${new Date(info.modified_time).toLocaleString('zh-CN')}</span>` : ''}
+                        </div>
+                        <div style="font-size: 0.85rem; font-family: monospace; color: var(--text-secondary);">
+                            ${info.path}
+                        </div>
+                        ${info.error ? `<div style="color: var(--error); font-size: 0.85rem; margin-top: var(--space-1);">错误: ${info.error}</div>` : ''}
+                    </div>
+                `;
+            }
+
+            configContent.innerHTML = `
+                <div style="margin-bottom: var(--space-4);">
+                    <h4>项目路径</h4>
+                    <div style="font-family: monospace; font-size: 0.9rem; background-color: var(--gray-100); padding: var(--space-2); border-radius: var(--radius-sm);">
+                        ${data.project_root}
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: var(--space-4);">
+                    <h4>配置文件状态</h4>
+                    ${configFilesHtml}
+                </div>
+                
+                <div style="margin-bottom: var(--space-4);">
+                    <h4>环境变量</h4>
+                    <table class="info-table">
+                        ${Object.entries(data.environment).map(([key, value]) =>
+                `<tr><th>${key}</th><td>${value || '(未设置)'}</td></tr>`
+            ).join('')}
+                    </table>
+                </div>
+                
+                <div>
+                    <div style="font-size: 0.9rem; color: var(--text-secondary);">
+                        更新时间: ${new Date(data.timestamp).toLocaleString('zh-CN')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function getProgressClass(percentage) {
+            if (percentage < 50) return 'progress-low';
+            if (percentage < 80) return 'progress-medium';
+            return 'progress-high';
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function showLoading() {
+            document.getElementById('loadingState').style.display = 'block';
+            document.getElementById('systemContent').style.display = 'none';
+            document.getElementById('configSection').style.display = 'none';
+        }
+
+        function showSystemContent() {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('systemContent').style.display = 'grid';
+            document.getElementById('configSection').style.display = 'block';
+        }
+
+        function showError(message) {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('systemContent').style.display = 'none';
+            document.getElementById('configSection').style.display = 'none';
+            document.getElementById('errorMessage').innerHTML = message;
+            document.getElementById('errorMessage').style.display = 'block';
+        }
+
+        function hideError() {
+            document.getElementById('errorMessage').style.display = 'none';
+        }
+
+        function startAutoRefresh() {
+            // 清除现有定时器
+            if (autoRefreshTimer) {
+                clearInterval(autoRefreshTimer);
+            }
+
+            // 每30秒自动刷新
+            autoRefreshTimer = setInterval(() => {
+                loadSystemInfo();
+            }, 30000);
+        }
+
+        // 页面隐藏时停止自动刷新，显示时恢复
+        document.addEventListener('visibilitychange', function () {
+            if (document.hidden) {
+                if (autoRefreshTimer) {
+                    clearInterval(autoRefreshTimer);
+                    autoRefreshTimer = null;
+                }
+            } else {
+                startAutoRefresh();
+                loadSystemInfo(); // 立即刷新一次
+            }
+        });
+    </script>
+</body>
+
+</html>

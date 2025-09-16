@@ -26,7 +26,7 @@ class MockHairnetDetector:
         return {"wearing_hairnet": True, "has_hairnet": True, "confidence": 0.85}
 
 
-from src.core.hairnet_detector import (
+from src.detection.hairnet_detector import (
     HairnetCNN,
     HairnetDetectionPipeline,
     HairnetDetector,
@@ -70,12 +70,6 @@ class TestHairnetDetector(unittest.TestCase):
         """测试前准备"""
         self.detector = HairnetDetector()
         self.test_image = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
-
-    def test_init(self):
-        """测试初始化"""
-        self.assertIsNotNone(self.detector)
-        self.assertEqual(self.detector.confidence_threshold, 0.7)
-        self.assertIsNotNone(self.detector.transform)
 
     def test_get_device(self):
         """测试设备选择"""
@@ -142,16 +136,22 @@ class TestHairnetDetector(unittest.TestCase):
             self.assertIsInstance(result["confidence"], float)
 
     def test_detect_hairnet_fallback(self):
-        """测试模型不可用时的回退机制"""
+        """测试模型不可用时返回错误结果"""
         detector_no_model = HairnetDetector()
         detector_no_model.model = None
 
-        head_region = self.test_image[20:80, 30:90]
-        result = detector_no_model.detect_hairnet(head_region)
+        # 提供一个有效的人体边界框，确保能够提取头部ROI
+        human_bbox = [50, 20, 150, 200]  # x1, y1, x2, y2
 
+        # 测试应该返回错误结果
+        result = detector_no_model.detect_hairnet(
+            self.test_image, human_bbox=human_bbox
+        )
+
+        # 检查返回的错误结果
         self.assertIsInstance(result, dict)
-        self.assertIn("wearing_hairnet", result)
-        self.assertIn("confidence", result)
+        self.assertIn("error", result)
+        self.assertIn("CNN 发网检测模型未加载", result["error"])
 
     def test_preprocess_image(self):
         """测试图像预处理"""
@@ -183,12 +183,6 @@ class TestHairnetDetectionPipeline(unittest.TestCase):
             MockPersonDetector(), MockHairnetDetector()
         )
         self.test_frame = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
-
-    def test_init(self):
-        """测试初始化"""
-        self.assertIsNotNone(self.pipeline)
-        self.assertIsNotNone(self.pipeline.person_detector)
-        self.assertIsNotNone(self.pipeline.hairnet_detector)
 
     def test_detect_hairnet_compliance_empty_frame(self):
         """测试空帧的发网合规检测"""

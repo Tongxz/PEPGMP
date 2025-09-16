@@ -1,30 +1,26 @@
 import base64
 import logging
+import os
+import time
 from dataclasses import asdict
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
-from fastapi import Depends, Request
+import cv2
+import numpy as np
 
-from core.optimized_detection_pipeline import (
+from src.core.optimized_detection_pipeline import (
     DetectionResult,
     OptimizedDetectionPipeline,
 )
-from core.yolo_hairnet_detector import YOLOHairnetDetector
+from src.core.tracker import MultiObjectTracker
+from src.detection.pose_detector import PoseDetectorFactory
+from src.detection.yolo_hairnet_detector import YOLOHairnetDetector
 
 logger = logging.getLogger(__name__)
 
-# 在这里我们将实例化我们的服务，或者在app启动时进行
-# 为了简单起见，我们先在这里设置为None
+# Global instances, initialized at startup
 optimized_pipeline: Optional[OptimizedDetectionPipeline] = None
 hairnet_pipeline: Optional[YOLOHairnetDetector] = None
-
-
-def get_optimized_pipeline(request: Request) -> Optional[OptimizedDetectionPipeline]:
-    return getattr(request.app.state, "optimized_pipeline", None)
-
-
-def get_hairnet_pipeline(request: Request) -> Optional[YOLOHairnetDetector]:
-    return getattr(request.app.state, "hairnet_pipeline", None)
 
 
 def comprehensive_detection_logic(
@@ -32,189 +28,397 @@ def comprehensive_detection_logic(
     filename: str,
     optimized_pipeline: Optional[OptimizedDetectionPipeline],
     hairnet_pipeline: Optional[YOLOHairnetDetector],
+    record_process: bool = False,
 ) -> dict:
-    """
-    执行综合检测并返回统一格式的结果。
-    这个函数会被 comprehensive.py 中的API端点调用。
-    支持图像和视频文件。
-    """
-    import cv2
-    import numpy as np
     import tempfile
-    import os
     from pathlib import Path
 
-    # 检查文件类型
     file_ext = Path(filename).suffix.lower()
-    video_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm'}
-    image_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
-    
+    video_extensions = {".mp4", ".avi", ".mov"}
+    image_extensions = {".jpg", ".jpeg", ".png"}
+
     image = None
-    
     if file_ext in video_extensions:
-        # 处理视频文件
-        logger.info(f"检测到视频文件: {filename}")
-        
-        # 将视频内容写入临时文件
         with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as temp_file:
             temp_file.write(contents)
             temp_video_path = temp_file.name
-        
         try:
-            # 打开视频并提取第一帧
-            cap = cv2.VideoCapture(temp_video_path)
-            if not cap.isOpened():
-                raise ValueError("无法打开视频文件")
-            
-            ret, frame = cap.read()
-            if not ret or frame is None:
-                raise ValueError("无法从视频中读取帧")
-            
-            image = frame
-            cap.release()
-            
-            logger.info(f"成功从视频中提取第一帧，尺寸: {image.shape}")
-            
+            if record_process and optimized_pipeline:
+                return _process_video_with_recording(
+                    temp_video_path, filename, optimized_pipeline
+                )
+            else:
+                cap = cv2.VideoCapture(temp_video_path)
+                ret, frame = cap.read()
+                cap.release()
+                if not ret or frame is None:
+                    raise ValueError("Could not read frame from video")
+                image = frame
         finally:
-            # 清理临时文件
-            try:
-                os.unlink(temp_video_path)
-            except Exception as e:
-                logger.warning(f"清理临时视频文件失败: {e}")
-                
+            os.unlink(temp_video_path)
     elif file_ext in image_extensions:
-        # 处理图像文件
-        logger.info(f"检测到图像文件: {filename}")
         nparr = np.frombuffer(contents, np.uint8)
         image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if image is None:
-            raise ValueError("无法解码图像")
+            raise ValueError("Could not decode image")
     else:
-        raise ValueError(f"不支持的文件类型: {file_ext}。支持的格式: {image_extensions | video_extensions}")
-    
-    if image is None:
-        raise ValueError("无法获取有效的图像数据")
+        raise ValueError(f"Unsupported file type: {file_ext}")
 
-    if optimized_pipeline:
-        logger.info("使用优化检测管道进行综合检测")
-        result = optimized_pipeline.detect_comprehensive(image)
-        
-        # 转换为前端期望的格式
-        total_persons = len(result.person_detections)
-        persons_with_hairnet = len([h for h in result.hairnet_results if h.get('has_hairnet', False)])
-        persons_handwashing = len([h for h in result.handwash_results if h.get('is_handwashing', False)])
-        persons_sanitizing = len([s for s in result.sanitize_results if s.get('is_sanitizing', False)])
-        
-        # 构建统计信息
-        statistics = {
-            "persons_with_hairnet": persons_with_hairnet,
-            "persons_handwashing": persons_handwashing,
-            "persons_sanitizing": persons_sanitizing
-        }
-        
-        # 构建检测详情
-        detections = []
-        for detection in result.person_detections:
-            detections.append({
+    if image is None:
+        raise ValueError("Could not get a valid image to process")
+
+    if not optimized_pipeline:
+        raise RuntimeError("Detection service not initialized")
+
+    result = optimized_pipeline.detect_comprehensive(image)
+
+    total_persons = len(result.person_detections)
+    statistics = {
+        "persons_with_hairnet": len(
+            [h for h in result.hairnet_results if h.get("has_hairnet", False)]
+        ),
+        "persons_handwashing": len(
+            [h for h in result.handwash_results if h.get("is_handwashing", False)]
+        ),
+        "persons_sanitizing": len(
+            [s for s in result.sanitize_results if s.get("is_sanitizing", False)]
+        ),
+    }
+    detections = []
+    for det in result.person_detections:
+        detections.append(
+            {
                 "class": "person",
-                "confidence": detection.get("confidence", 0.0),
-                "bbox": detection.get("bbox", [0, 0, 0, 0])
-            })
-        
-        for detection in result.hairnet_results:
-            if detection.get('has_hairnet', False):
-                detections.append({
-                    "class": "hairnet",
-                    "confidence": detection.get("hairnet_confidence", 0.0),
-                    "bbox": detection.get("hairnet_bbox", [0, 0, 0, 0])
-                })
-        
-        # 处理标注图像
-        annotated_image_b64 = None
-        if result.annotated_image is not None:
-            _, buffer = cv2.imencode(".jpg", result.annotated_image)
-            annotated_image_b64 = base64.b64encode(buffer.tobytes()).decode("utf-8")
-        
-        return {
-            "total_persons": total_persons,
-            "statistics": statistics,
-            "detections": detections,
-            "annotated_image": annotated_image_b64,
-            "processing_times": result.processing_times
-        }
-        
-    elif hairnet_pipeline:
-        logger.warning("优化检测管道不可用，回退到原有发网检测逻辑")
-        result = hairnet_pipeline.detect_hairnet_compliance(image)
-        
-        # 转换为前端期望的格式
-        total_persons = result.get("total_persons", 0)
-        persons_with_hairnet = result.get("persons_with_hairnet", 0)
-        
-        # 构建统计信息（回退模式只有发网检测）
-        statistics = {
-            "persons_with_hairnet": persons_with_hairnet,
-            "persons_handwashing": 0,  # 回退模式不支持
-            "persons_sanitizing": 0   # 回退模式不支持
-        }
-        
-        # 构建检测详情
-        detections = []
-        for detection in result.get("detections", []):
-            detections.append({
-                "class": "hairnet" if detection.get("has_hairnet", False) else "person",
-                "confidence": detection.get("confidence", 0.0),
-                "bbox": detection.get("bbox", [0, 0, 0, 0])
-            })
-        
-        # 处理可视化图像
-        annotated_image_b64 = None
-        if "visualization" in result and isinstance(result.get("visualization"), np.ndarray):
-            img = result["visualization"]
-            _, buffer = cv2.imencode(".jpg", img)
-            annotated_image_b64 = base64.b64encode(buffer.tobytes()).decode("utf-8")
-        elif "visualization" in result and isinstance(result.get("visualization"), str):
-            # 如果已经是base64字符串
-            annotated_image_b64 = result["visualization"]
-        
-        return {
-            "total_persons": total_persons,
-            "statistics": statistics,
-            "detections": detections,
-            "annotated_image": annotated_image_b64,
-            "compliance_rate": result.get("compliance_rate", 0.0),
-            "average_confidence": result.get("average_confidence", 0.0)
-        }
-    else:
-        logger.error("所有检测管道都不可用")
-        raise RuntimeError("检测服务未初始化")
+                "confidence": det.get("confidence", 0.0),
+                "bbox": det.get("bbox"),
+            }
+        )
+
+    annotated_image_b64 = None
+    if result.annotated_image is not None:
+        _, buffer = cv2.imencode(".jpg", result.annotated_image)
+        annotated_image_b64 = base64.b64encode(buffer.tobytes()).decode("utf-8")
+
+    return {
+        "total_persons": total_persons,
+        "statistics": statistics,
+        "detections": detections,
+        "annotated_image": annotated_image_b64,
+        "processing_times": result.processing_times,
+    }
 
 
 def initialize_detection_services():
-    """初始化所有检测服务和模型."""
     global optimized_pipeline, hairnet_pipeline
-    logger.info("正在初始化检测服务...")
+    logger.info("Initializing detection services...")
     try:
-        # 这里的初始化逻辑需要从 app.py 的 startup 事件中迁移过来
-        # 为了演示，我们先使用None
         from src.core.behavior import BehaviorRecognizer
-        from src.core.data_manager import DetectionDataManager
-        from src.core.detector import HumanDetector
-        from src.core.region import RegionManager
-        from src.core.rule_engine import RuleEngine
+        from src.detection.detector import HumanDetector
 
         detector = HumanDetector()
         behavior_recognizer = BehaviorRecognizer()
-        data_manager = DetectionDataManager()
-        region_manager = RegionManager()
-        rule_engine = RuleEngine()
+
+        # 根据配置和设备选择姿态检测后端
+        from config.unified_params import get_unified_params
+        from src.config.model_config import ModelConfig
+
+        params = get_unified_params()
+        device = ModelConfig().select_device(requested=None)
+
+        pose_backend = params.pose_detection.backend
+        if pose_backend == "auto":
+            pose_backend = "yolov8" if str(device).lower() == "cuda" else "mediapipe"
+
+        pose_detector = PoseDetectorFactory.create(
+            backend=pose_backend,
+            device=params.pose_detection.device
+            if params.pose_detection.device != "auto"
+            else device,
+        )
+        logger.info(f"API服务 - 姿态检测器后端: {pose_backend}, 设备: {device}")
 
         optimized_pipeline = OptimizedDetectionPipeline(
             human_detector=detector,
             hairnet_detector=YOLOHairnetDetector(),
             behavior_recognizer=behavior_recognizer,
+            pose_detector=pose_detector,
         )
         hairnet_pipeline = YOLOHairnetDetector()
-        logger.info("检测服务初始化完成。")
+        logger.info("Detection services initialized.")
     except Exception as e:
-        logger.exception(f"初始化检测服务失败: {e}")
+        logger.exception(f"Failed to initialize detection services: {e}")
+        optimized_pipeline = None
+        hairnet_pipeline = None
+        raise
+
+
+def _process_video_with_recording(
+    video_path: str, filename: str, optimized_pipeline: OptimizedDetectionPipeline
+) -> dict:
+    from pathlib import Path
+
+    logger.info(f"Processing video: {filename}")
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise ValueError("Cannot open video file")
+
+    fps = int(cap.get(cv2.CAP_PROP_FPS))
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    output_dir = "./output/processed_videos"
+    os.makedirs(output_dir, exist_ok=True)
+    base_name = Path(filename).stem
+    output_filename = f"{base_name}_processed_{int(time.time())}.mp4"
+    output_path = os.path.join(output_dir, output_filename)
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+
+    tracker = MultiObjectTracker(max_disappeared=5, iou_threshold=0.5)
+    frame_count = 0
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        frame_count += 1
+        if frame_count % 5 == 0:
+            result = optimized_pipeline.detect_comprehensive(frame)
+            detections = [
+                {"bbox": p["bbox"], "confidence": p["confidence"]}
+                for p in result.person_detections
+            ]
+            tracked_objects = tracker.update(detections)
+            annotated_frame = _draw_detections_on_frame_with_tracking(
+                frame.copy(), result, tracked_objects, optimized_pipeline
+            )
+            out.write(annotated_frame)
+        else:
+            out.write(frame)
+    cap.release()
+    out.release()
+    return {"output_video": {"filename": output_filename, "path": output_path}}
+
+
+def _bbox_overlap(bbox1, bbox2, threshold=0.5):
+    if not bbox1 or not bbox2:
+        return False
+    x1 = max(bbox1[0], bbox2[0])
+    y1 = max(bbox1[1], bbox2[1])
+    x2 = min(bbox1[2], bbox2[2])
+    y2 = min(bbox1[3], bbox2[3])
+    if x2 <= x1 or y2 <= y1:
+        return False
+    intersection = (x2 - x1) * (y2 - y1)
+    area1 = (bbox1[2] - bbox1[0]) * (bbox1[3] - bbox1[1])
+    area2 = (bbox2[2] - bbox2[0]) * (bbox2[3] - bbox2[1])
+    union = area1 + area2 - intersection
+    return (intersection / union) > threshold
+
+
+def _draw_detections_on_frame_with_tracking(
+    frame, result, tracked_objects, optimized_pipeline
+):
+    annotated_frame = frame.copy()
+    pose_detector = optimized_pipeline.pose_detector
+    if pose_detector is None:
+        return annotated_frame
+    hands_results = pose_detector.detect(frame)
+    washing_person_bboxes = [
+        res["person_bbox"]
+        for res in result.handwash_results
+        if res.get("is_handwashing")
+    ]
+    for track in tracked_objects:
+        bbox = track["bbox"]
+        track_id = track["track_id"]
+        label = f"编号:{track_id} (置信度:{track.get('confidence', 0.0):.2f})"
+        cv2.rectangle(
+            annotated_frame,
+            (int(bbox[0]), int(bbox[1])),
+            (int(bbox[2]), int(bbox[3])),
+            (0, 255, 0),
+            2,
+        )
+        cv2.putText(
+            annotated_frame,
+            label,
+            (int(bbox[0]), int(bbox[1]) - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (0, 255, 0),
+            2,
+        )
+    return annotated_frame
+
+
+def _play_alert_sound():
+    """在支持的系统上播放简易提示音（macOS优先）。"""
+    try:
+        # macOS 系统提示音
+        if os.name == "posix" and os.uname().sysname == "Darwin":
+            os.system("afplay /System/Library/Sounds/Glass.aiff >/dev/null 2>&1 &")
+        else:
+            # 其他平台退化为控制台蜂鸣
+            print("\a", end="")
+    except Exception:
+        pass
+
+
+def _anonymize_faces_or_head(image: np.ndarray) -> np.ndarray:
+    """
+    对传入图像进行打码：
+    1) 优先使用Haar人脸检测进行区域模糊；
+    2) 若未检测到人脸，则对上部区域（近似头部）进行模糊。
+    """
+    try:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        # 使用OpenCV自带的Haar特征分类器
+        face_cascade_path = getattr(cv2, "data", None)
+        if face_cascade_path is not None:
+            cascade_file = os.path.join(
+                cv2.data.haarcascades, "haarcascade_frontalface_default.xml"
+            )
+        else:
+            cascade_file = "haarcascade_frontalface_default.xml"
+        face_cascade = cv2.CascadeClassifier(cascade_file)
+        faces = face_cascade.detectMultiScale(
+            gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
+        )
+
+        anonymized = image.copy()
+        if len(faces) > 0:
+            for x, y, w, h in faces:
+                x2, y2 = x + w, y + h
+                roi = anonymized[y:y2, x:x2]
+                if roi.size > 0:
+                    roi = cv2.GaussianBlur(roi, (31, 31), 0)
+                    anonymized[y:y2, x:x2] = roi
+            return anonymized
+        else:
+            # 无人脸时，模糊图像上方40%的区域（近似头部）
+            h = anonymized.shape[0]
+            top_h = max(1, int(h * 0.4))
+            roi = anonymized[0:top_h, :]
+            if roi.size > 0:
+                roi = cv2.GaussianBlur(roi, (31, 31), 0)
+                anonymized[0:top_h, :] = roi
+            return anonymized
+    except Exception:
+        return image
+
+
+def _capture_violation(
+    session, frame, track_id, violation_type, bbox, cooldown_period=10
+):
+    current_time = time.time()
+    cooldown_key = (track_id, violation_type)
+    last_capture_time = session.violation_cooldowns.get(cooldown_key, 0)
+    if current_time - last_capture_time < cooldown_period:
+        return
+    try:
+        timestamp = int(current_time)
+        filename = f"{violation_type}_track_{track_id}_{timestamp}.jpg"
+        output_dir = os.path.join("output", "violations", violation_type)
+        os.makedirs(output_dir, exist_ok=True)
+        output_path = os.path.join(output_dir, filename)
+        x1, y1, x2, y2 = map(int, bbox)
+        cropped_image = frame[y1:y2, x1:x2]
+        if cropped_image.size > 0:
+            anonymized = _anonymize_faces_or_head(cropped_image)
+            cv2.imwrite(output_path, anonymized)
+            logger.info(f"Violation captured (anonymized): {filename}")
+            session.violation_cooldowns[cooldown_key] = current_time
+            _play_alert_sound()
+    except Exception as e:
+        logger.error(f"Failed to capture violation for track {track_id}: {e}")
+
+
+def process_tracked_frame(session, frame, optimized_pipeline):
+    start_time = time.time()
+    person_detections = optimized_pipeline._detect_persons(frame)
+    tracker_input = [
+        {"bbox": p.get("bbox"), "confidence": p.get("confidence")}
+        for p in person_detections
+    ]
+    tracked_objects = session.tracker.update(tracker_input)
+    tracked_person_detections = []
+    for tobj in tracked_objects:
+        for pdet in person_detections:
+            if _bbox_overlap(tobj["bbox"], pdet["bbox"], threshold=0.8):
+                pdet["track_id"] = tobj["track_id"]
+                tracked_person_detections.append(pdet)
+                break
+    hairnet_results = optimized_pipeline._detect_hairnet_for_persons(
+        frame, tracked_person_detections
+    )
+    handwash_results = optimized_pipeline._detect_handwash_for_persons(
+        frame, tracked_person_detections
+    )
+    sanitize_results = optimized_pipeline._detect_sanitize_for_persons(
+        frame, tracked_person_detections
+    )
+    result = DetectionResult(
+        person_detections=tracked_person_detections,
+        hairnet_results=hairnet_results,
+        handwash_results=handwash_results,
+        sanitize_results=sanitize_results,
+        processing_times={},
+        annotated_image=None,
+    )
+    annotated_frame = _draw_detections_on_frame_with_tracking(
+        frame.copy(), result, tracked_objects, optimized_pipeline
+    )
+    for tobj in tracked_objects:
+        track_id = tobj["track_id"]
+        person_bbox = tobj["bbox"]
+        for h_res in hairnet_results:
+            if _bbox_overlap(
+                person_bbox, h_res.get("person_bbox", [])
+            ) and not h_res.get("has_hairnet"):
+                _capture_violation(session, frame, track_id, "no_hairnet", person_bbox)
+                break
+        is_washing = False
+        for w_res in handwash_results:
+            if _bbox_overlap(person_bbox, w_res.get("person_bbox", [])) and w_res.get(
+                "is_handwashing"
+            ):
+                is_washing = True
+                break
+        if not is_washing:
+            _capture_violation(session, frame, track_id, "not_handwashing", person_bbox)
+    _, buffer = cv2.imencode(".jpg", annotated_frame)
+    annotated_image_b64 = base64.b64encode(buffer.tobytes()).decode("utf-8")
+    total_persons = len(tracked_objects)
+    persons_with_hairnet = len(
+        [h for h in hairnet_results if h.get("has_hairnet", False)]
+    )
+    persons_handwashing = len(
+        [h for h in handwash_results if h.get("is_handwashing", False)]
+    )
+    persons_sanitizing = len(
+        [s for s in sanitize_results if s.get("is_sanitizing", False)]
+    )
+    statistics = {
+        "persons_with_hairnet": persons_with_hairnet,
+        "persons_handwashing": persons_handwashing,
+        "persons_sanitizing": persons_sanitizing,
+    }
+    detections = []
+    for tobj in tracked_objects:
+        detections.append(
+            {
+                "class": "person",
+                "confidence": tobj.get("confidence", 0.0),
+                "bbox": tobj.get("bbox", [0, 0, 0, 0]),
+                "track_id": tobj.get("track_id"),
+            }
+        )
+    end_time = time.time()
+    return {
+        "type": "comprehensive_detection_result",
+        "detection_count": total_persons,
+        "detections": detections,
+        "statistics": statistics,
+        "annotated_image": annotated_image_b64,
+        "timestamp": end_time,
+    }

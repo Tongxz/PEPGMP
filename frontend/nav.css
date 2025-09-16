@@ -1,0 +1,52 @@
+/* AI系统导航栏 - V2.0规范 渐变版本 */
+.topnav {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    background: #3A7AFE !important;
+    /* 降级支持 */
+    background: -webkit-linear-gradient(135deg, #3A7AFE, #2D62D8) !important;
+    /* Safari */
+    background: -moz-linear-gradient(135deg, #3A7AFE, #2D62D8) !important;
+    /* Firefox */
+    background: linear-gradient(135deg, #3A7AFE, #2D62D8) !important;
+    /* 标准 */
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 16px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.topnav .brand {
+    font-weight: 700;
+    color: #fff;
+    margin-right: 12px;
+}
+
+.topnav a {
+    color: #ffffff;
+    text-decoration: none;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.topnav a:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.topnav a.active {
+    background: rgba(255, 255, 255, 0.9) !important;
+    color: #3A7AFE !important;
+    font-weight: 600;
+}
+
+.topnav .spacer {
+    flex: 1;
+}
+
+.topnav .right a {
+    background: var(--text-secondary);
+}

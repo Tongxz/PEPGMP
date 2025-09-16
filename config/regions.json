@@ -1,43 +1,251 @@
 {
   "regions": [
     {
-      "id": "region_1754469805725",
-      "name": "测试",
-      "type": "entrance",
-      "description": "",
-      "points": [
+      "region_id": "region_1756783110752",
+      "region_type": "entrance",
+      "polygon": [
         {
-          "x": 339,
-          "y": 358.5
+          "x": 449,
+          "y": 14
         },
         {
-          "x": 345,
-          "y": 147.5
+          "x": 444,
+          "y": 108
         },
         {
-          "x": 549,
-          "y": 147.5
+          "x": 405,
+          "y": 106
         },
         {
-          "x": 549,
-          "y": 445.5
+          "x": 353,
+          "y": 202
         },
         {
-          "x": 337,
-          "y": 438.5
+          "x": 364,
+          "y": 160
+        },
+        {
+          "x": 552,
+          "y": 184
+        },
+        {
+          "x": 563,
+          "y": 20
         }
       ],
+      "name": "入口线",
+      "is_active": true,
       "rules": {
+        "required_behaviors": [],
+        "forbidden_behaviors": [],
+        "max_occupancy": -1,
+        "min_duration": 0,
+        "max_duration": -1,
+        "alert_on_violation": true
+      },
+      "stats": {
+        "total_entries": 0,
+        "current_occupancy": 0,
+        "violations": 0,
+        "last_entry_time": null,
+        "last_exit_time": null
+      }
+    },
+    {
+      "region_id": "region_1756783204958",
+      "region_type": "entrance",
+      "polygon": [
+        {
+          "x": 366,
+          "y": 163.5
+        },
+        {
+          "x": 196,
+          "y": 448.5
+        },
+        {
+          "x": 424,
+          "y": 446.5
+        },
+        {
+          "x": 490,
+          "y": 179.5
+        }
+      ],
+      "name": "洗手站立区域",
+      "is_active": true,
+      "rules": {
+        "required_behaviors": [],
+        "forbidden_behaviors": [],
+        "max_occupancy": -1,
+        "min_duration": 0,
+        "max_duration": -1,
+        "alert_on_violation": true,
         "require_hairnet": true
       },
-      "isActive": true,
-      "createdAt": "2025-08-06T08:43:25.725Z",
-      "color": "#28a745"
+      "stats": {
+        "total_entries": 0,
+        "current_occupancy": 0,
+        "violations": 0,
+        "last_entry_time": null,
+        "last_exit_time": null
+      }
+    },
+    {
+      "region_id": "region_1756783264453",
+      "region_type": "sanitize",
+      "polygon": [
+        [
+          108.0,
+          243.0
+        ],
+        [
+          101.0,
+          226.0
+        ],
+        [
+          1.0,
+          341.0
+        ],
+        [
+          3.0,
+          444.0
+        ],
+        [
+          77.0,
+          445.0
+        ],
+        [
+          115.0,
+          445.0
+        ],
+        [
+          183.0,
+          319.0
+        ],
+        [
+          158.0,
+          193.0
+        ],
+        [
+          99.0,
+          230.0
+        ]
+      ],
+      "name": "烘干区域",
+      "is_active": true,
+      "rules": {
+        "required_behaviors": [],
+        "forbidden_behaviors": [],
+        "max_occupancy": -1,
+        "min_duration": 0,
+        "max_duration": -1,
+        "alert_on_violation": true,
+        "require_hairnet": true
+      },
+      "stats": {
+        "total_entries": 0,
+        "current_occupancy": 0,
+        "violations": 0,
+        "last_entry_time": null,
+        "last_exit_time": null
+      }
+    },
+    {
+      "region_id": "region_1756783317894",
+      "region_type": "work_area",
+      "polygon": [
+        {
+          "x": 284,
+          "y": 6
+        },
+        {
+          "x": 289,
+          "y": 179
+        },
+        {
+          "x": 352,
+          "y": 183
+        },
+        {
+          "x": 419,
+          "y": 67
+        },
+        {
+          "x": 426,
+          "y": 3
+        }
+      ],
+      "name": "车间入口",
+      "is_active": true,
+      "rules": {
+        "required_behaviors": [],
+        "forbidden_behaviors": [],
+        "max_occupancy": -1,
+        "min_duration": 0,
+        "max_duration": -1,
+        "alert_on_violation": true,
+        "require_hairnet": true
+      },
+      "stats": {
+        "total_entries": 0,
+        "current_occupancy": 0,
+        "violations": 0,
+        "last_entry_time": null,
+        "last_exit_time": null
+      }
+    },
+    {
+      "region_id": "region_1756868068199",
+      "region_type": "entrance",
+      "polygon": [
+        {
+          "x": 491,
+          "y": 178.5
+        },
+        {
+          "x": 426,
+          "y": 447
+        },
+        {
+          "x": 598,
+          "y": 441.5
+        },
+        {
+          "x": 591,
+          "y": 186.5
+        }
+      ],
+      "name": "洗手水池",
+      "is_active": true,
+      "rules": {
+        "required_behaviors": [],
+        "forbidden_behaviors": [],
+        "max_occupancy": -1,
+        "min_duration": 0,
+        "max_duration": -1,
+        "alert_on_violation": true,
+        "require_hairnet": true
+      },
+      "stats": {
+        "total_entries": 0,
+        "current_occupancy": 0,
+        "violations": 0,
+        "last_entry_time": null,
+        "last_exit_time": null
+      }
     }
   ],
-  "canvas_size": {
-    "width": 800,
-    "height": 450
-  },
-  "saved_at": "2025-08-06T16:43:28.234126"
+  "meta": {
+    "canvas_size": {
+      "width": 800,
+      "height": 450
+    },
+    "background_size": {
+      "width": 1920,
+      "height": 1080
+    },
+    "fit_mode": "contain",
+    "ref_size": null
+  }
 }

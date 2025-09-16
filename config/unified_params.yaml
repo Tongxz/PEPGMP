@@ -1,0 +1,133 @@
+behavior_recognition:
+  confidence_threshold: 0.6
+  hairnet_min_duration: 1.0
+  hairnet_stability_frames: 5
+  handwashing_max_duration: 60.0
+  handwashing_min_duration: 0.0
+  handwashing_stability_frames: 1
+  history_maxlen: 30
+  max_num_hands: 2
+  min_detection_confidence: 0.5
+  min_tracking_confidence: 0.5
+  sanitizing_max_duration: 30.0
+  sanitizing_min_duration: 0.0
+  sanitizing_stability_frames: 1
+  use_advanced_detection: true
+  use_mediapipe: true
+  use_ml_classifier: true
+  ml_model_path: models/handwash_xgb.json
+  ml_window: 30
+  ml_fusion_alpha: 0.5
+hairnet_detection:
+  confidence_boost_factor: 1.2
+  confidence_threshold: 0.6
+  contour_area_threshold: 50
+  device: auto
+  edge_density_threshold: 0.006
+  input_size:
+    - 224
+    - 224
+  light_blue_ratio_threshold: 0.001
+  light_color_ratio_threshold: 0.003
+  min_contour_count: 2
+  model_path: null
+  sensitive_edge_threshold: 0.008
+  total_score_threshold: 0.8
+  upper_edge_density_threshold: 0.008
+  upper_region_ratio: 0.4
+  white_ratio_threshold: 0.002
+human_detection:
+  confidence_threshold: 0.4
+  device: auto
+  iou_threshold: 0.6
+  max_box_ratio: 6.0
+  max_detections: 15
+  min_box_area: 1000
+  min_height: 60
+  min_width: 40
+  model_path: models/yolo/yolov8s.pt
+  nms_threshold: 0.4
+  imgsz: 416 # 从512降到416提高吞吐量
+pose_detection:
+  backend: yolov8 # 'yolov8' or 'mediapipe' or 'auto'
+  device: auto
+  model_path: models/yolo/yolov8n-pose.pt
+  confidence_threshold: 0.5
+  iou_threshold: 0.7
+detection_rules:
+  consecutive_frames: 30 # 连续满足条件帧数阈值
+  horizontal_move_std: 8.0 # 手腕水平坐标标准差阈值 (像素)
+  min_move_frequency_hz: 2.0 # 水平移动最小频率 (Hz)
+  iou_threshold: 0.5 # ROI IoU 阈值
+  ioua_threshold: 0.5 # ROI IOUA 阈值
+system:
+  api_timeout: 30.0
+  batch_size: 8
+  cache_size: 200
+  cache_ttl: 300
+  debug_mode: false
+  enable_cache: true
+  log_level: INFO
+  max_request_size: 10485760
+  max_workers: 8
+  enable_amp: true # 启用自动混合精度
+  enable_batch_processing: true # 启用批处理优化
+
+# --- 新增：自适应档位与运行期配置（基础 + profiles 覆盖） ---
+inference:
+  profile: fast
+
+runtime:
+  frame_skip: 0
+  osd_minimal: false
+  log_interval: 60
+
+cascade:
+  enable: false
+  heavy_weights: null
+  trigger_confidence_range: null # 例如: [0.4, 0.6]
+  trigger_roi: null # 例如: [[x1,y1],[x2,y2],...]
+
+# 流程合规（默认关闭，仅占位；由代码读取后决定是否启用）
+process:
+  enable: true
+  min_dwell_seconds:
+    stand: 0.5
+    sink: 0.5
+    dryer: 0.5
+  cooldown_seconds: 10
+  # HANDWASHING_ACTIVE 连续帧阈值（达到后触发），建议 3~5
+  handwash_min_consecutive: 3
+  region_names:
+    entrance: "入口线"
+    stand: "洗手站立区域"
+    sink: "洗手水池" # 对齐现有 regions.json 中名称
+    dryer: "烘干区域"
+    work: "车间入口"
+
+# 抓拍配置（新增）
+capture:
+  anonymize_head: true
+  anonymize_ratio: 0.4
+  blur_kernel: 31
+  # 区域标注参考分辨率（用于还原映射，形如 "WxH"），例如 640x480
+  region_ref_size: "640x480"
+
+profiles:
+  fast: {}
+  balanced:
+    human_detection:
+      model_path: models/yolo/yolov8s.pt
+      confidence_threshold: 0.5
+    runtime:
+      frame_skip: 0
+  accurate:
+    human_detection:
+      model_path: models/yolo/yolov8m.pt
+      max_detections: 20
+    runtime:
+      osd_minimal: false
+    cascade:
+      enable: true
+      heavy_weights: models/yolo/yolov8l.pt
+      trigger_confidence_range: [0.4, 0.6]

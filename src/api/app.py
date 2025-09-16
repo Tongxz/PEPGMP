@@ -1,6 +1,11 @@
+"""FastAPI应用程序入口点.
+
+这个模块包含了FastAPI应用程序的主要配置和路由设置.
+"""
 import logging
 import os
 import sys
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,16 +17,83 @@ project_root = os.path.dirname(
 )
 sys.path.append(project_root)
 
-from src.api.routers import comprehensive, region_management, statistics, websocket
+from src.api.middleware.error_middleware import setup_error_middleware
+from src.api.middleware.security_middleware import setup_security_middleware
+from src.api.routers import (
+    cameras,
+    comprehensive,
+    download,
+    error_monitoring,
+    events,
+    metrics,
+    region_management,
+    security,
+    statistics,
+    system,
+    websocket,
+)
+from src.monitoring.advanced_monitoring import start_monitoring, stop_monitoring
 from src.services import detection_service, region_service, websocket_service
+from src.utils.error_monitor import start_error_monitoring, stop_error_monitoring
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用程序生命周期管理."""
+    # Startup
+    logger.info("Starting up the application...")
+    # Initialize services
+    detection_service.initialize_detection_services()
+    app.state.optimized_pipeline = detection_service.optimized_pipeline
+    app.state.hairnet_pipeline = detection_service.hairnet_pipeline
+    # 统一区域文件来源：优先环境变量 HBD_REGIONS_FILE，其次默认 config/regions.json
+    regions_file = os.environ.get(
+        "HBD_REGIONS_FILE", os.path.join(project_root, "config", "regions.json")
+    )
+    region_service.initialize_region_service(regions_file)
+
+    # 启动错误监控
+    try:
+        start_error_monitoring()
+        logger.info("错误监控已启动")
+    except Exception as e:
+        logger.warning(f"错误监控启动失败: {e}")
+
+    # 启动高级监控
+    try:
+        start_monitoring()
+        logger.info("高级监控系统已启动")
+    except Exception as e:
+        logger.warning(f"高级监控启动失败: {e}")
+
+    yield
+
+    # Shutdown
+    logger.info("Shutting down the application...")
+
+    # 停止错误监控
+    try:
+        stop_error_monitoring()
+        logger.info("错误监控已停止")
+    except Exception as e:
+        logger.warning(f"错误监控停止失败: {e}")
+
+    # 停止高级监控
+    try:
+        stop_monitoring()
+        logger.info("高级监控系统已停止")
+    except Exception as e:
+        logger.warning(f"高级监控停止失败: {e}")
+
 
 app = FastAPI(
     title="人体行为检测系统 API",
     description="基于深度学习的实时人体行为检测与分析系统",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Enable CORS
@@ -33,22 +105,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 设置错误处理中间件
+setup_error_middleware(app)
+
+# 设置安全中间件
+setup_security_middleware(app)
+
 
 @app.get("/health")
 async def health_check():
+    """健康检查端点."""
     return {"status": "healthy"}
-
-
-@app.on_event("startup")
-async def startup_event():
-    logger.info("Starting up the application...")
-    # Initialize services
-    detection_service.initialize_detection_services()
-    app.state.optimized_pipeline = detection_service.optimized_pipeline
-    app.state.hairnet_pipeline = detection_service.hairnet_pipeline
-    region_service.initialize_region_service(
-        os.path.join(project_root, "config", "regions.json")
-    )
 
 
 # Include routers
@@ -56,14 +123,24 @@ app.include_router(comprehensive.router, prefix="/api/v1/detect", tags=["Detecti
 app.include_router(
     region_management.router, prefix="/api/v1/management", tags=["Region Management"]
 )
-app.include_router(websocket.router, prefix="/ws", tags=["WebSocket"])
+# 兼容旧版前端的 /api/regions 路由
+app.include_router(region_management.compat_router, tags=["Compat"])
+app.include_router(websocket.router, prefix="", tags=["WebSocket"])
 app.include_router(statistics.router, prefix="/api/v1", tags=["Statistics"])
+app.include_router(download.router, prefix="/api/v1/download", tags=["Download"])
+app.include_router(events.router, tags=["Events"])
+app.include_router(metrics.router, tags=["Metrics"])
+app.include_router(cameras.router, tags=["Cameras"])
+app.include_router(system.router, prefix="/api/v1", tags=["System"])
+app.include_router(error_monitoring.router, prefix="/api/v1", tags=["Error Monitoring"])
+app.include_router(security.router, prefix="/api/v1", tags=["Security Management"])
 
 from fastapi.responses import RedirectResponse
 
 
 @app.get("/", include_in_schema=False)
 async def root():
+    """根路径端点."""
     return RedirectResponse(url="/frontend/index.html")
 
 
