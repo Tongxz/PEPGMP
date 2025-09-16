@@ -319,6 +319,33 @@ main() {
     check_requirements
     setup_venv
     install_dependencies
+    verify_dependencies
+    setup_git_hooks
+    create_directories
+    setup_config
+    download_models
+    run_tests
+    setup_docker
+    generate_docs
+    show_usage
+}
+
+# 错误处理
+trap 'log_error "设置过程中发生错误，请检查上面的错误信息"' ERR
+
+# 运行主函数
+main "$@"
+() {
+    echo "======================================"
+    echo "  人体行为检测系统开发环境设置"
+    echo "  Human Behavior Detection System"
+    echo "  Development Environment Setup"
+    echo "======================================"
+    echo
+
+    check_requirements
+    setup_venv
+    install_dependencies
     setup_git_hooks
     create_directories
     setup_config

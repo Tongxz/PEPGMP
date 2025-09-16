@@ -15,7 +15,7 @@ behavior_recognition:
   use_advanced_detection: true
   use_mediapipe: true
   use_ml_classifier: true
-  ml_model_path: models/handwash_xgb.joblib
+  ml_model_path: models/handwash_xgb.json
   ml_window: 30
   ml_fusion_alpha: 0.5
 hairnet_detection:

@@ -132,8 +132,14 @@ class BehaviorRecognizer:
         )
         if self.use_ml_classifier:
             try:
-                if joblib is not None and os.path.exists(self.ml_model_path):
-                    self.ml_model = joblib.load(self.ml_model_path)
+                if os.path.exists(self.ml_model_path):
+                    # 优先使用XGBoost native格式
+                    if self.ml_model_path.endswith('.json') or self.ml_model_path.endswith('.ubj'):
+                        self.ml_model = xgb.Booster()
+                        self.ml_model.load_model(self.ml_model_path)
+                    # 向后兼容joblib格式（但会有警告）
+                    elif joblib is not None and self.ml_model_path.endswith('.joblib'):
+                        self.ml_model = joblib.load(self.ml_model_path)
                     logger.info(f"Loaded ML handwash classifier: {self.ml_model_path}")
                 else:
                     logger.warning(
