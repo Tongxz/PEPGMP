@@ -277,6 +277,10 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         self.request_counts: Dict[str, int] = {}
         self.rate_limit_threshold = 100  # 每分钟100个请求
         self.rate_limit_window = 60  # 1分钟
+        
+        # 检查是否为开发环境
+        import os
+        self.is_development = os.getenv('ENVIRONMENT', 'development') == 'development'
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """处理请求"""
@@ -309,6 +313,10 @@ class SecurityMiddleware(BaseHTTPMiddleware):
 
     def _check_rate_limit(self, client_ip: str) -> bool:
         """检查速率限制"""
+        # 开发环境跳过速率限制
+        if self.is_development:
+            return True
+            
         current_time = time.time()
         window_start = current_time - self.rate_limit_window
 
