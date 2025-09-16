@@ -25,6 +25,14 @@ import cv2
 from config import Settings
 from utils.logger import setup_project_logger
 
+# GPU加速优化（在导入其他模块之前）
+try:
+    from utils.gpu_acceleration import initialize_gpu_acceleration
+
+    gpu_status = initialize_gpu_acceleration()
+except ImportError:
+    gpu_status = {"device": "cpu", "gpu_available": False}
+
 
 def main():
     """
@@ -47,6 +55,18 @@ def main():
         choices=["detection", "api", "training", "demo", "supervisor"],
         default="detection",
         help="运行模式 (默认: detection)",
+    )
+
+    parser.add_argument(
+        "--gpu-optimize",
+        action="store_true",
+        help="启用GPU加速优化",
+    )
+
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        help="批处理大小（自动检测最优值）",
     )
 
     parser.add_argument(
@@ -133,6 +153,17 @@ def main():
     logger.info("=" * 50)
     logger.info("人体行为检测系统启动")
     logger.info(f"运行模式: {args.mode}")
+
+    # 显示GPU状态
+    if gpu_status["gpu_available"]:
+        logger.info(f"🚀 GPU加速已启用: {gpu_status['device']}")
+        if args.gpu_optimize:
+            logger.info("⚙️  GPU优化模式已启用")
+    else:
+        logger.info("⚠️  GPU不可用，使用CPU模式")
+        if args.gpu_optimize:
+            logger.warning("⚠️  GPU优化参数已忽略（GPU不可用）")
+
     logger.info("=" * 50)
 
     try:
