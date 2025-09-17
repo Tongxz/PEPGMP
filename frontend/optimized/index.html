@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="智能行为检测系统 - 企业级前端界面">
+    <meta name="keywords" content="行为检测,AI,智能监控,企业级">
+    <meta name="author" content="HumanBehaviorDetection">
+
+    <!-- Preload critical resources -->
+    <link rel="preload" href="/common.css" as="style">
+    <link rel="preload" href="/theme.css" as="style">
+    <link rel="preload" href="/app.js" as="script">
+
+    <!-- Critical CSS inline -->
+    <style>
+        /* Critical above-the-fold CSS */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease-out;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .main-container {
+            opacity: 0;
+            transition: opacity 0.5s ease-in;
+        }
+
+        .main-container.loaded {
+            opacity: 1;
+        }
+    </style>
+
+    <!-- Non-critical CSS -->
+    <link rel="stylesheet" href="/common.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="/theme.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="/nav.css" media="print" onload="this.media='all'">
+
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('SW registered: ', registration);
+                    })
+                    .catch(registrationError => {
+                        console.log('SW registration failed: ', registrationError);
+                    });
+            });
+        }
+    </script>
+
+    <title>智能行为检测系统</title>
+</head>
+
+<body>
+    <!-- Loading Screen -->
+    <div class="loading-screen" id="loadingScreen">
+        <div class="loading-spinner"></div>
+    </div>
+
+    <!-- Main Application -->
+    <div class="main-container" id="mainContainer">
+        <!-- Navigation -->
+        <nav class="navbar">
+            <div class="nav-brand">
+                <h1>智能行为检测系统</h1>
+            </div>
+            <div class="nav-menu">
+                <a href="/" class="nav-link active">首页</a>
+                <a href="/camera_config.html" class="nav-link">相机配置</a>
+                <a href="/region_config.html" class="nav-link">区域配置</a>
+                <a href="/statistics.html" class="nav-link">统计信息</a>
+                <a href="/system_info.html" class="nav-link">系统信息</a>
+            </div>
+            <div class="nav-status">
+                <span class="status-indicator" id="connectionStatus">连接中...</span>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="dashboard">
+                <div class="dashboard-header">
+                    <h2>系统概览</h2>
+                    <div class="dashboard-controls">
+                        <button class="btn btn-primary" id="refreshBtn">刷新数据</button>
+                        <button class="btn btn-secondary" id="settingsBtn">设置</button>
+                    </div>
+                </div>
+
+                <div class="dashboard-grid">
+                    <!-- Camera Status Cards -->
+                    <div class="card" id="cameraStatusCard">
+                        <div class="card-header">
+                            <h3>相机状态</h3>
+                            <span class="card-badge" id="cameraStatusBadge">检查中</span>
+                        </div>
+                        <div class="card-content">
+                            <div class="status-list" id="cameraStatusList">
+                                <div class="status-item">
+                                    <span class="status-label">cam0:</span>
+                                    <span class="status-value" id="cam0Status">检查中...</span>
+                                </div>
+                                <div class="status-item">
+                                    <span class="status-label">vid1:</span>
+                                    <span class="status-value" id="vid1Status">检查中...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Detection Statistics -->
+                    <div class="card" id="detectionStatsCard">
+                        <div class="card-header">
+                            <h3>检测统计</h3>
+                            <span class="card-badge" id="detectionStatsBadge">实时</span>
+                        </div>
+                        <div class="card-content">
+                            <div class="stats-grid">
+                                <div class="stat-item">
+                                    <span class="stat-label">总检测次数</span>
+                                    <span class="stat-value" id="totalDetections">0</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">违规次数</span>
+                                    <span class="stat-value" id="violations">0</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">检测准确率</span>
+                                    <span class="stat-value" id="accuracy">0%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- System Performance -->
+                    <div class="card" id="systemPerformanceCard">
+                        <div class="card-header">
+                            <h3>系统性能</h3>
+                            <span class="card-badge" id="systemPerformanceBadge">正常</span>
+                        </div>
+                        <div class="card-content">
+                            <div class="performance-metrics">
+                                <div class="metric-item">
+                                    <span class="metric-label">CPU使用率</span>
+                                    <div class="metric-bar">
+                                        <div class="metric-fill" id="cpuUsage" style="width: 0%"></div>
+                                    </div>
+                                    <span class="metric-value" id="cpuValue">0%</span>
+                                </div>
+                                <div class="metric-item">
+                                    <span class="metric-label">内存使用率</span>
+                                    <div class="metric-bar">
+                                        <div class="metric-fill" id="memoryUsage" style="width: 0%"></div>
+                                    </div>
+                                    <span class="metric-value" id="memoryValue">0%</span>
+                                </div>
+                                <div class="metric-item">
+                                    <span class="metric-label">GPU使用率</span>
+                                    <div class="metric-bar">
+                                        <div class="metric-fill" id="gpuUsage" style="width: 0%"></div>
+                                    </div>
+                                    <span class="metric-value" id="gpuValue">0%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Events -->
+                    <div class="card" id="recentEventsCard">
+                        <div class="card-header">
+                            <h3>最近事件</h3>
+                            <span class="card-badge" id="recentEventsBadge">实时</span>
+                        </div>
+                        <div class="card-content">
+                            <div class="events-list" id="recentEventsList">
+                                <div class="event-item">
+                                    <span class="event-time">--:--:--</span>
+                                    <span class="event-message">系统启动中...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <p>&copy; 2024 智能行为检测系统. 企业级AI解决方案.</p>
+                <div class="footer-links">
+                    <a href="/api/v1/system/info">API文档</a>
+                    <a href="/health">健康检查</a>
+                    <a href="/metrics">性能指标</a>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Error Boundary -->
+    <div class="error-boundary" id="errorBoundary" style="display: none;">
+        <div class="error-content">
+            <h3>系统错误</h3>
+            <p id="errorMessage">发生未知错误，请刷新页面重试。</p>
+            <button class="btn btn-primary" onclick="location.reload()">刷新页面</button>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/nav.js" defer></script>
+    <script src="/app.js" defer></script>
+
+    <!-- Performance Monitoring -->
+    <script>
+        // Web Vitals monitoring
+        if ('PerformanceObserver' in window) {
+            // First Contentful Paint
+            new PerformanceObserver((list) => {
+                for (const entry of list.getEntries()) {
+                    console.log('FCP:', entry.startTime);
+                }
+            }).observe({ entryTypes: ['paint'] });
+
+            // Largest Contentful Paint
+            new PerformanceObserver((list) => {
+                for (const entry of list.getEntries()) {
+                    console.log('LCP:', entry.startTime);
+                }
+            }).observe({ entryTypes: ['largest-contentful-paint'] });
+
+            // First Input Delay
+            new PerformanceObserver((list) => {
+                for (const entry of list.getEntries()) {
+                    console.log('FID:', entry.processingStart - entry.startTime);
+                }
+            }).observe({ entryTypes: ['first-input'] });
+
+            // Cumulative Layout Shift
+            new PerformanceObserver((list) => {
+                for (const entry of list.getEntries()) {
+                    console.log('CLS:', entry.value);
+                }
+            }).observe({ entryTypes: ['layout-shift'] });
+        }
+
+        // Error handling
+        window.addEventListener('error', (event) => {
+            console.error('Global error:', event.error);
+            document.getElementById('errorBoundary').style.display = 'block';
+            document.getElementById('errorMessage').textContent = event.error.message || '未知错误';
+        });
+
+        // Unhandled promise rejection
+        window.addEventListener('unhandledrejection', (event) => {
+            console.error('Unhandled promise rejection:', event.reason);
+            document.getElementById('errorBoundary').style.display = 'block';
+            document.getElementById('errorMessage').textContent = '网络请求失败，请检查网络连接';
+        });
+    </script>
+</body>
+
+</html>

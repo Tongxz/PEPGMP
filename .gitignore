@@ -245,3 +245,7 @@ cache/
 *.tar.gz
 *.rar
 *.7z
+
+# Frontend artifacts
+frontend/node_modules/
+frontend/dist/

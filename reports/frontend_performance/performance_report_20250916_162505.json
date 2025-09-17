@@ -1,0 +1,452 @@
+{
+  "timestamp": "2025-09-16T16:25:05.078108",
+  "summary": {
+    "html_files": 5,
+    "css_files": 3,
+    "js_files": 3,
+    "total_suggestions": 11
+  },
+  "html_analysis": [
+    {
+      "file": "camera_config.html",
+      "size": 15450,
+      "external_resources": [
+        {
+          "type": "js",
+          "url": "/frontend/nav.js"
+        }
+      ],
+      "inline_resources": {
+        "css": [
+          {
+            "size": 1680,
+            "content": "/* 摄像头操作按钮样式 */\n        .camera-actions {\n            display: flex;\n            gap: 6px;\n         ..."
+          }
+        ],
+        "js": [
+          {
+            "size": 0,
+            "content": ""
+          },
+          {
+            "size": 7697,
+            "content": "// API 调用封装\n        async function api(path, options = {}) {\n            const res = await fetch(pat..."
+          }
+        ],
+        "images": []
+      },
+      "performance_issues": ["存在阻塞渲染的CSS资源"],
+      "suggestions": [
+        {
+          "category": "资源加载",
+          "priority": "高",
+          "description": "优化CSS加载策略",
+          "impact": "减少首屏渲染时间",
+          "effort": "低",
+          "implementation": "使用preload或异步加载非关键CSS"
+        }
+      ]
+    },
+    {
+      "file": "index.html",
+      "size": 8634,
+      "external_resources": [
+        {
+          "type": "js",
+          "url": "/frontend/nav.js"
+        },
+        {
+          "type": "js",
+          "url": "/frontend/app.js"
+        }
+      ],
+      "inline_resources": {
+        "css": [],
+        "js": [
+          {
+            "size": 0,
+            "content": ""
+          },
+          {
+            "size": 0,
+            "content": ""
+          }
+        ],
+        "images": []
+      },
+      "performance_issues": [
+        "存在阻塞渲染的CSS资源",
+        "存在内联样式，建议外部化"
+      ],
+      "suggestions": [
+        {
+          "category": "资源加载",
+          "priority": "高",
+          "description": "优化CSS加载策略",
+          "impact": "减少首屏渲染时间",
+          "effort": "低",
+          "implementation": "使用preload或异步加载非关键CSS"
+        }
+      ]
+    },
+    {
+      "file": "statistics.html",
+      "size": 16594,
+      "external_resources": [
+        {
+          "type": "js",
+          "url": "/frontend/nav.js"
+        },
+        {
+          "type": "js",
+          "url": "https://cdn.jsdelivr.net/npm/chart.js"
+        }
+      ],
+      "inline_resources": {
+        "css": [],
+        "js": [
+          {
+            "size": 0,
+            "content": ""
+          },
+          {
+            "size": 0,
+            "content": ""
+          },
+          {
+            "size": 10624,
+            "content": "// 全局变量\n        let charts = {};\n        let currentData = {};\n\n        // 标签页切换\n        function sh..."
+          }
+        ],
+        "images": []
+      },
+      "performance_issues": [
+        "存在阻塞渲染的CSS资源",
+        "存在内联样式，建议外部化"
+      ],
+      "suggestions": [
+        {
+          "category": "资源加载",
+          "priority": "高",
+          "description": "优化CSS加载策略",
+          "impact": "减少首屏渲染时间",
+          "effort": "低",
+          "implementation": "使用preload或异步加载非关键CSS"
+        }
+      ]
+    },
+    {
+      "file": "region_config.html",
+      "size": 25523,
+      "external_resources": [
+        {
+          "type": "js",
+          "url": "/frontend/nav.js"
+        },
+        {
+          "type": "js",
+          "url": "region_config.js"
+        }
+      ],
+      "inline_resources": {
+        "css": [
+          {
+            "size": 7868,
+            "content": "/* 修复：左右分栏改为顶部对齐，避免高度互相影响 */\n        .region-layout {\n            align-items: flex-start;\n        }..."
+          }
+        ],
+        "js": [
+          {
+            "size": 0,
+            "content": ""
+          },
+          {
+            "size": 0,
+            "content": ""
+          },
+          {
+            "size": 5088,
+            "content": "// 人数限制复选框事件\n        document.getElementById('limitOccupancy').addEventListener('change', function (..."
+          }
+        ],
+        "images": []
+      },
+      "performance_issues": [
+        "存在阻塞渲染的CSS资源",
+        "存在内联样式，建议外部化"
+      ],
+      "suggestions": [
+        {
+          "category": "资源加载",
+          "priority": "高",
+          "description": "优化CSS加载策略",
+          "impact": "减少首屏渲染时间",
+          "effort": "低",
+          "implementation": "使用preload或异步加载非关键CSS"
+        }
+      ]
+    },
+    {
+      "file": "system_info.html",
+      "size": 19498,
+      "external_resources": [
+        {
+          "type": "js",
+          "url": "/frontend/nav.js"
+        }
+      ],
+      "inline_resources": {
+        "css": [
+          {
+            "size": 3792,
+            "content": ".system-grid {\n            display: grid;\n            grid-template-columns: repeat(auto-fit, minmax..."
+          }
+        ],
+        "js": [
+          {
+            "size": 0,
+            "content": ""
+          },
+          {
+            "size": 12222,
+            "content": "let autoRefreshTimer = null;\n\n        // 页面加载时获取系统信息\n        document.addEventListener('DOMContentLo..."
+          }
+        ],
+        "images": []
+      },
+      "performance_issues": [
+        "存在阻塞渲染的CSS资源",
+        "存在内联样式，建议外部化"
+      ],
+      "suggestions": [
+        {
+          "category": "资源加载",
+          "priority": "高",
+          "description": "优化CSS加载策略",
+          "impact": "减少首屏渲染时间",
+          "effort": "低",
+          "implementation": "使用preload或异步加载非关键CSS"
+        }
+      ]
+    }
+  ],
+  "css_analysis": [
+    {
+      "file": "theme.css",
+      "size": 22193,
+      "unused_rules": ["发现226个CSS类，建议检查使用情况"],
+      "large_selectors": [],
+      "duplicate_rules": ["建议检查CSS规则重复"],
+      "suggestions": [
+        {
+          "category": "CSS优化",
+          "priority": "中",
+          "description": "移除未使用的CSS规则",
+          "impact": "减少文件大小",
+          "effort": "中",
+          "implementation": "使用工具检测并移除未使用的CSS"
+        }
+      ]
+    },
+    {
+      "file": "nav.css",
+      "size": 1097,
+      "unused_rules": ["发现15个CSS类，建议检查使用情况"],
+      "large_selectors": [],
+      "duplicate_rules": ["建议检查CSS规则重复"],
+      "suggestions": [
+        {
+          "category": "CSS优化",
+          "priority": "中",
+          "description": "移除未使用的CSS规则",
+          "impact": "减少文件大小",
+          "effort": "中",
+          "implementation": "使用工具检测并移除未使用的CSS"
+        }
+      ]
+    },
+    {
+      "file": "common.css",
+      "size": 1236,
+      "unused_rules": ["发现22个CSS类，建议检查使用情况"],
+      "large_selectors": [],
+      "duplicate_rules": ["建议检查CSS规则重复"],
+      "suggestions": [
+        {
+          "category": "CSS优化",
+          "priority": "中",
+          "description": "移除未使用的CSS规则",
+          "impact": "减少文件大小",
+          "effort": "中",
+          "implementation": "使用工具检测并移除未使用的CSS"
+        }
+      ]
+    }
+  ],
+  "js_analysis": [
+    {
+      "file": "region_config.js",
+      "size": 38422,
+      "large_functions": ["发现6个函数，建议检查函数大小"],
+      "duplicate_code": ["建议检查代码重复"],
+      "performance_issues": [
+        "频繁DOM查询，建议缓存元素引用",
+        "使用innerHTML，注意XSS风险"
+      ],
+      "suggestions": [
+        {
+          "category": "JavaScript优化",
+          "priority": "高",
+          "description": "优化JavaScript性能",
+          "impact": "提高执行效率",
+          "effort": "中",
+          "implementation": "缓存DOM查询，优化事件处理"
+        },
+        {
+          "category": "代码结构",
+          "priority": "中",
+          "description": "重构大型函数",
+          "impact": "提高可维护性",
+          "effort": "高",
+          "implementation": "将大函数拆分为小函数"
+        }
+      ]
+    },
+    {
+      "file": "nav.js",
+      "size": 2196,
+      "large_functions": [],
+      "duplicate_code": ["建议检查代码重复"],
+      "performance_issues": [],
+      "suggestions": []
+    },
+    {
+      "file": "app.js",
+      "size": 67919,
+      "large_functions": [],
+      "duplicate_code": ["建议检查代码重复"],
+      "performance_issues": [
+        "使用setInterval，建议检查频率",
+        "频繁DOM查询，建议缓存元素引用",
+        "使用innerHTML，注意XSS风险"
+      ],
+      "suggestions": [
+        {
+          "category": "JavaScript优化",
+          "priority": "高",
+          "description": "优化JavaScript性能",
+          "impact": "提高执行效率",
+          "effort": "中",
+          "implementation": "缓存DOM查询，优化事件处理"
+        }
+      ]
+    }
+  ],
+  "optimization_suggestions": [
+    {
+      "category": "资源加载",
+      "priority": "高",
+      "description": "优化CSS加载策略",
+      "impact": "减少首屏渲染时间",
+      "effort": "低",
+      "implementation": "使用preload或异步加载非关键CSS"
+    },
+    {
+      "category": "资源加载",
+      "priority": "高",
+      "description": "优化CSS加载策略",
+      "impact": "减少首屏渲染时间",
+      "effort": "低",
+      "implementation": "使用preload或异步加载非关键CSS"
+    },
+    {
+      "category": "资源加载",
+      "priority": "高",
+      "description": "优化CSS加载策略",
+      "impact": "减少首屏渲染时间",
+      "effort": "低",
+      "implementation": "使用preload或异步加载非关键CSS"
+    },
+    {
+      "category": "资源加载",
+      "priority": "高",
+      "description": "优化CSS加载策略",
+      "impact": "减少首屏渲染时间",
+      "effort": "低",
+      "implementation": "使用preload或异步加载非关键CSS"
+    },
+    {
+      "category": "资源加载",
+      "priority": "高",
+      "description": "优化CSS加载策略",
+      "impact": "减少首屏渲染时间",
+      "effort": "低",
+      "implementation": "使用preload或异步加载非关键CSS"
+    },
+    {
+      "category": "JavaScript优化",
+      "priority": "高",
+      "description": "优化JavaScript性能",
+      "impact": "提高执行效率",
+      "effort": "中",
+      "implementation": "缓存DOM查询，优化事件处理"
+    },
+    {
+      "category": "JavaScript优化",
+      "priority": "高",
+      "description": "优化JavaScript性能",
+      "impact": "提高执行效率",
+      "effort": "中",
+      "implementation": "缓存DOM查询，优化事件处理"
+    },
+    {
+      "category": "CSS优化",
+      "priority": "中",
+      "description": "移除未使用的CSS规则",
+      "impact": "减少文件大小",
+      "effort": "中",
+      "implementation": "使用工具检测并移除未使用的CSS"
+    },
+    {
+      "category": "CSS优化",
+      "priority": "中",
+      "description": "移除未使用的CSS规则",
+      "impact": "减少文件大小",
+      "effort": "中",
+      "implementation": "使用工具检测并移除未使用的CSS"
+    },
+    {
+      "category": "CSS优化",
+      "priority": "中",
+      "description": "移除未使用的CSS规则",
+      "impact": "减少文件大小",
+      "effort": "中",
+      "implementation": "使用工具检测并移除未使用的CSS"
+    },
+    {
+      "category": "代码结构",
+      "priority": "中",
+      "description": "重构大型函数",
+      "impact": "提高可维护性",
+      "effort": "高",
+      "implementation": "将大函数拆分为小函数"
+    }
+  ],
+  "recommendations": {
+    "immediate": [
+      "优化CSS加载策略",
+      "优化CSS加载策略",
+      "优化CSS加载策略",
+      "优化CSS加载策略",
+      "优化CSS加载策略"
+    ],
+    "short_term": [
+      "优化JavaScript性能",
+      "优化JavaScript性能",
+      "移除未使用的CSS规则",
+      "移除未使用的CSS规则",
+      "移除未使用的CSS规则"
+    ],
+    "long_term": ["重构大型函数"]
+  }
+}
