@@ -1,0 +1,53 @@
+// SCSS 变量定义文件
+// 用于全局样式变量，支持 Vite 构建时的样式预处理
+
+// 颜色变量
+$primary-color: #3A7AFE;
+$success-color: #52C41A;
+$warning-color: #FAAD14;
+$error-color: #FF4D4F;
+$info-color: #1890FF;
+
+// 文本颜色
+$text-color-1: #262626;
+$text-color-2: #595959;
+$text-color-3: #8C8C8C;
+
+// 背景颜色
+$bg-color: #FFFFFF;
+$bg-color-2: #FAFAFA;
+$bg-color-3: #F5F5F5;
+
+// 边框颜色
+$border-color: #D9D9D9;
+$border-color-2: #F0F0F0;
+
+// 间距变量
+$spacing-xs: 4px;
+$spacing-sm: 8px;
+$spacing-md: 16px;
+$spacing-lg: 24px;
+$spacing-xl: 32px;
+
+// 圆角变量
+$border-radius-sm: 4px;
+$border-radius-md: 6px;
+$border-radius-lg: 8px;
+
+// 阴影变量
+$box-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+$box-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+$box-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.15);
+
+// 字体变量
+$font-size-xs: 12px;
+$font-size-sm: 14px;
+$font-size-md: 16px;
+$font-size-lg: 18px;
+$font-size-xl: 20px;
+
+// 响应式断点
+$breakpoint-sm: 576px;
+$breakpoint-md: 768px;
+$breakpoint-lg: 992px;
+$breakpoint-xl: 1200px;
