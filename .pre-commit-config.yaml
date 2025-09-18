@@ -21,7 +21,7 @@ repos:
       - id: requirements-txt-fixer
       - id: fix-byte-order-marker
       - id: fix-encoding-pragma
-        args: ['--remove']
+        args: ["--remove"]
 
   # Python 代码格式化
   - repo: https://github.com/psf/black
@@ -29,21 +29,21 @@ repos:
     hooks:
       - id: black
         language_version: python3
-        args: ['--line-length=88']
+        args: ["--line-length=88"]
 
   # 导入排序
   - repo: https://github.com/pycqa/isort
     rev: 5.12.0
     hooks:
       - id: isort
-        args: ['--profile', 'black', '--line-length=88']
+        args: ["--profile", "black", "--line-length=88"]
 
   # 代码质量检查
   - repo: https://github.com/pycqa/flake8
     rev: 6.0.0
     hooks:
       - id: flake8
-        args: ['--max-line-length=88', '--extend-ignore=E203,W503']
+        args: ["--max-line-length=88", "--extend-ignore=E203,W503"]
         additional_dependencies:
           - flake8-docstrings
           - flake8-bugbear
@@ -55,7 +55,7 @@ repos:
     rev: v1.5.1
     hooks:
       - id: mypy
-        args: ['--ignore-missing-imports', '--strict-optional']
+        args: ["--ignore-missing-imports", "--strict-optional"]
         additional_dependencies:
           - types-requests
           - types-PyYAML
@@ -66,15 +66,16 @@ repos:
     rev: 1.7.5
     hooks:
       - id: bandit
-        args: ['-r', 'src/']
+        args: ["-r", "src/"]
         exclude: tests/
+        additional_dependencies: ["pbr"]
 
   # 文档字符串检查
   - repo: https://github.com/pycqa/pydocstyle
     rev: 6.3.0
     hooks:
       - id: pydocstyle
-        args: ['--convention=google']
+        args: ["--convention=google"]
         exclude: tests/
 
   # Jupyter Notebook 清理
@@ -101,14 +102,14 @@ repos:
     rev: v2.12.0
     hooks:
       - id: hadolint-docker
-        args: ['--ignore', 'DL3008', '--ignore', 'DL3009']
+        args: ["--ignore", "DL3008", "--ignore", "DL3009"]
 
   # 密钥检查
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.4.0
     hooks:
       - id: detect-secrets
-        args: ['--baseline', '.secrets.baseline']
+        args: ["--baseline", ".secrets.baseline"]
         exclude: package.lock.json
 
 # 全局配置
@@ -121,8 +122,8 @@ ci:
 
     for more information, see https://pre-commit.ci
   autofix_prs: true
-  autoupdate_branch: ''
-  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
+  autoupdate_branch: ""
+  autoupdate_commit_msg: "[pre-commit.ci] pre-commit autoupdate"
   autoupdate_schedule: weekly
   skip: []
   submodules: false

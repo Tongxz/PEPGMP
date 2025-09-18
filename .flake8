@@ -3,7 +3,7 @@
 max-line-length = 88
 max-complexity = 10
 select = E,W,F,C
-ignore = 
+ignore =
     # E203: whitespace before ':' (conflicts with black)
     E203,
     # E501: line too long (handled by black)
@@ -16,7 +16,7 @@ ignore =
     # E402,
 
 # File patterns to exclude
-exclude = 
+exclude =
     .git,
     __pycache__,
     .pytest_cache,
@@ -51,7 +51,7 @@ exclude =
     models/*.onnx
 
 # Per-file ignores
-per-file-ignores = 
+per-file-ignores =
     # __init__.py files can have unused imports
     __init__.py:F401,
     # Test files can have longer lines and unused imports
@@ -73,25 +73,24 @@ import-order-style = google
 application-import-names = src
 
 # Naming conventions
-classmethod-decorators = 
+classmethod-decorators =
     classmethod,
     pydantic.validator,
     pydantic.root_validator,
 
-staticmethod-decorators = 
+staticmethod-decorators =
     staticmethod,
 
 # Inline comments
 inline-quotes = double
 
 # McCabe complexity
-max-complexity = 10
 
 # Specific error codes to enable
-enable-extensions = 
+enable-extensions =
     # flake8-bugbear
     B,
-    # flake8-comprehensions  
+    # flake8-comprehensions
     C4,
     # flake8-docstrings
     D,
@@ -101,7 +100,7 @@ enable-extensions =
     Q,
 
 # Docstring error codes to ignore
-extend-ignore = 
+extend-ignore =
     # D100: Missing docstring in public module
     D100,
     # D101: Missing docstring in public class

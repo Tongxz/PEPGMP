@@ -1,0 +1,400 @@
+/* 响应式布局样式 */
+
+/* 基础网格系统 */
+.container {
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 var(--space-large);
+}
+
+.container-sm {
+  max-width: 640px;
+}
+
+.container-md {
+  max-width: 768px;
+}
+
+.container-lg {
+  max-width: 1024px;
+}
+
+.container-xl {
+  max-width: 1280px;
+}
+
+.container-2xl {
+  max-width: 1536px;
+}
+
+/* 网格布局 */
+.grid {
+  display: grid;
+  gap: var(--space-large);
+}
+
+.grid-cols-1 {
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+.grid-cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.grid-cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.grid-cols-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.grid-cols-6 {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.grid-cols-12 {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+/* 响应式工具类 */
+.hidden {
+  display: none;
+}
+
+.block {
+  display: block;
+}
+
+.inline-block {
+  display: inline-block;
+}
+
+.flex {
+  display: flex;
+}
+
+.inline-flex {
+  display: inline-flex;
+}
+
+/* 超小屏幕 (手机) */
+@media (max-width: 479px) {
+  .container {
+    padding: 0 var(--space-medium);
+  }
+
+  .xs\:hidden {
+    display: none;
+  }
+
+  .xs\:block {
+    display: block;
+  }
+
+  .xs\:flex {
+    display: flex;
+  }
+
+  .xs\:grid-cols-1 {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+
+  .xs\:text-sm {
+    font-size: var(--font-size-small);
+    line-height: var(--line-height-small);
+  }
+
+  .xs\:p-2 {
+    padding: var(--space-small);
+  }
+
+  .xs\:gap-2 {
+    gap: var(--space-small);
+  }
+}
+
+/* 小屏幕 (大手机) */
+@media (min-width: 480px) and (max-width: 575px) {
+  .sm\:hidden {
+    display: none;
+  }
+
+  .sm\:block {
+    display: block;
+  }
+
+  .sm\:flex {
+    display: flex;
+  }
+
+  .sm\:grid-cols-1 {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+
+  .sm\:grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* 中等屏幕 (平板) */
+@media (min-width: 576px) and (max-width: 767px) {
+  .md\:hidden {
+    display: none;
+  }
+
+  .md\:block {
+    display: block;
+  }
+
+  .md\:flex {
+    display: flex;
+  }
+
+  .md\:grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .md\:grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* 大屏幕 (桌面) */
+@media (min-width: 768px) and (max-width: 991px) {
+  .lg\:hidden {
+    display: none;
+  }
+
+  .lg\:block {
+    display: block;
+  }
+
+  .lg\:flex {
+    display: flex;
+  }
+
+  .lg\:grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .lg\:grid-cols-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* 超大屏幕 (大桌面) */
+@media (min-width: 992px) and (max-width: 1199px) {
+  .xl\:hidden {
+    display: none;
+  }
+
+  .xl\:block {
+    display: block;
+  }
+
+  .xl\:flex {
+    display: flex;
+  }
+
+  .xl\:grid-cols-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .xl\:grid-cols-6 {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+/* 超超大屏幕 */
+@media (min-width: 1200px) {
+  .xxl\:hidden {
+    display: none;
+  }
+
+  .xxl\:block {
+    display: block;
+  }
+
+  .xxl\:flex {
+    display: flex;
+  }
+
+  .xxl\:grid-cols-6 {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .xxl\:grid-cols-12 {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+}
+
+/* 移动端优化 */
+@media (max-width: 768px) {
+  /* 侧边栏在移动端自动折叠 */
+  .layout-sider {
+    position: fixed;
+    z-index: 1000;
+    height: 100vh;
+    transform: translateX(-100%);
+    transition: transform var(--duration-medium) var(--cubic-bezier-ease-in-out);
+  }
+
+  .layout-sider.mobile-open {
+    transform: translateX(0);
+  }
+
+  /* 移动端遮罩层 */
+  .mobile-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    opacity: 0;
+    visibility: hidden;
+    transition: all var(--duration-medium) var(--cubic-bezier-ease-in-out);
+  }
+
+  .mobile-overlay.active {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  /* 移动端头部调整 */
+  .layout-header {
+    padding: 0 var(--space-medium);
+  }
+
+  /* 移动端内容区域调整 */
+  .layout-content {
+    padding: var(--space-medium);
+  }
+
+  /* 移动端卡片间距调整 */
+  .data-card {
+    margin-bottom: var(--space-medium);
+  }
+
+  /* 移动端表格横向滚动 */
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 移动端按钮组调整 */
+  .button-group {
+    flex-direction: column;
+    gap: var(--space-small);
+  }
+
+  .button-group .n-button {
+    width: 100%;
+  }
+}
+
+/* 平板端优化 */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .container {
+    padding: 0 var(--space-xl);
+  }
+
+  /* 平板端侧边栏宽度调整 */
+  .layout-sider {
+    width: 200px;
+  }
+
+  /* 平板端网格调整 */
+  .tablet-grid-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tablet-grid-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* 桌面端优化 */
+@media (min-width: 1025px) {
+  /* 桌面端容器最大宽度 */
+  .container {
+    max-width: 1200px;
+  }
+
+  /* 桌面端网格系统 */
+  .desktop-grid-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .desktop-grid-6 {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  /* 桌面端悬停效果 */
+  .hover-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--box-shadow-2);
+  }
+}
+
+/* 高分辨率屏幕优化 */
+@media (min-width: 1440px) {
+  .container {
+    max-width: 1400px;
+  }
+
+  /* 大屏幕下的字体调整 */
+  .large-screen-text {
+    font-size: var(--font-size-large);
+    line-height: var(--line-height-large);
+  }
+}
+
+/* 打印样式 */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .layout-sider,
+  .layout-header,
+  .layout-footer {
+    display: none !important;
+  }
+
+  .layout-content {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .data-card {
+    break-inside: avoid;
+    margin-bottom: var(--space-medium);
+  }
+}
+
+/* 无障碍优化 */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* 高对比度模式 */
+@media (prefers-contrast: high) {
+  :root {
+    --border-color: #000000;
+    --text-color: #000000;
+    --text-color-disabled: #666666;
+  }
+
+  [data-theme='dark'] {
+    --border-color: #ffffff;
+    --text-color: #ffffff;
+    --text-color-disabled: #cccccc;
+  }
+}

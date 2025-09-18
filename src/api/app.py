@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """FastAPI应用程序入口点.
 
 这个模块包含了FastAPI应用程序的主要配置和路由设置.
@@ -6,6 +7,7 @@ import logging
 import os
 import sys
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -118,6 +120,12 @@ async def health_check():
     return {"status": "healthy"}
 
 
+@app.get("/api/ping")
+async def ping():
+    """API连通性测试端点."""
+    return {"message": "pong", "timestamp": datetime.now().isoformat()}
+
+
 # Include routers
 app.include_router(comprehensive.router, prefix="/api/v1/detect", tags=["Detection"])
 app.include_router(
@@ -130,7 +138,7 @@ app.include_router(statistics.router, prefix="/api/v1", tags=["Statistics"])
 app.include_router(download.router, prefix="/api/v1/download", tags=["Download"])
 app.include_router(events.router, tags=["Events"])
 app.include_router(metrics.router, tags=["Metrics"])
-app.include_router(cameras.router, tags=["Cameras"])
+app.include_router(cameras.router, prefix="/api/v1", tags=["Cameras"])
 app.include_router(system.router, prefix="/api/v1", tags=["System"])
 app.include_router(error_monitoring.router, prefix="/api/v1", tags=["Error Monitoring"])
 app.include_router(security.router, prefix="/api/v1", tags=["Security Management"])
@@ -146,6 +154,24 @@ async def root():
 
 # Mount frontend static files
 frontend_path = os.path.join(project_root, "frontend")
-if os.path.exists(frontend_path):
-    app.mount("/frontend", StaticFiles(directory=frontend_path), name="frontend")
-    logger.info(f"Static file directory mounted: {frontend_path} to /frontend")
+frontend_dist_path = os.path.join(project_root, "frontend", "dist")
+
+# 优先使用构建产物，如果不存在则使用源码目录
+if os.path.exists(frontend_dist_path):
+    app.mount(
+        "/frontend",
+        StaticFiles(directory=frontend_dist_path, html=True),
+        name="frontend",
+    )
+    logger.info(
+        f"Static file directory mounted: {frontend_dist_path} to /frontend (production build)"
+    )
+elif os.path.exists(frontend_path):
+    app.mount(
+        "/frontend", StaticFiles(directory=frontend_path, html=True), name="frontend"
+    )
+    logger.info(
+        f"Static file directory mounted: {frontend_path} to /frontend (development)"
+    )
+else:
+    logger.warning("Frontend directory not found")

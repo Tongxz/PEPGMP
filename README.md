@@ -267,9 +267,8 @@ ENVIRONMENT=production python main.py --mode api --port 8000
 
 #### 访问界面
 - **主界面**: http://localhost:8000/frontend/index.html
-- **摄像头配置**: http://localhost:8000/frontend/camera_config.html
 - **API文档**: http://localhost:8000/docs
-- **监控面板**: http://localhost:8000/frontend/statistics.html
+- **Vue开发服务器**: http://localhost:5173/ (开发模式)
 
 ### 🎛️ 多路监控
 
@@ -324,7 +323,7 @@ gpu:
 # 安全配置
 security:
   enable_csrf: false  # 开发环境
-  jwt_secret: "your-secret-key"
+  jwt_secret: "your-secret-key-here"  # pragma: allowlist secret
 
 # 监控配置
 monitoring:
