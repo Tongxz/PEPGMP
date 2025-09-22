@@ -25,11 +25,11 @@ def get_statistics_summary(
     """获取统计摘要信息.
 
     Args:
-        camera_id: 可选的摄像头ID筛选
-        region_service: 区域服务依赖项
+        camera_id: 可选的摄像头ID筛选.
+        region_service: 区域服务依赖项.
 
     Returns:
-        统计摘要数据
+        统计摘要数据.
     """
     # 模拟统计数据
     return {
@@ -54,12 +54,12 @@ def get_daily_statistics(
     """获取每日统计数据.
 
     Args:
-        days: 查询天数
-        camera_id: 可选的摄像头ID筛选
-        region_service: 区域服务依赖项
+        days: 查询天数.
+        camera_id: 可选的摄像头ID筛选.
+        region_service: 区域服务依赖项.
 
     Returns:
-        每日统计数据列表
+        每日统计数据列表.
     """
     # 模拟每日统计数据
     from datetime import datetime, timedelta
@@ -94,14 +94,14 @@ def get_statistics_events(
     """获取统计事件列表.
 
     Args:
-        start_date: 开始日期
-        end_date: 结束日期
-        event_type: 事件类型筛选
-        camera_id: 摄像头ID筛选
-        region_service: 区域服务依赖项
+        start_date: 开始日期.
+        end_date: 结束日期.
+        event_type: 事件类型筛选.
+        camera_id: 摄像头ID筛选.
+        region_service: 区域服务依赖项.
 
     Returns:
-        事件列表数据
+        事件列表数据.
     """
     # 模拟事件数据
     import random
@@ -144,10 +144,10 @@ def get_statistics(region_service: RegionService = Depends(get_region_service)):
     """获取统计信息.
 
     Args:
-        region_service: 区域服务依赖项
+        region_service: 区域服务依赖项.
 
     Returns:
-        统计信息数据
+        统计信息数据.
     """
     # This is a placeholder for statistics logic
     # In a real application, this would query a database or a metrics service
@@ -159,10 +159,10 @@ def get_violations(region_service: RegionService = Depends(get_region_service)):
     """获取违规记录.
 
     Args:
-        region_service: 区域服务依赖项
+        region_service: 区域服务依赖项.
 
     Returns:
-        违规记录数据
+        违规记录数据.
     """
     # This is a placeholder for violation retrieval logic
     return {"message": "Violations endpoint"}
@@ -175,10 +175,10 @@ def get_realtime_statistics(
     """获取实时统计信息.
 
     Args:
-        region_service: 区域服务依赖项
+        region_service: 区域服务依赖项.
 
     Returns:
-        实时统计数据，包括当前检测状态、违规统计等
+        实时统计数据，包括当前检测状态、违规统计等.
     """
     try:
         # 获取当前时间
@@ -274,9 +274,17 @@ def get_statistics_summary(
     limit: int = Query(1000, ge=1, le=10000),
     camera_id: Optional[str] = Query(None, description="按摄像头过滤（可选）"),
 ) -> Dict[str, Any]:
-    """返回最近 N 分钟内的事件统计与分布。
+    """返回最近 N 分钟内的事件统计与分布.
 
-    可选参数 camera_id 用于仅统计指定摄像头的事件。
+    可选参数 camera_id 用于仅统计指定摄像头的事件.
+
+    Args:
+        minutes: 要查询的最近分钟数.
+        limit: 返回样本的最大数量.
+        camera_id: (可选) 要筛选的摄像头ID.
+
+    Returns:
+        一个包含统计信息的字典.
     """
     rows = _read_recent_events(max_lines=max(limit * 2, 2000))
     since_ts = (datetime.utcnow() - timedelta(minutes=minutes)).timestamp()
@@ -313,9 +321,16 @@ def get_statistics_daily(
     days: int = Query(7, ge=1, le=90),
     camera_id: Optional[str] = Query(None, description="按摄像头过滤（可选）"),
 ) -> List[Dict[str, Any]]:
-    """返回最近 N 天内的每日事件统计。
+    """返回最近 N 天内的每日事件统计.
 
     输出：[{date: 'YYYY-MM-DD', total_events: int, counts_by_type: {etype: count}}]
+
+    Args:
+        days: 要查询的最近天数.
+        camera_id: (可选) 要筛选的摄像头ID.
+
+    Returns:
+        一个包含每日统计信息的列表.
     """
     rows = _read_recent_events(max_lines=200000)
     from datetime import timezone
@@ -362,7 +377,16 @@ def get_statistics_history(
     limit: int = Query(100, ge=1, le=1000),
     camera_id: Optional[str] = Query(None, description="按摄像头过滤（可选）"),
 ) -> List[Dict[str, Any]]:
-    """返回近期事件列表，按时间倒序。"""
+    """返回近期事件列表，按时间倒序.
+
+    Args:
+        minutes: 要查询的最近分钟数.
+        limit: 返回事件的最大数量.
+        camera_id: (可选) 要筛选的摄像头ID.
+
+    Returns:
+        一个包含事件详细信息的列表.
+    """
     rows = _read_recent_events(max_lines=max(limit * 5, 2000))
     since_ts = (datetime.utcnow() - timedelta(minutes=minutes)).timestamp()
     out: List[Dict[str, Any]] = []

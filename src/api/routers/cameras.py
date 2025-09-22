@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from __future__ import annotations
 
 import logging
@@ -50,12 +51,25 @@ def _write_yaml(path: str, data: Dict[str, Any]) -> None:
 
 @router.get("/cameras")
 def list_cameras() -> Dict[str, Any]:
+    """获取所有已配置的摄像头列表。
+
+    Returns:
+        一个包含所有摄像头配置列表的字典。
+    """
     data = _read_yaml(_cameras_path())
     return {"cameras": data.get("cameras", [])}
 
 
 @router.post("/cameras")
 def create_camera(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """创建一个新的摄像头配置。
+
+    Args:
+        payload: 包含新摄像头信息的字典。
+
+    Returns:
+        一个表示操作成功的字典，包含新创建的摄像头信息。
+    """
     required = ["id", "name", "source"]
     for k in required:
         if k not in payload:
@@ -74,6 +88,15 @@ def create_camera(payload: Dict[str, Any]) -> Dict[str, Any]:
 def update_camera(
     camera_id: str = Path(...), payload: Dict[str, Any] = {}
 ) -> Dict[str, Any]:
+    """更新指定摄像头的配置。
+
+    Args:
+        camera_id: 要更新的摄像头的ID。
+        payload: 包含要更新的字段的字典。
+
+    Returns:
+        一个表示操作成功的字典。
+    """
     data = _read_yaml(_cameras_path())
     cameras = data.get("cameras", [])
     for i, cam in enumerate(cameras):
@@ -86,6 +109,14 @@ def update_camera(
 
 @router.delete("/cameras/{camera_id}")
 def delete_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
+    """删除指定摄像头的配置。
+
+    Args:
+        camera_id: 要删除的摄像头的ID。
+
+    Returns:
+        一个表示操作成功的字典。
+    """
     data = _read_yaml(_cameras_path())
     cameras = data.get("cameras", [])
     for i, cam in enumerate(cameras):
@@ -98,7 +129,14 @@ def delete_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
 
 @router.get("/cameras/{camera_id}/preview")
 def preview_camera(camera_id: str = Path(...)) -> Response:
-    """返回指定摄像头的一帧 JPEG 预览。"""
+    """返回指定摄像头的一帧 JPEG 预览。
+
+    Args:
+        camera_id: 目标摄像头的ID。
+
+    Returns:
+        一个包含JPEG图像数据的 StreamingResponse。
+    """
     data = _read_yaml(_cameras_path())
     cams: List[Dict[str, Any]] = list(data.get("cameras", []))
     cam = next((c for c in cams if str(c.get("id")) == camera_id), None)
@@ -149,6 +187,14 @@ from src.services.process_manager import get_process_manager
 
 @router.post("/cameras/{camera_id}/start")
 def start_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
+    """启动指定摄像头的检测进程。
+
+    Args:
+        camera_id: 目标摄像头的ID。
+
+    Returns:
+        一个包含操作结果和进程信息的字典。
+    """
     pm = get_process_manager()
     res = pm.start(camera_id)
     if not res.get("ok"):
@@ -164,6 +210,14 @@ def start_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
 
 @router.post("/cameras/{camera_id}/stop")
 def stop_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
+    """停止指定摄像头的检测进程。
+
+    Args:
+        camera_id: 目标摄像头的ID。
+
+    Returns:
+        一个包含操作结果的字典。
+    """
     pm = get_process_manager()
     res = pm.stop(camera_id)
     if not res.get("ok"):
@@ -177,6 +231,14 @@ def stop_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
 
 @router.post("/cameras/{camera_id}/restart")
 def restart_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
+    """重启指定摄像头的检测进程。
+
+    Args:
+        camera_id: 目标摄像头的ID。
+
+    Returns:
+        一个包含操作结果和新进程信息的字典。
+    """
     pm = get_process_manager()
     res = pm.restart(camera_id)
     if not res.get("ok"):
@@ -192,6 +254,14 @@ def restart_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
 
 @router.get("/cameras/{camera_id}/status")
 def status_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
+    """获取指定摄像头检测进程的状态。
+
+    Args:
+        camera_id: 目标摄像头的ID。
+
+    Returns:
+        一个包含进程运行状态和PID的字典。
+    """
     pm = get_process_manager()
     res = pm.status(camera_id)
     logger.info(
@@ -204,8 +274,12 @@ def status_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
 def refresh_all_cameras() -> Dict[str, Any]:
     """
     刷新所有摄像头状态（占位实现）。
+
     前端仅用来触发状态刷新流程，随后会重新获取摄像头列表。
     这里返回简单的确认信息即可，未来可在此集成真实状态探测/进程同步。
+
+    Returns:
+        一个表示操作成功的确认信息字典。
     """
     return {
         "status": "success",

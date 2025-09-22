@@ -4,7 +4,7 @@ import { http } from '@/lib/http'
 export interface Region {
   id: string
   name: string
-  type: 'entrance' | 'work_area' | 'restricted' | 'monitoring' | 'custom'
+  type: 'entrance' | 'handwash' | 'sanitize' | 'work_area' | 'restricted' | 'monitoring'
   description?: string
   rules: {
     requireHairnet: boolean
@@ -67,6 +67,25 @@ function normalizeRegion(item: BackendRegionAny): Region {
   }
 }
 
+function toBackendRegionPayload(regionData: Partial<Region>): any {
+  const payload: { [key: string]: any } = {}
+
+  // 生成 region_id（如果没有提供 id）
+  if (regionData.id) {
+    payload.region_id = regionData.id
+  } else {
+    payload.region_id = `region_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+  }
+
+  if (regionData.name) payload.name = regionData.name
+  if (regionData.type) payload.region_type = regionData.type
+  if (regionData.points) payload.polygon = regionData.points.map(p => [p.x, p.y])
+  if (regionData.enabled !== undefined) payload.is_active = regionData.enabled
+  if (regionData.rules) payload.rules = regionData.rules
+  if (regionData.description) payload.description = regionData.description
+  return payload
+}
+
 // 区域API接口
 export const regionApi = {
   /**
@@ -95,8 +114,9 @@ export const regionApi = {
    * @param regionData 区域数据
    */
   async createRegion(regionData: Omit<Region, 'id'>): Promise<Region> {
-    const response = await http.post('management/regions', regionData)
-    return response.data
+    const payload = toBackendRegionPayload(regionData)
+    const response = await http.post('management/regions', payload)
+    return normalizeRegion(response.data)
   },
 
   /**
@@ -105,8 +125,9 @@ export const regionApi = {
    * @param regionData 更新的区域数据
    */
   async updateRegion(id: string, regionData: Partial<Region>): Promise<Region> {
-    const response = await http.put(`management/regions/${encodeURIComponent(id)}`, regionData)
-    return response.data
+    const payload = toBackendRegionPayload(regionData)
+    const response = await http.put(`management/regions/${encodeURIComponent(id)}`, payload)
+    return normalizeRegion(response.data)
   },
 
   /**

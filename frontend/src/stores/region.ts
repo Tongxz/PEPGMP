@@ -71,12 +71,10 @@ export const useRegionStore = defineStore('region', () => {
     loading.value = true
     error.value = ''
     try {
-      // await http.put(`/api/v1/management/regions/${id}`, regionData)
-
-      // 临时更新本地状态
+      const updatedRegion = await regionApi.updateRegion(id, regionData)
       const index = regions.value.findIndex(region => region.id === id)
       if (index !== -1) {
-        regions.value[index] = { ...regions.value[index], ...regionData }
+        regions.value[index] = updatedRegion
       }
     } catch (e: any) {
       error.value = e.message || '更新区域失败'
@@ -90,14 +88,9 @@ export const useRegionStore = defineStore('region', () => {
     loading.value = true
     error.value = ''
     try {
-      const newRegion: Region = {
-        ...regionData,
-        id: `region_${Date.now()}`
-      }
-      // Simulate API call
-      // const created = await regionApi.createRegion(newRegion)
-      regions.value.push(newRegion)
-      return newRegion
+      const created = await regionApi.createRegion(regionData)
+      regions.value.push(created)
+      return created
     } catch (e: any) {
       error.value = e.message || '创建区域失败'
       throw e
@@ -110,9 +103,7 @@ export const useRegionStore = defineStore('region', () => {
     loading.value = true
     error.value = ''
     try {
-      // await http.delete(`/api/v1/management/regions/${id}`)
-
-      // 临时从本地状态删除
+      await regionApi.deleteRegion(id)
       regions.value = regions.value.filter(region => region.id !== id)
       if (selectedRegion.value?.id === id) {
         selectedRegion.value = null
@@ -129,9 +120,7 @@ export const useRegionStore = defineStore('region', () => {
     loading.value = true
     error.value = ''
     try {
-      // await http.delete('/api/v1/management/regions')
-
-      // 临时清空本地状态
+      await regionApi.clearRegions()
       regions.value = []
       selectedRegion.value = null
     } catch (e: any) {
@@ -146,10 +135,8 @@ export const useRegionStore = defineStore('region', () => {
     loading.value = true
     error.value = ''
     try {
-      // await http.post('/api/regions', { regions: regions.value })
-
-      // 临时模拟保存成功
-      console.log('保存区域配置:', regions.value)
+      await regionApi.saveRegions(regions.value)
+      console.log('保存区域配置成功:', regions.value)
     } catch (e: any) {
       error.value = e.message || '保存区域配置失败'
       throw e
@@ -185,7 +172,7 @@ export const useRegionStore = defineStore('region', () => {
     // Create a new region object
     const newRegionData: Omit<Region, 'id'> = {
       name: `新区域 ${regions.value.length + 1}`,
-      type: 'custom', // Default type
+      type: 'work_area', // 使用有效的区域类型
       description: '新创建的多边形区域',
       rules: {
         requireHairnet: false,
