@@ -4,7 +4,7 @@ import { http } from '@/lib/http'
 export interface Region {
   id: string
   name: string
-  type: 'entrance' | 'handwash' | 'sanitize' | 'work_area' | 'restricted' | 'monitoring'
+  type: 'entrance' | 'handwash' | 'sanitize' | 'work_area' | 'restricted' | 'monitoring' | 'custom'
   description?: string
   rules: {
     requireHairnet: boolean

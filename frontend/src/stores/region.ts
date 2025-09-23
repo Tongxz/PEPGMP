@@ -49,14 +49,9 @@ export const useRegionStore = defineStore('region', () => {
     try {
       const newRegion: Region = {
         ...regionData,
-        id: `region_${Date.now()}`,
+        id: `region_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         enabled: true
       }
-
-      // 这里应该调用后端API保存区域
-      // await http.post('/api/v1/management/regions', newRegion)
-
-      // 临时添加到本地状态
       regions.value.push(newRegion)
       return newRegion
     } catch (e: any) {
@@ -131,14 +126,14 @@ export const useRegionStore = defineStore('region', () => {
     }
   }
 
-  async function saveRegions() {
+  async function saveRegions(regionsToSave: Region[]) {
     loading.value = true
     error.value = ''
     try {
-      await regionApi.saveRegions(regions.value)
-      console.log('保存区域配置成功:', regions.value)
+      await regionApi.saveRegions(regionsToSave)
+      regions.value = [...regionsToSave]
     } catch (e: any) {
-      error.value = e.message || '保存区域配置失败'
+      error.value = e.message || '保存区域失败'
       throw e
     } finally {
       loading.value = false
@@ -169,27 +164,26 @@ export const useRegionStore = defineStore('region', () => {
     const points = [...currentDrawingPoints.value]
     currentDrawingPoints.value = []
 
-    // Create a new region object
-    const newRegionData: Omit<Region, 'id'> = {
-      name: `新区域 ${regions.value.length + 1}`,
-      type: 'work_area', // 使用有效的区域类型
-      description: '新创建的多边形区域',
-      rules: {
-        requireHairnet: false,
-        limitOccupancy: false,
-        timeRestriction: false
-      },
-      points: points,
-      enabled: true
-    }
-
     try {
+      const newRegionData: Omit<Region, 'id'> = {
+        name: `新区域 ${regions.value.length + 1}`,
+        type: 'work_area',
+        description: '新创建的多边形区域',
+        rules: {
+          requireHairnet: false,
+          limitOccupancy: false,
+          timeRestriction: false
+        },
+        points: points,
+        enabled: true
+      }
+
       const newRegion = await createRegion(newRegionData)
       selectRegion(newRegion)
       return newRegion
     } catch (e) {
       console.error('创建区域失败:', e)
-      throw e // Re-throw to be handled by UI
+      throw e
     }
   }
 
@@ -216,11 +210,11 @@ export const useRegionStore = defineStore('region', () => {
 
   function reset() {
     regions.value = []
+    loading.value = false
+    error.value = ''
     selectedRegion.value = null
     isDrawing.value = false
     currentDrawingPoints.value = []
-    error.value = ''
-    loading.value = false
   }
 
   return {
@@ -237,7 +231,7 @@ export const useRegionStore = defineStore('region', () => {
     enabledRegions,
     regionsByType,
     regionCount,
-    // 操作
+    // 方法
     fetchRegions,
     createRegion,
     saveRegion,

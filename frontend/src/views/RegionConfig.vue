@@ -194,318 +194,266 @@
                     {{ currentRegion.id ? '编辑区域' : '新区域配置' }}
                   </n-divider>
 
-                  <n-form :model="currentRegion" label-placement="top" size="medium">
-                    <n-form-item label="区域名称" :feedback="getNameFeedback(currentRegion.name)">
+                  <n-form
+                    ref="formRef"
+                    :model="currentRegion"
+                    :rules="formRules"
+                    label-placement="top"
+                    require-mark-placement="right-hanging"
+                    size="medium"
+                    class="region-form"
+                  >
+                    <!-- 基本信息 -->
+                    <n-form-item label="区域名称" path="name">
                       <n-input
                         v-model:value="currentRegion.name"
-                        placeholder="输入区域名称"
-                        @blur="validateRegionName"
+                        placeholder="请输入区域名称"
+                        clearable
                       />
                     </n-form-item>
 
-                    <n-form-item label="检测类型">
+                    <n-form-item label="区域类型" path="type">
                       <n-select
                         v-model:value="currentRegion.type"
                         :options="regionTypeOptions"
-                        placeholder="选择检测类型"
-                        @update:value="onTypeChange"
-                      />
-                      <!-- 类型说明 -->
-                      <n-text depth="3" style="font-size: 12px; margin-top: 4px; display: block;">
-                        {{ getTypeDescription(currentRegion.type) }}
-                      </n-text>
-                    </n-form-item>
-
-                    <n-form-item label="区域颜色">
-                      <n-color-picker
-                        v-model:value="currentRegion.color"
-                        :modes="['hex']"
-                        :show-alpha="false"
-                        size="medium"
+                        placeholder="选择区域类型"
                       />
                     </n-form-item>
 
-                    <n-form-item label="区域描述">
+                    <n-form-item label="区域描述" path="description">
                       <n-input
                         v-model:value="currentRegion.description"
                         type="textarea"
-                        placeholder="输入区域描述（可选）"
-                        :rows="2"
+                        placeholder="请输入区域描述（可选）"
+                        :autosize="{ minRows: 2, maxRows: 4 }"
                       />
                     </n-form-item>
 
-                    <n-form-item label="敏感度" :feedback="getSensitivityFeedback(currentRegion.sensitivity)">
-                      <n-slider
-                        v-model:value="currentRegion.sensitivity"
-                        :min="0"
-                        :max="100"
-                        :step="1"
-                        :marks="{ 0: '低', 50: '中', 100: '高' }"
-                        @update:value="onSensitivityChange"
-                      />
-                    </n-form-item>
+                    <!-- 检测参数 -->
+                    <n-divider title-placement="left">
+                      <n-text depth="2">检测参数</n-text>
+                    </n-divider>
 
-                    <n-form-item label="置信度阈值" :feedback="getThresholdFeedback(currentRegion.threshold)">
-                      <n-input-number
-                        v-model:value="currentRegion.threshold"
-                        :min="0"
-                        :max="1"
-                        :step="0.1"
-                        placeholder="0.0 - 1.0"
-                        style="width: 100%"
-                        @update:value="onThresholdChange"
-                      />
-                    </n-form-item>
-
-                    <!-- 高级选项 -->
-                    <n-collapse>
-                      <n-collapse-item title="高级选项" name="advanced">
-                        <n-form-item label="检测间隔 (秒)">
-                          <n-input-number
-                            v-model:value="currentRegion.interval"
-                            :min="1"
-                            :max="60"
-                            placeholder="检测间隔"
-                            style="width: 100%"
-                          />
-                        </n-form-item>
-
-                        <n-form-item label="最小目标尺寸">
-                          <n-input-number
-                            v-model:value="currentRegion.minSize"
-                            :min="10"
-                            :max="1000"
-                            placeholder="像素"
-                            style="width: 100%"
-                          />
-                        </n-form-item>
-
-                        <n-form-item label="报警延迟 (秒)">
-                          <n-input-number
-                            v-model:value="currentRegion.alertDelay"
-                            :min="0"
-                            :max="300"
-                            placeholder="延迟时间"
-                            style="width: 100%"
-                          />
-                        </n-form-item>
-                      </n-collapse-item>
-                    </n-collapse>
-
-                    <n-form-item label="启用状态">
-                      <n-switch v-model:value="currentRegion.enabled">
+                    <n-form-item label="启用检测" path="enabled">
+                      <n-switch
+                        v-model:value="currentRegion.enabled"
+                        size="medium"
+                      >
                         <template #checked>启用</template>
                         <template #unchecked>禁用</template>
                       </n-switch>
                     </n-form-item>
 
-                    <!-- 预设配置 -->
-                    <n-form-item label="预设配置">
-                      <n-space>
-                        <n-button size="small" @click="applyPreset('high-precision')">
-                          高精度
-                        </n-button>
-                        <n-button size="small" @click="applyPreset('balanced')">
-                          平衡
-                        </n-button>
-                        <n-button size="small" @click="applyPreset('high-efficiency')">
-                          高效率
-                        </n-button>
-                      </n-space>
+                    <n-form-item
+                      v-if="currentRegion.enabled"
+                      label="检测敏感度"
+                      path="sensitivity"
+                    >
+                      <n-slider
+                        v-model:value="currentRegion.sensitivity"
+                        :min="0.1"
+                        :max="1.0"
+                        :step="0.1"
+                        :format-tooltip="(value) => `${(value * 100).toFixed(0)}%`"
+                      />
+                      <n-text depth="3" style="font-size: 12px; margin-top: 4px;">
+                        敏感度越高，检测越严格
+                      </n-text>
+                    </n-form-item>
+
+                    <n-form-item
+                      v-if="currentRegion.enabled"
+                      label="最小停留时间（秒）"
+                      path="minDuration"
+                    >
+                      <n-input-number
+                        v-model:value="currentRegion.minDuration"
+                        :min="1"
+                        :max="300"
+                        placeholder="最小停留时间"
+                        style="width: 100%"
+                      />
+                    </n-form-item>
+
+                    <!-- 告警设置 -->
+                    <n-divider title-placement="left">
+                      <n-text depth="2">告警设置</n-text>
+                    </n-divider>
+
+                    <n-form-item label="启用告警" path="alertEnabled">
+                      <n-switch
+                        v-model:value="currentRegion.alertEnabled"
+                        size="medium"
+                      >
+                        <template #checked>启用</template>
+                        <template #unchecked>禁用</template>
+                      </n-switch>
+                    </n-form-item>
+
+                    <n-form-item
+                      v-if="currentRegion.alertEnabled"
+                      label="告警级别"
+                      path="alertLevel"
+                    >
+                      <n-select
+                        v-model:value="currentRegion.alertLevel"
+                        :options="alertLevelOptions"
+                        placeholder="选择告警级别"
+                      />
                     </n-form-item>
 
                     <!-- 操作按钮 -->
                     <n-form-item>
                       <n-space>
                         <n-button
-                          v-if="currentRegion.id"
                           type="primary"
-                          @click="saveRegionEdit"
+                          @click="saveCurrentRegion"
+                          :loading="saving"
                         >
                           <template #icon>
                             <n-icon><SaveOutline /></n-icon>
                           </template>
-                          保存
+                          {{ currentRegion.id ? '更新区域' : '保存区域' }}
                         </n-button>
-                        <n-button
-                          v-if="currentRegion.id"
-                          @click="cancelEdit"
-                        >
+
+                        <n-button @click="cancelEdit">
                           <template #icon>
                             <n-icon><CloseOutline /></n-icon>
                           </template>
                           取消
                         </n-button>
+
                         <n-button
-                          v-if="isDrawing"
-                          type="primary"
-                          @click="finishDrawing"
+                          v-if="currentRegion.id"
+                          type="error"
+                          @click="deleteCurrentRegion"
+                          :loading="deleting"
                         >
                           <template #icon>
-                            <n-icon><CheckmarkDoneOutline /></n-icon>
+                            <n-icon><TrashOutline /></n-icon>
                           </template>
-                          完成绘制
+                          删除
                         </n-button>
                       </n-space>
                     </n-form-item>
                   </n-form>
                 </div>
 
-                <!-- 无选择状态提示 -->
-                <div v-if="!currentRegion.id && !isDrawing" class="no-selection-hint">
-                  <n-empty description="请选择一个区域进行编辑，或绘制新区域">
-                    <template #icon>
-                      <n-icon size="48" color="var(--text-color-3)">
-                        <CreateOutline />
-                      </n-icon>
-                    </template>
-                    <template #extra>
-                      <n-button
-                        type="primary"
-                        @click="startDrawingMode"
-                        :disabled="!selectedCamera && !regionStore.backgroundImage"
-                      >
-                        绘制新区域
-                      </n-button>
-                    </template>
-                  </n-empty>
-                </div>
+                <!-- 空状态提示 -->
+                <n-empty
+                  v-else
+                  description="请绘制或选择一个区域进行配置"
+                  size="medium"
+                  style="margin-top: 40px;"
+                >
+                  <template #icon>
+                    <n-icon size="48" color="#d0d0d0">
+                      <CreateOutline />
+                    </n-icon>
+                  </template>
+                </n-empty>
               </n-tab-pane>
 
               <!-- Tab 2: 区域列表 -->
               <n-tab-pane name="list" tab="区域列表">
                 <template #tab>
                   <n-space align="center" size="small">
-                    <n-icon><LayersOutline /></n-icon>
+                    <n-icon><ListOutline /></n-icon>
                     <span>区域列表</span>
                     <n-badge
                       v-if="regions.length > 0"
                       :value="regions.length"
-                      :max="99"
                       type="info"
                     />
                   </n-space>
                 </template>
 
-                <!-- 区域统计 -->
-                <div class="region-stats" style="margin-bottom: 16px;">
-                  <n-space justify="space-between" align="center">
-                    <n-statistic label="总区域数" :value="regions.length" />
-                    <n-statistic
-                      label="启用区域"
-                      :value="regions.filter(r => r.enabled).length"
-                    />
-                    <n-dropdown
-                      v-if="regions.length > 0"
-                      :options="batchOptions"
-                      @select="handleBatchAction"
-                      trigger="click"
-                    >
-                      <n-button size="small">
-                        <template #icon>
-                          <n-icon><LayersOutline /></n-icon>
-                        </template>
-                        批量操作
-                      </n-button>
-                    </n-dropdown>
-                  </n-space>
-                </div>
-
-                <n-divider />
-
                 <!-- 区域列表 -->
-                <div class="regions-list">
-                  <div
-                    v-for="region in regions"
-                    :key="region.id"
-                    class="region-item"
-                    :class="{
-                      active: selectedRegion?.id === region.id,
-                      disabled: !region.enabled,
-                      editing: currentRegion.id === region.id
-                    }"
-                    @click="regionStore.selectRegion(region)"
-                    @mouseenter="hoveredRegion = region"
-                    @mouseleave="hoveredRegion = null"
-                  >
-                    <div class="region-header">
-                      <n-space align="center" justify="space-between">
-                        <div class="region-info">
-                          <n-text strong>{{ region.name || `区域 ${region.id}` }}</n-text>
-                          <n-tag
-                            :type="getRegionTypeColor(region.type)"
-                            size="small"
-                            style="margin-left: 8px;"
-                          >
-                            {{ getRegionTypeText(region.type) }}
-                          </n-tag>
-                          <n-tag
-                            v-if="!region.enabled"
-                            type="default"
-                            size="small"
-                            style="margin-left: 4px;"
-                          >
-                            已禁用
-                          </n-tag>
-                        </div>
+                <div class="region-list-section">
+                  <n-space vertical size="medium">
+                    <n-card
+                      v-for="region in regions"
+                      :key="region.id"
+                      size="small"
+                      hoverable
+                      :class="{
+                        'region-card': true,
+                        'region-card-selected': selectedRegionId === region.id,
+                        'region-card-disabled': !region.enabled
+                      }"
+                      @click="selectRegion(region)"
+                    >
+                      <template #header>
+                        <n-space align="center" justify="space-between">
+                          <n-space align="center" size="small">
+                            <n-icon
+                              :color="getRegionTypeColor(region.type)"
+                              size="16"
+                            >
+                              <component :is="getRegionTypeIcon(region.type)" />
+                            </n-icon>
+                            <n-text strong>{{ region.name }}</n-text>
+                            <n-tag
+                              :type="region.enabled ? 'success' : 'default'"
+                              size="small"
+                            >
+                              {{ region.enabled ? '启用' : '禁用' }}
+                            </n-tag>
+                          </n-space>
 
-                        <n-space size="small">
-                          <n-button
-                            size="tiny"
-                            quaternary
-                            :type="currentRegion.id === region.id ? 'warning' : 'default'"
-                            @click.stop="editRegion(region)"
+                          <n-dropdown
+                            :options="getRegionActions(region)"
+                            @select="(key) => handleRegionAction(key, region)"
+                            trigger="click"
+                            @click.stop
                           >
-                            <template #icon>
-                              <n-icon><CreateOutline /></n-icon>
-                            </template>
-                            {{ currentRegion.id === region.id ? '编辑中' : '' }}
-                          </n-button>
-                          <n-button size="tiny" quaternary type="error" @click.stop="deleteRegion(region.id)">
-                            <template #icon>
-                              <n-icon><TrashOutline /></n-icon>
-                            </template>
-                          </n-button>
+                            <n-button
+                              size="small"
+                              quaternary
+                              circle
+                              @click.stop
+                            >
+                              <template #icon>
+                                <n-icon><EllipsisVerticalOutline /></n-icon>
+                              </template>
+                            </n-button>
+                          </n-dropdown>
                         </n-space>
-                      </n-space>
-                    </div>
+                      </template>
 
-                    <div class="region-details">
-                      <n-space size="small" vertical>
-                        <n-text depth="3" style="font-size: 12px;">
-                          <template v-if="region.points && region.points.length > 0">
-                            多边形区域 ({{ region.points.length }} 个点)
-                          </template>
-                          <template v-else-if="region.x !== undefined && region.y !== undefined">
-                            坐标: ({{ region.x }}, {{ region.y }}) - {{ region.width }}×{{ region.height }}
-                          </template>
-                          <template v-else>
-                            区域信息不完整
-                          </template>
+                      <n-space vertical size="small">
+                        <n-text depth="3">
+                          类型：{{ getRegionTypeLabel(region.type) }}
                         </n-text>
-                        <n-text depth="3" style="font-size: 12px;">
-                          置信度: {{ region.threshold || '未设置' }} | 敏感度: {{ region.sensitivity || '未设置' }}
-                        </n-text>
-                        <n-text v-if="region.description" depth="3" style="font-size: 12px;">
+                        <n-text v-if="region.description" depth="3">
                           {{ region.description }}
                         </n-text>
+                        <n-space size="small">
+                          <n-tag size="small" type="info">
+                            敏感度：{{ (region.sensitivity * 100).toFixed(0) }}%
+                          </n-tag>
+                          <n-tag size="small" type="warning">
+                            停留：{{ region.minDuration }}s
+                          </n-tag>
+                          <n-tag
+                            v-if="region.alertEnabled"
+                            size="small"
+                            :type="getAlertLevelType(region.alertLevel)"
+                          >
+                            {{ getAlertLevelLabel(region.alertLevel) }}
+                          </n-tag>
+                        </n-space>
                       </n-space>
+                    </n-card>
 
-                      <!-- 区域问题提示 -->
-                      <div v-if="hasRegionIssues(region)" class="region-issues" style="margin-top: 8px;">
-                        <n-text type="warning" style="font-size: 12px;">
-                          <n-icon><WarningOutline /></n-icon>
-                          {{ getRegionIssues(region) }}
-                        </n-text>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- 空状态 -->
-                  <div v-if="regions.length === 0" class="empty-regions">
-                    <n-empty description="暂无区域，请先绘制区域">
+                    <!-- 空状态 -->
+                    <n-empty
+                      v-if="regions.length === 0"
+                      description="暂无配置的区域"
+                      size="medium"
+                    >
                       <template #icon>
-                        <n-icon size="48" color="var(--text-color-3)">
+                        <n-icon size="48" color="#d0d0d0">
                           <LayersOutline />
                         </n-icon>
                       </template>
@@ -519,1296 +467,756 @@
                         </n-button>
                       </template>
                     </n-empty>
-                  </div>
+                  </n-space>
+                </div>
+              </n-tab-pane>
+
+              <!-- Tab 3: 预设模板 -->
+              <n-tab-pane name="templates" tab="预设模板">
+                <template #tab>
+                  <n-space align="center" size="small">
+                    <n-icon><TemplateOutline /></n-icon>
+                    <span>预设模板</span>
+                  </n-space>
+                </template>
+
+                <!-- 模板列表 -->
+                <div class="template-section">
+                  <n-space vertical size="medium">
+                    <n-card
+                      v-for="template in regionTemplates"
+                      :key="template.id"
+                      size="small"
+                      hoverable
+                      class="template-card"
+                    >
+                      <template #header>
+                        <n-space align="center" justify="space-between">
+                          <n-space align="center" size="small">
+                            <n-icon :color="template.color" size="16">
+                              <component :is="template.icon" />
+                            </n-icon>
+                            <n-text strong>{{ template.name }}</n-text>
+                          </n-space>
+
+                          <n-button
+                            type="primary"
+                            size="small"
+                            @click="applyTemplate(template)"
+                            :disabled="!selectedCamera && !regionStore.backgroundImage"
+                          >
+                            应用模板
+                          </n-button>
+                        </n-space>
+                      </template>
+
+                      <n-space vertical size="small">
+                        <n-text depth="3">{{ template.description }}</n-text>
+                        <n-space size="small">
+                          <n-tag
+                            v-for="regionType in template.regions"
+                            :key="regionType.type"
+                            size="small"
+                            :type="getRegionTypeTagType(regionType.type)"
+                          >
+                            {{ getRegionTypeLabel(regionType.type) }}
+                          </n-tag>
+                        </n-space>
+                      </n-space>
+                    </n-card>
+                  </n-space>
                 </div>
               </n-tab-pane>
             </n-tabs>
           </div>
         </n-layout-sider>
 
-        <!-- 右侧预览区域 -->
-        <n-layout-content class="right-panel">
-          <DataCard title="预览画面" class="preview-card">
-            <template #extra>
-              <n-space>
-                <!-- 操作引导按钮 -->
-                <n-button
-                  size="small"
-                  type="info"
-                  ghost
-                  @click="showOperationGuide"
-                >
-                  <template #icon>
-                    <n-icon><HelpCircleOutline /></n-icon>
-                  </template>
-                  操作指南
-                </n-button>
+        <!-- 右侧画布区域 -->
+        <n-layout-content class="canvas-container">
+          <div class="canvas-wrapper">
+            <!-- 工具栏 -->
+            <div class="canvas-toolbar">
+              <n-space align="center" justify="space-between">
+                <n-space align="center" size="small">
+                  <!-- 画布控制 -->
+                  <n-button-group>
+                    <n-button
+                      size="small"
+                      @click="zoomIn"
+                      :disabled="zoomLevel >= 3"
+                    >
+                      <template #icon>
+                        <n-icon><ZoomInOutline /></n-icon>
+                      </template>
+                    </n-button>
+                    <n-button
+                      size="small"
+                      @click="resetZoom"
+                    >
+                      {{ Math.round(zoomLevel * 100) }}%
+                    </n-button>
+                    <n-button
+                      size="small"
+                      @click="zoomOut"
+                      :disabled="zoomLevel <= 0.2"
+                    >
+                      <template #icon>
+                        <n-icon><ZoomOutOutline /></n-icon>
+                      </template>
+                    </n-button>
+                  </n-button-group>
 
-                <!-- 绘制状态指示器 -->
-                <n-tag
-                  v-if="isDrawing"
-                  type="success"
-                  size="small"
-                  :bordered="false"
-                >
-                  <template #icon>
-                    <n-icon><BrushOutline /></n-icon>
-                  </template>
-                  绘制模式
-                </n-tag>
+                  <!-- 显示选项 -->
+                  <n-space size="small">
+                    <n-checkbox
+                      v-model:checked="showGrid"
+                      size="small"
+                    >
+                      网格
+                    </n-checkbox>
+                    <n-checkbox
+                      v-model:checked="showLabels"
+                      size="small"
+                    >
+                      标签
+                    </n-checkbox>
+                    <n-checkbox
+                      v-model:checked="showCoordinates"
+                      size="small"
+                    >
+                      坐标
+                    </n-checkbox>
+                  </n-space>
+                </n-space>
 
-                <!-- 编辑状态指示器 -->
-                <n-tag
-                  v-if="currentRegion.id && !isDrawing"
-                  type="warning"
-                  size="small"
-                  :bordered="false"
-                >
-                  <template #icon>
-                    <n-icon><CreateOutline /></n-icon>
-                  </template>
-                  编辑模式: {{ currentRegion.name || currentRegion.id }}
-                </n-tag>
-
-                <!-- 画布工具栏 -->
-                <n-button-group size="small" class="canvas-toolbar">
-                  <!-- 绘制控制 -->
-                  <n-button
-                    v-if="!isDrawing && selectedCamera && regionStore.backgroundImage"
-                    type="primary"
-                    @click="startDrawingGuide"
+                <n-space align="center" size="small">
+                  <!-- 画布状态 -->
+                  <n-tag
+                    v-if="isDrawing"
+                    type="info"
+                    size="small"
                   >
                     <template #icon>
                       <n-icon><BrushOutline /></n-icon>
                     </template>
-                    开始绘制
-                  </n-button>
+                    绘制模式
+                  </n-tag>
 
-                  <n-button
-                    v-if="isDrawing"
-                    type="primary"
-                    @click="finishDrawing"
-                    :disabled="currentDrawingPoints.length < 3"
+                  <n-tag
+                    v-if="selectedRegionId"
+                    type="success"
+                    size="small"
                   >
                     <template #icon>
-                      <n-icon><CheckmarkDoneOutline /></n-icon>
+                      <n-icon><CheckmarkCircleOutline /></n-icon>
                     </template>
-                    完成绘制
-                  </n-button>
+                    已选择区域
+                  </n-tag>
 
+                  <!-- 清除所有 -->
                   <n-button
-                    v-if="isDrawing"
-                    @click="cancelDrawing"
+                    v-if="regions.length > 0"
+                    size="small"
+                    type="error"
+                    @click="clearAllRegions"
                   >
                     <template #icon>
-                      <n-icon><CloseOutline /></n-icon>
+                      <n-icon><TrashOutline /></n-icon>
                     </template>
-                    取消
+                    清除所有
                   </n-button>
-
-                  <!-- 缩放控制 -->
-                  <n-button
-                    @click="zoomOut"
-                    :disabled="scale <= 0.3 || (!selectedCamera && !regionStore.backgroundImage)"
-                    title="缩小"
-                  >
-                    <template #icon>
-                      <n-icon><RemoveOutline /></n-icon>
-                    </template>
-                  </n-button>
-
-                  <n-button
-                    @click="resetZoom"
-                    class="zoom-display"
-                    title="重置缩放"
-                    :disabled="!selectedCamera && !regionStore.backgroundImage"
-                  >
-                    {{ Math.round(scale * 100) }}%
-                  </n-button>
-
-                  <n-button
-                    @click="zoomIn"
-                    :disabled="scale >= 3 || (!selectedCamera && !regionStore.backgroundImage)"
-                    title="放大"
-                  >
-                    <template #icon>
-                      <n-icon><AddOutline /></n-icon>
-                    </template>
-                  </n-button>
-
-                  <!-- 画布操作 -->
-                  <n-button
-                    @click="clearCanvas"
-                    title="清空画布"
-                    :disabled="isDrawing || (!selectedCamera && !regionStore.backgroundImage)"
-                  >
-                    <template #icon>
-                      <n-icon><RefreshOutline /></n-icon>
-                    </template>
-                  </n-button>
-                </n-button-group>
+                </n-space>
               </n-space>
-            </template>
+            </div>
 
-            <!-- 预览容器 -->
-            <div
-              class="preview-container"
-              :class="{
-                'drawing-mode': isDrawing,
-                'has-background': regionStore.backgroundImage || selectedCamera
-              }"
-              v-if="selectedCamera || regionStore.backgroundImage"
-            >
-              <!-- 操作引导提示 -->
-              <div
-                v-if="showGuide && !isDrawing"
-                class="operation-guide"
-              >
-                <n-alert
-                  type="info"
-                  closable
-                  @close="showGuide = false"
-                >
-                  <template #icon>
-                    <n-icon><InformationCircleOutline /></n-icon>
-                  </template>
-                  <template #header>操作提示</template>
-                  点击"开始绘制"按钮开始创建区域，或点击"操作指南"查看详细说明
-                </n-alert>
-              </div>
+            <!-- 画布主体 -->
+            <div class="canvas-main" ref="canvasContainer">
+              <canvas
+                ref="canvas"
+                class="region-canvas"
+                @mousedown="handleCanvasMouseDown"
+                @mousemove="handleCanvasMouseMove"
+                @mouseup="handleCanvasMouseUp"
+                @dblclick="handleCanvasDoubleClick"
+                @wheel="handleCanvasWheel"
+                @contextmenu.prevent
+              ></canvas>
 
-              <!-- 交互反馈提示 -->
-              <n-alert
-                v-if="showFeedback"
-                :type="feedbackType"
-                class="feedback-alert"
-                :show-icon="true"
-              >
-                {{ feedbackMessage }}
-              </n-alert>
-
-              <div
-                class="canvas-container"
-                ref="canvasContainer"
-                @click="onCanvasClick"
-                @dblclick="onCanvasDblClick"
-                @mousemove="onCanvasMouseMove"
-                @mouseup="onCanvasMouseUp"
-                @mouseleave="onCanvasMouseLeave"
-              >
-                <!-- 画布 -->
-                <canvas
-                  ref="previewCanvas"
-                  class="preview-canvas"
-                  :width="canvasWidth"
-                  :height="canvasHeight"
+              <!-- 画布覆盖层 -->
+              <div class="canvas-overlay">
+                <!-- 坐标显示 -->
+                <div
+                  v-if="showCoordinates && mousePosition"
+                  class="coordinate-display"
                   :style="{
-                    cursor: isDrawing ? 'crosshair' : 'default',
-                    transform: `scale(${scale})`
+                    left: mousePosition.x + 10 + 'px',
+                    top: mousePosition.y - 30 + 'px'
                   }"
-                />
+                >
+                  {{ Math.round(mousePosition.canvasX) }}, {{ Math.round(mousePosition.canvasY) }}
+                </div>
 
                 <!-- 绘制提示 -->
                 <div
-                  v-if="isDrawing"
-                  class="drawing-hint"
+                  v-if="isDrawing && currentPoints.length === 0"
+                  class="draw-hint"
                 >
-                  <n-text depth="3">
-                    <template v-if="currentDrawingPoints.length === 0">
-                      点击画布开始绘制区域
-                    </template>
-                    <template v-else-if="currentDrawingPoints.length < 3">
-                      继续点击添加顶点 (至少需要3个点)
-                    </template>
-                    <template v-else>
-                      双击完成绘制，或继续添加顶点
-                    </template>
-                  </n-text>
+                  <n-icon size="24"><LocationOutline /></n-icon>
+                  <span>点击开始绘制区域</span>
                 </div>
 
-                <!-- 区域工具提示 -->
                 <div
-                  v-if="hoveredRegion"
-                  class="region-tooltip"
-                  :style="tooltipStyle"
+                  v-if="isDrawing && currentPoints.length > 0"
+                  class="draw-hint"
                 >
-                  <n-card size="small">
-                    <n-text strong>{{ hoveredRegion.name }}</n-text>
-                    <br>
-                    <n-text depth="3" style="font-size: 12px;">
-                      类型: {{ getRegionTypeText(hoveredRegion.type) }}
-                    </n-text>
-                    <br>
-                    <n-text depth="3" style="font-size: 12px;">
-                      状态: {{ hoveredRegion.enabled ? '启用' : '禁用' }}
-                    </n-text>
-                  </n-card>
-                </div>
-
-                <!-- 画布信息显示 -->
-                <div class="canvas-info">
-                  <n-space size="small">
-                    <n-text depth="3" size="small">
-                      {{ canvasWidth }} × {{ canvasHeight }}
-                    </n-text>
-                    <n-text depth="3" size="small">
-                      缩放: {{ Math.round(scale * 100) }}%
-                    </n-text>
-                    <n-text depth="3" size="small">
-                      区域: {{ regions.length }}
-                    </n-text>
-                  </n-space>
+                  <n-icon size="24"><BrushOutline /></n-icon>
+                  <span>继续点击绘制，双击完成</span>
                 </div>
               </div>
-            </div>
 
-            <!-- 无摄像头/图片时的空状态 -->
-            <div class="no-camera-placeholder" v-else>
-              <n-empty
-                description="请在页面顶部选择摄像头或上传图片开始配置区域"
-                size="large"
-                class="canvas-empty-state"
+              <!-- 加载状态 -->
+              <div v-if="loading" class="canvas-loading">
+                <n-spin size="large">
+                  <template #description>
+                    加载画面中...
+                  </template>
+                </n-spin>
+              </div>
+
+              <!-- 空状态 -->
+              <div
+                v-if="!selectedCamera && !regionStore.backgroundImage && !loading"
+                class="canvas-empty"
               >
-                <template #icon>
-                  <n-icon size="48" color="#d0d0d0">
-                    <VideocamOutline />
-                  </n-icon>
-                </template>
-                <template #extra>
-                  <n-text depth="3" size="small">
-                    使用页面顶部的按钮选择摄像头或上传图片
-                  </n-text>
-                </template>
-              </n-empty>
+                <n-empty
+                  description="请选择摄像头或上传图片开始配置"
+                  size="large"
+                >
+                  <template #icon>
+                    <n-icon size="64" color="#d0d0d0">
+                      <CameraOutline />
+                    </n-icon>
+                  </template>
+                  <template #extra>
+                    <n-space>
+                      <n-button
+                        type="primary"
+                        @click="$refs.cameraSelect?.focus()"
+                      >
+                        选择摄像头
+                      </n-button>
+                      <n-upload
+                        :show-file-list="false"
+                        accept="image/*"
+                        @change="handleImageUpload"
+                      >
+                        <n-button>上传图片</n-button>
+                      </n-upload>
+                    </n-space>
+                  </template>
+                </n-empty>
+              </div>
             </div>
-          </DataCard>
+          </div>
         </n-layout-content>
       </n-layout>
     </div>
 
-    <!-- 确认对话框 -->
-    <n-modal v-model:show="showConfirmDialog">
-      <n-card
-        style="width: 400px"
-        title="确认操作"
-        :bordered="false"
-        size="huge"
-        role="dialog"
-        aria-modal="true"
-      >
-        <n-text>{{ confirmMessage }}</n-text>
-        <template #footer>
-          <n-space justify="end">
-            <n-button @click="showConfirmDialog = false">取消</n-button>
-            <n-button type="primary" @click="confirmAction">确认</n-button>
-          </n-space>
-        </template>
-      </n-card>
+    <!-- 批量操作对话框 -->
+    <n-modal
+      v-model:show="showBatchModal"
+      preset="dialog"
+      title="批量操作"
+      positive-text="确认"
+      negative-text="取消"
+      @positive-click="confirmBatchAction"
+    >
+      <div v-if="batchAction === 'enable'">
+        确定要启用所有选中的区域吗？
+      </div>
+      <div v-else-if="batchAction === 'disable'">
+        确定要禁用所有选中的区域吗？
+      </div>
+      <div v-else-if="batchAction === 'delete'">
+        <n-alert type="warning" style="margin-bottom: 16px;">
+          <template #icon>
+            <n-icon><WarningOutline /></n-icon>
+          </template>
+          此操作不可撤销！
+        </n-alert>
+        确定要删除所有区域吗？这将永久删除所有配置的区域。
+      </div>
     </n-modal>
 
-    <!-- 无障碍访问面板 -->
-    <AccessibilityPanel />
+    <!-- 导入配置对话框 -->
+    <n-modal
+      v-model:show="showImportModal"
+      preset="dialog"
+      title="导入配置"
+      positive-text="导入"
+      negative-text="取消"
+      @positive-click="confirmImport"
+    >
+      <n-space vertical size="medium">
+        <n-alert type="info">
+          <template #icon>
+            <n-icon><InformationCircleOutline /></n-icon>
+          </template>
+          导入配置将覆盖当前所有区域设置，请确认操作。
+        </n-alert>
 
-    <!-- 测试面板 -->
-    <TestPanel />
-
-    <!-- 性能监控面板 -->
-    <PerformanceMonitor />
+        <div v-if="importData">
+          <n-text strong>配置预览：</n-text>
+          <n-code
+            :code="JSON.stringify(importData, null, 2)"
+            language="json"
+            style="max-height: 200px; overflow-y: auto; margin-top: 8px;"
+          />
+        </div>
+      </n-space>
+    </n-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import {
-  NAlert, NIcon, NButton, NSpace, NDropdown, NSelect, NTag, NText,
-  NForm, NFormItem, NInput, NInputNumber, NSlider, NSwitch, NCollapse,
-  NCollapseItem, NButtonGroup, NCard, NModal, NEmpty, NUpload,
-  useMessage, useDialog
-} from 'naive-ui'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { useMessage, useDialog } from 'naive-ui'
+import { useRegionStore } from '@/stores/region'
+import { useCameraStore } from '@/stores/camera'
+import PageHeader from '@/components/PageHeader.vue'
+import type { Region, RegionType } from '@/types/region'
+import type { UploadFileInfo } from 'naive-ui'
+
+// Icons
 import {
   InformationCircleOutline,
-  LayersOutline,
-  ChevronDownOutline,
-  DownloadOutline,
-  CloudUploadOutline,
-  RefreshOutline,
-  VideocamOutline,
-  LocationOutline,
-  AddOutline,
   CreateOutline,
-  TrashOutline,
-  WarningOutline,
-  SettingsOutline,
-  SparklesOutline,
+  AddOutline,
   BrushOutline,
-  RemoveOutline,
-  HelpCircleOutline,
+  WarningOutline,
   SaveOutline,
   CloseOutline,
-  CheckmarkDoneOutline,
-  ImageOutline
+  TrashOutline,
+  ListOutline,
+  LayersOutline,
+  EllipsisVerticalOutline,
+  TemplateOutline,
+  ZoomInOutline,
+  ZoomOutOutline,
+  CheckmarkCircleOutline,
+  LocationOutline,
+  CameraOutline,
+  ImageOutline,
+  ChevronDownOutline,
+  DownloadOutline,
+  CloudUploadOutline
 } from '@vicons/ionicons5'
 
-// 组件导入
-import PageHeader from '@/components/common/PageHeader.vue'
-import DataCard from '@/components/common/DataCard.vue'
-import AccessibilityPanel from '@/components/common/AccessibilityPanel.vue'
-import TestPanel from '@/components/common/TestPanel.vue'
-import PerformanceMonitor from '@/components/common/PerformanceMonitor.vue'
-import { useCameraStore } from '@/stores/camera'
-import { useRegionStore } from '@/stores/region'
-import type { Region } from '@/api/region'
-import { storeToRefs } from 'pinia'
-
-// Composables
-import { useAccessibility } from '@/composables/useAccessibility'
-import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts'
-import { usePerformance } from '@/composables/usePerformance'
-import { RegionConfigManager, type RegionConfig, type Point } from '@/utils/RegionConfigManager'
-
-// 响应式数据
-const message = useMessage()
-const dialog = useDialog()
+// Stores
 const regionStore = useRegionStore()
 const cameraStore = useCameraStore()
-const { regions, selectedRegion, isDrawing, currentDrawingPoints } = storeToRefs(regionStore)
+
+// UI
+const message = useMessage()
+const dialog = useDialog()
+
+// Refs
+const canvas = ref<HTMLCanvasElement>()
+const canvasContainer = ref<HTMLElement>()
+const formRef = ref()
+
+// State
+const showGuide = ref(true)
+const selectedCamera = ref<string>('')
+const leftPanelWidth = ref(400)
+const loading = ref(false)
+const saving = ref(false)
+const deleting = ref(false)
+
+// Canvas state
+const zoomLevel = ref(1)
+const showGrid = ref(true)
+const showLabels = ref(true)
+const showCoordinates = ref(true)
+const mousePosition = ref<{
+  x: number
+  y: number
+  canvasX: number
+  canvasY: number
+} | null>(null)
+
+// Drawing state
+const isDrawing = ref(false)
+const currentPoints = ref<Array<{ x: number; y: number }>>([])
+const selectedRegionId = ref<string>('')
+
+// Form state
+const currentRegion = ref<Partial<Region>>({
+  name: '',
+  type: 'work_area' as RegionType,
+  description: '',
+  enabled: true,
+  sensitivity: 0.8,
+  minDuration: 5,
+  alertEnabled: true,
+  alertLevel: 'medium',
+  points: []
+})
+
+// Batch operations
+const showBatchModal = ref(false)
+const batchAction = ref<string>('')
+
+// Import/Export
+const showImportModal = ref(false)
+const importData = ref<any>(null)
+
+// Computed
+const regions = computed(() => regionStore.regions)
 
 const cameraOptions = computed(() =>
-  (cameraStore.cameras || []).map((cam: any) => ({
-    label: cam.name,
-    value: cam.id,
+  cameraStore.cameras.map(camera => ({
+    label: camera.name,
+    value: camera.id
   }))
 )
 
-// 无障碍功能
-const {
-  announceMessage,
-  setFocusToElement,
-  enableKeyboardNavigation
-} = useAccessibility()
-
-// 键盘快捷键
-const { registerShortcut, unregisterShortcut } = useKeyboardShortcuts()
-
-// 性能监控
-const { startMonitoring, stopMonitoring } = usePerformance()
-
-// 组件状态
-const showGuide = ref(true)
-const selectedCamera = ref<string>('')
-const hoveredRegion = ref<Region | null>(null)
-const showConfirmDialog = ref(false)
-const confirmMessage = ref('')
-const confirmAction = ref(() => {})
-const saving = ref(false)
-const uploadedImage = ref<any>(null)
-
-// 左侧面板宽度控制
-const leftPanelWidth = ref(400)
-const minPanelWidth = 300
-const maxPanelWidth = 600
-
-watch(selectedRegion, (newRegion) => {
-  if (newRegion) {
-    // Note: This is a shallow copy. For deep reactivity, consider a deep copy.
-    Object.assign(currentRegion, newRegion)
-  } else {
-    // Reset when no region is selected
-    Object.assign(currentRegion, {
-      id: '',
-      name: '',
-      type: 'custom',
-      points: [],
-      rules: {
-        requireHairnet: false,
-        limitOccupancy: false,
-        timeRestriction: false
-      },
-      enabled: true
-    })
-  }
-})
-
-// 区域数据
-const currentRegion = reactive<Partial<Region>>({
-  id: '',
-  name: '',
-  type: 'detection',
-  points: [],
-  sensitivity: 60,
-  threshold: 0.7,
-  interval: 2,
-  minSize: 30,
-  alertDelay: 2,
-  enabled: true
-})
-
-// 画布相关
-const canvasContainer = ref<HTMLElement>()
-const previewCanvas = ref<HTMLCanvasElement>()
-const canvasWidth = ref(800)
-const canvasHeight = ref(600)
-const scale = ref(1)
-
-// RegionConfigManager 实例
-let regionConfigManager: RegionConfigManager | null = null
-
-// 画布工具函数
-function getCtx() {
-  if (!previewCanvas.value) return null
-  return previewCanvas.value.getContext('2d')
-}
-
-function clearCanvas() {
-  const ctx = getCtx()
-  if (!ctx) return
-  ctx.clearRect(0, 0, canvasWidth.value, canvasHeight.value)
-}
-
-function renderCanvas() {
-  const ctx = getCtx()
-  if (!ctx) return
-
-  // 如果有 RegionConfigManager，让它处理渲染
-  if (regionConfigManager) {
-    regionConfigManager.render()
-    return
-  }
-
-  // 原有的渲染逻辑作为备用
-  // 背景
-  clearCanvas()
-  ctx.save()
-  ctx.scale(scale.value, scale.value)
-  const img = regionStore.backgroundImage as unknown as HTMLImageElement | null
-  if (img) {
-    ctx.drawImage(img, 0, 0, canvasWidth.value, canvasHeight.value)
-  } else {
-    // 无背景图时填充灰底
-    ctx.fillStyle = '#fafafa'
-    ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value)
-  }
-  // 绘制已存在区域
-  drawRegions(ctx)
-  // 绘制进行中的多边形
-  if (isDrawing.value && currentDrawingPoints.value.length > 0) {
-    ctx.strokeStyle = '#18a058' // green
-    ctx.lineWidth = 2
-
-    // Draw lines between points
-    ctx.beginPath()
-    ctx.moveTo(currentDrawingPoints.value[0].x, currentDrawingPoints.value[0].y)
-    for (let i = 1; i < currentDrawingPoints.value.length; i++) {
-      ctx.lineTo(currentDrawingPoints.value[i].x, currentDrawingPoints.value[i].y)
-    }
-
-    // Draw line to current mouse position
-    ctx.lineTo(currentMousePos.value.x, currentMousePos.value.y)
-    ctx.stroke()
-
-    // Draw a faint line back to the start to show closure
-    if (currentDrawingPoints.value.length > 1) {
-      ctx.save()
-      ctx.strokeStyle = 'rgba(24, 160, 88, 0.5)'
-      ctx.setLineDash([2, 4])
-      ctx.beginPath()
-      ctx.moveTo(currentMousePos.value.x, currentMousePos.value.y)
-      ctx.lineTo(currentDrawingPoints.value[0].x, currentDrawingPoints.value[0].y)
-      ctx.stroke()
-      ctx.restore()
-    }
-  }
-  ctx.restore()
-}
-
-function drawRegions(ctx: CanvasRenderingContext2D) {
-  ctx.save()
-  ctx.lineWidth = 2
-
-  for (const r of regions.value) {
-    // 判断是否为编辑中的区域
-    const isEditing = currentRegion.id === r.id
-    // 判断是否为选中的区域
-    const isSelected = selectedRegion?.id === r.id
-    // 判断是否为悬停的区域
-    const isHovered = hoveredRegion?.id === r.id
-
-    if (r.points && r.points.length > 1) {
-      // 根据状态设置不同的颜色
-      if (isEditing) {
-        ctx.strokeStyle = 'rgba(255, 193, 7, 0.9)' // 编辑状态：橙色
-        ctx.fillStyle = 'rgba(255, 193, 7, 0.2)'
-      } else if (isSelected) {
-        ctx.strokeStyle = 'rgba(24, 160, 88, 0.9)' // 选中状态：绿色
-        ctx.fillStyle = 'rgba(24, 160, 88, 0.2)'
-      } else if (isHovered) {
-        ctx.strokeStyle = 'rgba(64, 158, 255, 1)' // 悬停状态：蓝色加深
-        ctx.fillStyle = 'rgba(64, 158, 255, 0.3)'
-      } else {
-        ctx.strokeStyle = 'rgba(64, 158, 255, 0.9)' // 默认状态：蓝色
-        ctx.fillStyle = 'rgba(64, 158, 255, 0.2)'
-      }
-
-      // 绘制区域多边形
-      ctx.beginPath()
-      ctx.moveTo(r.points[0].x, r.points[0].y)
-      for (let i = 1; i < r.points.length; i++) {
-        ctx.lineTo(r.points[i].x, r.points[i].y)
-      }
-      ctx.closePath()
-      ctx.fill()
-      ctx.stroke()
-
-      // 如果是编辑状态，绘制控制点
-      if (isEditing) {
-        ctx.fillStyle = 'rgba(255, 193, 7, 0.8)'
-        ctx.strokeStyle = '#fff'
-        ctx.lineWidth = 1
-
-        for (const point of r.points) {
-          ctx.beginPath()
-          ctx.arc(point.x, point.y, 4, 0, 2 * Math.PI)
-          ctx.fill()
-          ctx.stroke()
-        }
-      }
-
-      // 绘制区域标签
-      if (r.name && (isSelected || isHovered || isEditing)) {
-        const centerX = r.points.reduce((sum, p) => sum + p.x, 0) / r.points.length
-        const centerY = r.points.reduce((sum, p) => sum + p.y, 0) / r.points.length
-
-        ctx.fillStyle = isEditing ? 'rgba(255, 193, 7, 0.9)' : 'rgba(64, 158, 255, 0.9)'
-        ctx.font = '12px Arial'
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-
-        // 绘制背景
-        const textWidth = ctx.measureText(r.name).width
-        ctx.fillRect(centerX - textWidth/2 - 4, centerY - 8, textWidth + 8, 16)
-
-        // 绘制文字
-        ctx.fillStyle = '#fff'
-        ctx.fillText(r.name, centerX, centerY)
-      }
-
-    } else if ('x' in r && 'y' in r && 'width' in r && 'height' in r) {
-      // Fallback for old rectangle regions
-      ctx.strokeStyle = 'rgba(255, 0, 0, 0.9)' // Different color for old data
-      ctx.fillStyle = 'rgba(255, 0, 0, 0.1)'
-      ctx.strokeRect(r.x, r.y, r.width, r.height)
-      ctx.fillRect(r.x, r.y, r.width, r.height)
-    }
-  }
-  ctx.restore()
-}
-
-function fitCanvasToImage(img: HTMLImageElement) {
-  // 根据容器尺寸等比适配
-  const container = canvasContainer.value
-  if (!container) {
-    canvasWidth.value = img.naturalWidth
-    canvasHeight.value = img.naturalHeight
-  } else {
-    const maxW = container.clientWidth || img.naturalWidth
-    const maxH = container.clientHeight || img.naturalHeight
-    const ratio = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight)
-    canvasWidth.value = Math.max(10, Math.floor(img.naturalWidth * ratio))
-    canvasHeight.value = Math.max(10, Math.floor(img.naturalHeight * ratio))
-  }
-  regionStore.setCanvasSize(canvasWidth.value, canvasHeight.value)
-  nextTick().then(renderCanvas)
-}
-
-// 上传图片作为背景以进行离线配置
-function onUploadImage(options: any) {
-  const file: File | undefined = options?.file?.file
-  if (!file) return
-  const reader = new FileReader()
-  reader.onload = () => {
-    const img = new Image()
-    img.onload = () => {
-      regionStore.setBackgroundImage(img)
-      scale.value = 1
-      nextTick(() => {
-        fitCanvasToImage(img)
-      })
-      announceMessage('图片已加载，可在画布中绘制区域')
-    }
-    img.src = reader.result as string
-  }
-  reader.readAsDataURL(file)
-}
-
-// 交互：缩放
-function zoomIn() {
-  scale.value = Math.min(3, parseFloat((scale.value + 0.1).toFixed(2)))
-  renderCanvas()
-}
-function zoomOut() {
-  scale.value = Math.max(0.3, parseFloat((scale.value - 0.1).toFixed(2)))
-  renderCanvas()
-}
-function resetZoom() {
-  scale.value = 1
-  renderCanvas()
-}
-
-// 画布坐标换算
-function getCanvasPos(e: MouseEvent) {
-  if (!previewCanvas.value) return { x: 0, y: 0 }
-  const rect = previewCanvas.value.getBoundingClientRect()
-  const x = (e.clientX - rect.left) / scale.value
-  const y = (e.clientY - rect.top) / scale.value
-  return { x, y }
-}
-
-// 画布事件处理
-const currentMousePos = ref({ x: 0, y: 0 });
-const isDraggingPoint = ref(false);
-const dragPointIndex = ref(-1);
-const dragRegionId = ref('');
-
-function onCanvasClick(e: MouseEvent) {
-  const point = getCanvasPos(e);
-
-  // 如果正在绘制模式
-  if (regionStore.isDrawing) {
-    regionStore.addDrawingPoint(point);
-
-    // 同时通知 RegionConfigManager
-    if (regionConfigManager) {
-      regionConfigManager.handleCanvasClick(e)
-    }
-
-    renderCanvas();
-    showDrawingFeedback('点击添加成功');
-    return;
-  }
-
-  // 如果在编辑模式，检查是否点击了控制点
-  if (currentRegion.id && currentRegion.points) {
-    const clickedPointIndex = findClickedPoint(point, currentRegion.points);
-    if (clickedPointIndex !== -1) {
-      // 开始拖拽控制点
-      isDraggingPoint.value = true;
-      dragPointIndex.value = clickedPointIndex;
-      dragRegionId.value = currentRegion.id;
-      showDrawingFeedback('拖拽控制点调整区域形状', 'info');
-      return;
-    }
-  }
-
-  // 检查是否点击了某个区域
-  const clickedRegion = findClickedRegion(point);
-  if (clickedRegion) {
-    regionStore.selectRegion(clickedRegion);
-
-    // 同时通知 RegionConfigManager
-    if (regionConfigManager) {
-      regionConfigManager.selectRegion(clickedRegion.id)
-    }
-
-    renderCanvas();
-  }
-}
-
-// 查找点击的控制点
-function findClickedPoint(clickPos: {x: number, y: number}, points: Array<{x: number, y: number}>): number {
-  const threshold = 8; // 点击阈值
-  for (let i = 0; i < points.length; i++) {
-    const distance = Math.sqrt(
-      Math.pow(clickPos.x - points[i].x, 2) +
-      Math.pow(clickPos.y - points[i].y, 2)
-    );
-    if (distance <= threshold) {
-      return i;
-    }
-  }
-  return -1;
-}
-
-// 查找点击的区域
-function findClickedRegion(clickPos: {x: number, y: number}) {
-  for (const region of regions.value) {
-    if (region.points && region.points.length > 2) {
-      if (isPointInPolygon(clickPos, region.points)) {
-        return region;
-      }
-    }
-  }
-  return null;
-}
-
-// 判断点是否在多边形内
-function isPointInPolygon(point: {x: number, y: number}, polygon: Array<{x: number, y: number}>): boolean {
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    if (((polygon[i].y > point.y) !== (polygon[j].y > point.y)) &&
-        (point.x < (polygon[j].x - polygon[i].x) * (point.y - polygon[i].y) / (polygon[j].y - polygon[i].y) + polygon[i].x)) {
-      inside = !inside;
-    }
-  }
-  return inside;
-}
-
-async function finishDrawing() {
-  if (!regionStore.isDrawing) return
-
-  try {
-    if (regionConfigManager) {
-      regionConfigManager.finishDrawing()
-    }
-
-    await regionStore.finishDrawing()
-    announceMessage('区域已创建', 'success')
-    showDrawingFeedback('区域创建成功', 'success');
-  } catch (error: any) {
-    announceMessage(error.message || '创建区域失败', 'error')
-    showDrawingFeedback(error.message || '创建区域失败', 'error');
-  } finally {
-    renderCanvas()
-  }
-}
-
-async function onCanvasDblClick(e: MouseEvent) {
-  if (!regionStore.isDrawing) return
-  e.preventDefault()
-  showDrawingFeedback('双击完成绘制', 'info');
-  await finishDrawing()
-}
-
-function onCanvasMouseMove(e: MouseEvent) {
-    const p = getCanvasPos(e);
-    currentMousePos.value = p;
-
-    // 如果正在拖拽控制点
-    if (isDraggingPoint.value && dragPointIndex.value !== -1 && currentRegion.points) {
-      // 更新控制点位置
-      currentRegion.points[dragPointIndex.value] = { x: p.x, y: p.y };
-      renderCanvas();
-      return;
-    }
-
-    // 如果正在绘制
-    if (regionStore.isDrawing) {
-        renderCanvas();
-    }
-}
-
-// 鼠标抬起事件 - 结束拖拽
-function onCanvasMouseUp(e: MouseEvent) {
-  if (isDraggingPoint.value) {
-    isDraggingPoint.value = false;
-    dragPointIndex.value = -1;
-    dragRegionId.value = '';
-    showDrawingFeedback('控制点调整完成', 'success');
-
-    // 自动保存编辑的区域
-    if (currentRegion.id) {
-      saveRegionEdit();
-    }
-  }
-}
-
-// 鼠标离开画布 - 取消拖拽
-function onCanvasMouseLeave(e: MouseEvent) {
-  if (isDraggingPoint.value) {
-    isDraggingPoint.value = false;
-    dragPointIndex.value = -1;
-    dragRegionId.value = '';
-    showDrawingFeedback('已取消拖拽', 'warning');
-  }
-}
-
-// 操作引导和反馈
-const feedbackMessage = ref('');
-const feedbackType = ref<'info' | 'success' | 'warning' | 'error'>('info');
-const showFeedback = ref(false);
-
-function showDrawingFeedback(message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') {
-  feedbackMessage.value = message;
-  feedbackType.value = type;
-  showFeedback.value = true;
-  setTimeout(() => {
-    showFeedback.value = false;
-  }, 2000);
-}
-
-function startDrawingGuide() {
-  if (!selectedCamera.value) {
-    announceMessage('请先在页面顶部选择摄像头', 'warning');
-    return;
-  }
-  if (!regionStore.backgroundImage) {
-    announceMessage('请先在页面顶部上传背景图片', 'warning');
-    return;
-  }
-
-  showGuide.value = false;
-  regionStore.startDrawing();
-  showDrawingFeedback('开始绘制区域，点击画布添加顶点，双击完成绘制', 'info');
-}
-
-function cancelDrawing() {
-  regionStore.cancelDrawing();
-  showDrawingFeedback('已取消绘制', 'warning');
-  renderCanvas();
-}
-
-function showOperationGuide() {
-  const guide = `
-操作指南：
-1. 选择摄像头或上传背景图片
-2. 点击"开始绘制"按钮
-3. 在画布上点击添加区域顶点
-4. 双击完成区域绘制
-5. 填写区域信息并保存
-
-编辑模式：
-- 点击区域列表中的编辑按钮进入编辑模式
-- 在编辑模式下，点击画布上的控制点可拖拽调整
-- 拖拽完成后自动保存修改
-- 点击其他区域或取消按钮退出编辑模式
-  `;
-  announceMessage(guide, 'info');
-}
-
-// 辅助：区域类型显示
-function getRegionTypeText(t: string) {
-  const m: Record<string, string> = {
-    entrance: '入口区域',
-    handwash: '洗手区域',
-    sanitize: '消毒区域',
-    work_area: '工作区域',
-    restricted: '限制区域',
-    monitoring: '监控区域',
-    detection: '人员检测',
-    intrusion: '入侵检测',
-    loitering: '滞留检测',
-    counting: '人数统计',
-    custom: '自定义'
-  }
-  return m[t] || t
-}
-
-function getRegionTypeColor(type: string) {
-  const colorMap: Record<string, string> = {
-    entrance: 'success',
-    handwash: 'info',
-    sanitize: 'warning',
-    work_area: 'info',
-    restricted: 'error',
-    monitoring: 'warning',
-    custom: 'default',
-    detection: 'info',
-    intrusion: 'error',
-    loitering: 'warning',
-    counting: 'success'
-  }
-  return colorMap[type] || 'default'
-}
-
-function hasRegionIssues(region: Region): boolean {
-  if (!region.name) {
-    return true
-  }
-  if (region.points && region.points.length > 0) {
-    const xs = region.points.map(p => p.x)
-    const ys = region.points.map(p => p.y)
-    const minX = Math.min(...xs)
-    const maxX = Math.max(...xs)
-    const minY = Math.min(...ys)
-    const maxY = Math.max(...ys)
-    if (maxX - minX < 10 || maxY - minY < 10) {
-      return true
-    }
-  } else if ('width' in region && 'height' in region && (region.width < 10 || region.height < 10)) {
-    return true
-  }
-  return false
-}
-
-function getRegionIssues(region: Region): string {
-  if (!region.name) {
-    return '区域未命名'
-  }
-  if (region.points && region.points.length > 0) {
-    const xs = region.points.map(p => p.x)
-    const ys = region.points.map(p => p.y)
-    const minX = Math.min(...xs)
-    const maxX = Math.max(...xs)
-    const minY = Math.min(...ys)
-    const maxY = Math.max(...ys)
-    if (maxX - minX < 10 || maxY - minY < 10) {
-      return '区域尺寸过小'
-    }
-  } else if ('width' in region && 'height' in region && (region.width < 10 || region.height < 10)) {
-    return '区域尺寸过小'
-  }
-  return ''
-}
-
-// 无摄像头时的处理
-function showCameraSetup() {
-  message.info('请在页面顶部选择摄像头，或前往"摄像头管理"添加摄像头')
-}
-
-async function onCameraChange(value: string) {
-  console.log('selected camera:', value)
-  regionStore.selectRegion(null)
-
-  // 切换摄像头时清空区域列表
-  if (regions.value.length > 0) {
-    dialog.warning({
-      title: '切换摄像头',
-      content: '切换摄像头将清空当前区域列表，是否继续？',
-      positiveText: '继续',
-      negativeText: '取消',
-      onPositiveClick: async () => {
-        try {
-          // 清空当前区域
-          regionStore.clearRegions()
-          // 加载新摄像头的区域
-          await regionStore.fetchRegions(value)
-          const cam = cameraStore.cameras.find((c: any) => c.id === value)
-          message.success(`已切换到摄像头: ${cam ? cam.name : value}`)
-          renderCanvas()
-        } catch (error) {
-          message.error('加载区域列表失败')
-        }
-      },
-      onNegativeClick: () => {
-        // 恢复之前的选择
-        selectedCamera.value = selectedCamera.value
-      }
-    })
-  } else {
-    try {
-      await regionStore.fetchRegions(value) // Fetch regions for the new camera
-      const cam = cameraStore.cameras.find((c: any) => c.id === value)
-      message.success(`已选择摄像头: ${cam ? cam.name : value}`)
-      renderCanvas()
-    } catch (error) {
-      message.error('加载区域列表失败')
-    }
-  }
-}
-
-function getCameraResolution(cameraId: string): string {
-  const cam = cameraStore.cameras.find((c: any) => c.id === cameraId)
-  return cam ? cam.resolution : '未知'
-}
-
-function getCameraLocation(cameraId: string): string {
-  const cam = cameraStore.cameras.find((c: any) => c.id === cameraId)
-  return cam ? cam.location : '未知'
-}
-
-function loadExistingConfig() {
-  message.info('加载已有配置功能待实现')
-}
-
-// 新增：进入绘制模式
-function startDrawingMode() {
-  if (!selectedCamera.value && !regionStore.backgroundImage) {
-    message.warning('请先在页面顶部选择摄像头或上传图片后再绘制')
-    return
-  }
-
-  if (regionConfigManager) {
-    regionConfigManager.startDrawing()
-  }
-
-  regionStore.startDrawing()
-  // 重置当前区域表单为新区域
-  resetCurrentRegion()
-  announceMessage('已进入绘制模式：在画布上单击添加点，双击结束绘制')
-  nextTick(() => {
-    const el = previewCanvas.value as any
-    if (el && typeof el.focus === 'function') el.focus()
-  })
-}
-
-// 清除背景图片
-function clearBackgroundImage() {
-  regionStore.clearBackgroundImage()
-  message.success('已清除背景图片')
-  renderCanvas()
-}
-
-// 工具提示样式，避免未定义
-const tooltipStyle = computed(() => ({ left: '0px', top: '0px' }))
-// 监听变化自动重绘
-watch([regions, scale, canvasWidth, canvasHeight], () => {
-  renderCanvas()
-}, { deep: true })
-
-watch(() => regionStore.backgroundImage, () => {
-  // 背景图变化时重绘
-  renderCanvas()
-})
-
-// 区域类型选项
-const regionTypeOptions = computed(() => [
+const regionTypeOptions = [
   { label: '入口区域', value: 'entrance' },
   { label: '洗手区域', value: 'handwash' },
   { label: '消毒区域', value: 'sanitize' },
   { label: '工作区域', value: 'work_area' },
   { label: '限制区域', value: 'restricted' },
-  { label: '监控区域', value: 'monitoring' }
-])
+  { label: '监控区域', value: 'monitoring' },
+  { label: '自定义区域', value: 'custom' }
+]
 
-// 表单验证和反馈函数
-function getNameFeedback(name?: string): string {
-  if (!name || name.trim() === '') {
-    return '请输入区域名称'
-  }
-  if (name.length < 2) {
-    return '区域名称至少需要2个字符'
-  }
-  if (name.length > 50) {
-    return '区域名称不能超过50个字符'
-  }
-  return ''
-}
+const alertLevelOptions = [
+  { label: '低', value: 'low' },
+  { label: '中', value: 'medium' },
+  { label: '高', value: 'high' },
+  { label: '紧急', value: 'critical' }
+]
 
-function validateRegionName() {
-  const feedback = getNameFeedback(currentRegion.name)
-  if (feedback) {
-    message.warning(feedback)
-  }
-}
-
-function getTypeDescription(type?: string): string {
-  const descriptions: Record<string, string> = {
-    entrance: '检测人员进出入口区域',
-    handwash: '监控洗手行为和时长',
-    sanitize: '检测消毒操作是否规范',
-    work_area: '监控工作区域人员活动',
-    restricted: '检测是否有人员进入限制区域',
-    monitoring: '通用监控区域，记录所有活动'
-  }
-  return descriptions[type || ''] || '请选择检测类型'
-}
-
-function getSensitivityFeedback(sensitivity?: number): string {
-  if (sensitivity === undefined || sensitivity === null) {
-    return '请设置检测敏感度'
-  }
-  if (sensitivity < 30) {
-    return '低敏感度：减少误报，可能漏检'
-  }
-  if (sensitivity > 70) {
-    return '高敏感度：提高检测率，可能误报'
-  }
-  return '中等敏感度：平衡检测率和误报率'
-}
-
-function getThresholdFeedback(threshold?: number): string {
-  if (threshold === undefined || threshold === null) {
-    return '请设置置信度阈值'
-  }
-  if (threshold < 0.3) {
-    return '阈值过低，可能产生大量误报'
-  }
-  if (threshold > 0.9) {
-    return '阈值过高，可能漏检重要事件'
-  }
-  return '阈值设置合理'
-}
-
-// 表单事件处理函数
-function onTypeChange(value: string) {
-  currentRegion.type = value
-  // 根据类型设置默认参数
-  switch (value) {
-    case 'entrance':
-      currentRegion.sensitivity = 60
-      currentRegion.threshold = 0.7
-      break
-    case 'handwash':
-      currentRegion.sensitivity = 70
-      currentRegion.threshold = 0.6
-      break
-    case 'sanitize':
-      currentRegion.sensitivity = 65
-      currentRegion.threshold = 0.65
-      break
-    case 'work_area':
-      currentRegion.sensitivity = 50
-      currentRegion.threshold = 0.75
-      break
-    case 'restricted':
-      currentRegion.sensitivity = 80
-      currentRegion.threshold = 0.8
-      break
-    case 'monitoring':
-      currentRegion.sensitivity = 55
-      currentRegion.threshold = 0.7
-      break
-  }
-  announceMessage(`已选择检测类型: ${getRegionTypeText(value)}`)
-}
-
-function onSensitivityChange(value: number) {
-  currentRegion.sensitivity = value
-}
-
-function onThresholdChange(value: number) {
-  currentRegion.threshold = value
-}
-
-// 预设配置选项
-const presetOptions = computed(() => [
+const batchOptions = [
   {
-    label: '高精度模式',
-    key: 'high-precision',
-    props: {
-      onClick: () => applyPreset('high-precision')
-    }
+    label: '启用所有区域',
+    key: 'enable',
+    icon: () => h('n-icon', null, { default: () => h(CheckmarkCircleOutline) })
   },
   {
-    label: '平衡模式',
-    key: 'balanced',
-    props: {
-      onClick: () => applyPreset('balanced')
-    }
+    label: '禁用所有区域',
+    key: 'disable',
+    icon: () => h('n-icon', null, { default: () => h(CloseOutline) })
   },
   {
-    label: '高效率模式',
-    key: 'high-efficiency',
-    props: {
-      onClick: () => applyPreset('high-efficiency')
-    }
+    type: 'divider',
+    key: 'd1'
+  },
+  {
+    label: '删除所有区域',
+    key: 'delete',
+    icon: () => h('n-icon', null, { default: () => h(TrashOutline) })
   }
-])
+]
 
-function applyPreset(preset: string) {
-  switch (preset) {
-    case 'high-precision':
-      currentRegion.sensitivity = 80
-      currentRegion.threshold = 0.85
-      currentRegion.interval = 1
-      currentRegion.minSize = 50
-      currentRegion.alertDelay = 0
-      message.success('已应用高精度预设')
-      break
-    case 'balanced':
-      currentRegion.sensitivity = 60
-      currentRegion.threshold = 0.7
-      currentRegion.interval = 2
-      currentRegion.minSize = 30
-      currentRegion.alertDelay = 2
-      message.success('已应用平衡模式预设')
-      break
-    case 'high-efficiency':
-      currentRegion.sensitivity = 40
-      currentRegion.threshold = 0.6
-      currentRegion.interval = 5
-      currentRegion.minSize = 20
-      currentRegion.alertDelay = 5
-      message.success('已应用高效率预设')
-      break
+const regionTemplates = [
+  {
+    id: 'hospital_entrance',
+    name: '医院入口',
+    description: '适用于医院入口的标准配置',
+    color: '#18a058',
+    icon: 'LocationOutline',
+    regions: [
+      { type: 'entrance', name: '入口检测区' },
+      { type: 'handwash', name: '洗手区域' },
+      { type: 'sanitize', name: '消毒区域' }
+    ]
+  },
+  {
+    id: 'office_workspace',
+    name: '办公区域',
+    description: '适用于办公场所的配置',
+    color: '#2080f0',
+    icon: 'BusinessOutline',
+    regions: [
+      { type: 'work_area', name: '工作区域' },
+      { type: 'monitoring', name: '监控区域' }
+    ]
+  },
+  {
+    id: 'restricted_area',
+    name: '限制区域',
+    description: '高安全级别的限制区域配置',
+    color: '#f0a020',
+    icon: 'WarningOutline',
+    regions: [
+      { type: 'restricted', name: '限制区域' },
+      { type: 'monitoring', name: '监控区域' }
+    ]
   }
-  announceMessage(`已应用预设配置: ${preset}`)
+]
+
+const formRules = {
+  name: [
+    { required: true, message: '请输入区域名称', trigger: 'blur' }
+  ],
+  type: [
+    { required: true, message: '请选择区域类型', trigger: 'change' }
+  ]
 }
 
-// 批量操作选项
-const batchOptions = computed(() => [
-  {
-    label: '全部启用',
-    key: 'enable-all',
-    props: {
-      onClick: () => handleBatchAction('enable-all')
-    }
-  },
-  {
-    label: '全部禁用',
-    key: 'disable-all',
-    props: {
-      onClick: () => handleBatchAction('disable-all')
-    }
-  },
-  {
-    label: '删除全部',
-    key: 'delete-all',
-    props: {
-      onClick: () => handleBatchAction('delete-all')
-    }
-  }
-])
+// Methods
+const onLeftPanelResize = (width: number) => {
+  leftPanelWidth.value = width
+  nextTick(() => {
+    resizeCanvas()
+  })
+}
 
-async function handleBatchAction(action: string) {
-  switch (action) {
-    case 'enable-all':
+const startDrawingMode = () => {
+  if (!selectedCamera.value && !regionStore.backgroundImage) {
+    message.warning('请先选择摄像头或上传图片')
+    return
+  }
+
+  isDrawing.value = true
+  currentPoints.value = []
+  selectedRegionId.value = ''
+
+  // Reset current region
+  currentRegion.value = {
+    name: '',
+    type: 'work_area' as RegionType,
+    description: '',
+    enabled: true,
+    sensitivity: 0.8,
+    minDuration: 5,
+    alertEnabled: true,
+    alertLevel: 'medium',
+    points: []
+  }
+}
+
+const handleCanvasMouseDown = (event: MouseEvent) => {
+  if (!isDrawing.value) return
+
+  const rect = canvas.value!.getBoundingClientRect()
+  const x = (event.clientX - rect.left) / zoomLevel.value
+  const y = (event.clientY - rect.top) / zoomLevel.value
+
+  currentPoints.value.push({ x, y })
+  drawCanvas()
+}
+
+const handleCanvasMouseMove = (event: MouseEvent) => {
+  const rect = canvas.value!.getBoundingClientRect()
+  const x = event.clientX - rect.left
+  const y = event.clientY - rect.top
+  const canvasX = x / zoomLevel.value
+  const canvasY = y / zoomLevel.value
+
+  mousePosition.value = { x, y, canvasX, canvasY }
+
+  if (isDrawing.value && currentPoints.value.length > 0) {
+    drawCanvas()
+  }
+}
+
+const handleCanvasMouseUp = () => {
+  // Mouse up logic if needed
+}
+
+const handleCanvasDoubleClick = () => {
+  if (isDrawing.value && currentPoints.value.length >= 3) {
+    finishDrawing()
+  }
+}
+
+const handleCanvasWheel = (event: WheelEvent) => {
+  event.preventDefault()
+
+  const delta = event.deltaY > 0 ? -0.1 : 0.1
+  const newZoom = Math.max(0.2, Math.min(3, zoomLevel.value + delta))
+
+  zoomLevel.value = newZoom
+  drawCanvas()
+}
+
+const finishDrawing = () => {
+  if (currentPoints.value.length < 3) {
+    message.warning('至少需要3个点才能形成区域')
+    return
+  }
+
+  currentRegion.value.points = [...currentPoints.value]
+  isDrawing.value = false
+  currentPoints.value = []
+
+  // Auto-generate name if empty
+  if (!currentRegion.value.name) {
+    const typeLabel = regionTypeOptions.find(opt => opt.value === currentRegion.value.type)?.label || '区域'
+    currentRegion.value.name = `${typeLabel}_${Date.now().toString().slice(-4)}`
+  }
+
+  drawCanvas()
+}
+
+const selectRegion = (region: Region) => {
+  selectedRegionId.value = region.id
+  currentRegion.value = { ...region }
+  drawCanvas()
+}
+
+const saveCurrentRegion = async () => {
+  try {
+    await formRef.value?.validate()
+
+    if (!currentRegion.value.points || currentRegion.value.points.length < 3) {
+      message.error('请先绘制区域')
+      return
+    }
+
+    saving.value = true
+
+    if (currentRegion.value.id) {
+      await regionStore.updateRegion(currentRegion.value.id, currentRegion.value as Region)
+      message.success('区域更新成功')
+    } else {
+      await regionStore.createRegion(currentRegion.value as Omit<Region, 'id'>)
+      message.success('区域创建成功')
+    }
+
+    // Reset form
+    currentRegion.value = {
+      name: '',
+      type: 'work_area' as RegionType,
+      description: '',
+      enabled: true,
+      sensitivity: 0.8,
+      minDuration: 5,
+      alertEnabled: true,
+      alertLevel: 'medium',
+      points: []
+    }
+    selectedRegionId.value = ''
+
+    drawCanvas()
+  } catch (error) {
+    console.error('Save region error:', error)
+    message.error('保存失败，请重试')
+  } finally {
+    saving.value = false
+  }
+}
+
+const cancelEdit = () => {
+  currentRegion.value = {
+    name: '',
+    type: 'work_area' as RegionType,
+    description: '',
+    enabled: true,
+    sensitivity: 0.8,
+    minDuration: 5,
+    alertEnabled: true,
+    alertLevel: 'medium',
+    points: []
+  }
+  selectedRegionId.value = ''
+  isDrawing.value = false
+  currentPoints.value = []
+  drawCanvas()
+}
+
+const deleteCurrentRegion = async () => {
+  if (!currentRegion.value.id) return
+
+  dialog.warning({
+    title: '确认删除',
+    content: `确定要删除区域"${currentRegion.value.name}"吗？此操作不可撤销。`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
       try {
-        for (const region of regions.value) {
-          if (!region.enabled) {
-            await regionStore.updateRegion(region.id, { enabled: true })
-          }
-        }
-        message.success('已启用所有区域')
-        renderCanvas()
-      } catch (error: any) {
-        message.error('批量启用失败: ' + error.message)
+        deleting.value = true
+        await regionStore.deleteRegion(currentRegion.value.id!)
+        message.success('区域删除成功')
+        cancelEdit()
+      } catch (error) {
+        console.error('Delete region error:', error)
+        message.error('删除失败，请重试')
+      } finally {
+        deleting.value = false
       }
-      break
-    case 'disable-all':
-      try {
-        for (const region of regions.value) {
-          if (region.enabled) {
-            await regionStore.updateRegion(region.id, { enabled: false })
-          }
-        }
-        message.success('已禁用所有区域')
-        renderCanvas()
-      } catch (error: any) {
-        message.error('批量禁用失败: ' + error.message)
-      }
-      break
-    case 'delete-all':
-      dialog.warning({
-        title: '确认删除',
-        content: `确定要删除所有 ${regions.value.length} 个区域吗？此操作不可撤销。`,
-        positiveText: '删除',
-        negativeText: '取消',
-        onPositiveClick: async () => {
-          try {
-            for (const region of regions.value) {
-              await regionStore.deleteRegion(region.id)
-            }
-            message.success('已删除所有区域')
-            renderCanvas()
-          } catch (error: any) {
-            message.error('批量删除失败: ' + error.message)
-          }
-        }
+    }
+  })
+}
+
+const saveAllRegions = async () => {
+  try {
+    saving.value = true
+    await regionStore.saveRegions(selectedCamera.value)
+    message.success('配置保存成功')
+  } catch (error) {
+    console.error('Save all regions error:', error)
+    message.error('保存失败，请重试')
+  } finally {
+    saving.value = false
+  }
+}
+
+const handleBatchAction = (key: string) => {
+  batchAction.value = key
+  showBatchModal.value = true
+}
+
+const confirmBatchAction = async () => {
+  try {
+    if (batchAction.value === 'enable') {
+      regions.value.forEach(region => {
+        regionStore.updateRegion(region.id, { ...region, enabled: true })
       })
-      break
+      message.success('已启用所有区域')
+    } else if (batchAction.value === 'disable') {
+      regions.value.forEach(region => {
+        regionStore.updateRegion(region.id, { ...region, enabled: false })
+      })
+      message.success('已禁用所有区域')
+    } else if (batchAction.value === 'delete') {
+      await regionStore.clearRegions()
+      message.success('已删除所有区域')
+      cancelEdit()
+    }
+
+    drawCanvas()
+  } catch (error) {
+    console.error('Batch action error:', error)
+    message.error('操作失败，请重试')
   }
 }
 
-// 导入导出功能
-function exportConfig() {
+const exportConfig = () => {
   const config = {
-    camera: selectedCamera.value,
     regions: regions.value,
+    camera: selectedCamera.value,
     timestamp: new Date().toISOString()
   }
-  const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' })
+
+  const blob = new Blob([JSON.stringify(config, null, 2)], {
+    type: 'application/json'
+  })
+
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `region-config-${selectedCamera.value || 'default'}-${Date.now()}.json`
-  document.body.appendChild(a)
+  a.download = `region-config-${Date.now()}.json`
   a.click()
-  document.body.removeChild(a)
+
   URL.revokeObjectURL(url)
-  message.success('配置已导出')
+  message.success('配置导出成功')
 }
 
-function importConfig(options: any) {
+const importConfig = (options: { file: UploadFileInfo }) => {
   const file = options.file.file
   if (!file) return
 
@@ -1816,1035 +1224,689 @@ function importConfig(options: any) {
   reader.onload = (e) => {
     try {
       const config = JSON.parse(e.target?.result as string)
-      if (config.regions && Array.isArray(config.regions)) {
-        // 导入区域配置
-        regions.value = config.regions
-        if (config.camera) {
-          selectedCamera.value = config.camera
-        }
-        message.success(`已导入 ${config.regions.length} 个区域配置`)
-        renderCanvas()
-      } else {
-        message.error('配置文件格式不正确')
-      }
+      importData.value = config
+      showImportModal.value = true
     } catch (error) {
-      message.error('配置文件解析失败')
+      message.error('配置文件格式错误')
     }
   }
   reader.readAsText(file)
 }
 
-// 上传图片功能
-function handleImageUpload(options: any) {
+const confirmImport = async () => {
+  try {
+    if (importData.value?.regions) {
+      await regionStore.clearRegions()
+
+      for (const region of importData.value.regions) {
+        await regionStore.createRegion(region)
+      }
+
+      if (importData.value.camera) {
+        selectedCamera.value = importData.value.camera
+      }
+
+      message.success('配置导入成功')
+      drawCanvas()
+    }
+  } catch (error) {
+    console.error('Import config error:', error)
+    message.error('导入失败，请重试')
+  }
+}
+
+const handleImageUpload = (options: { file: UploadFileInfo }) => {
   const file = options.file.file
   if (!file) return
 
-  // 验证文件类型
-  if (!file.type.startsWith('image/')) {
-    message.error('请选择图片文件')
-    return
-  }
-
-  // 验证文件大小 (限制为10MB)
-  if (file.size > 10 * 1024 * 1024) {
-    message.error('图片文件大小不能超过10MB')
-    return
-  }
-
   const reader = new FileReader()
   reader.onload = (e) => {
-    try {
-      const img = new Image()
-      img.onload = () => {
-        // 设置画布尺寸
-        canvasWidth.value = img.width
-        canvasHeight.value = img.height
-
-        // 设置背景图片
-        regionStore.setBackgroundImage(img)
-
-        // 清空当前选择的摄像头（使用上传的图片）
-        selectedCamera.value = ''
-
-        // 重新渲染画布
-        renderCanvas()
-
-        message.success('图片上传成功')
-        announceMessage('背景图片已更新，可以开始绘制区域')
-      }
-      img.onerror = () => {
-        message.error('图片加载失败')
-      }
-      img.src = e.target?.result as string
-    } catch (error) {
-      message.error('图片处理失败')
-    }
+    const imageUrl = e.target?.result as string
+    regionStore.setBackgroundImage(imageUrl)
+    selectedCamera.value = ''
+    drawCanvas()
+    message.success('图片上传成功')
   }
   reader.readAsDataURL(file)
 }
 
-// 编辑区域
-function editRegion(region: Region) {
-  // 选中区域
-  regionStore.selectRegion(region)
-
-  // 同时通知 RegionConfigManager
-  if (regionConfigManager) {
-    regionConfigManager.selectRegion(region.id)
-  }
-
-  // 将区域数据复制到当前编辑表单
-  currentRegion.id = region.id
-  currentRegion.name = region.name
-  currentRegion.type = region.type
-  currentRegion.points = [...(region.points || [])]
-  currentRegion.sensitivity = region.sensitivity || 60
-  currentRegion.threshold = region.threshold || 0.7
-  currentRegion.interval = region.interval || 2
-  currentRegion.minSize = region.minSize || 30
-  currentRegion.alertDelay = region.alertDelay || 2
-  currentRegion.enabled = region.enabled
-
-  // 重新渲染画布，高亮选中的区域
-  renderCanvas()
-
-  // 滚动到配置表单
-  nextTick(() => {
-    const configSection = document.querySelector('.rules-config-card')
-    if (configSection) {
-      configSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
-  })
-
-  message.info(`正在编辑区域: ${region.name || region.id}`)
-  announceMessage(`已选择编辑区域: ${region.name || region.id}，类型: ${getRegionTypeText(region.type)}`)
-}
-
-// 保存区域编辑
-async function saveRegionEdit() {
-  try {
-    // 验证表单数据
-    const nameValidation = getNameFeedback(currentRegion.name)
-    if (nameValidation) {
-      message.error(nameValidation)
-      return
-    }
-
-    if (!currentRegion.type) {
-      message.error('请选择检测类型')
-      return
-    }
-
-    if (!currentRegion.points || currentRegion.points.length < 3) {
-      message.error('区域至少需要3个点')
-      return
-    }
-
-    // 构建更新数据
-    const updateData = {
-      name: currentRegion.name?.trim(),
-      type: currentRegion.type,
-      points: currentRegion.points,
-      sensitivity: currentRegion.sensitivity,
-      threshold: currentRegion.threshold,
-      interval: currentRegion.interval,
-      minSize: currentRegion.minSize,
-      alertDelay: currentRegion.alertDelay,
-      enabled: currentRegion.enabled
-    }
-
-    // 调用 API 更新区域
-    await regionStore.updateRegion(currentRegion.id!, updateData)
-
-    // 重置表单
-    resetCurrentRegion()
-
-    // 重新渲染画布
-    renderCanvas()
-
-    message.success('区域更新成功')
-    announceMessage('区域配置已保存')
-
-  } catch (error: any) {
-    console.error('保存区域失败:', error)
-    message.error('保存失败: ' + (error.message || '未知错误'))
-  }
-}
-
-// 取消编辑
-function cancelEdit() {
-  regionStore.selectRegion(null)
-  resetCurrentRegion()
-  renderCanvas()
-  message.info('已取消编辑')
-  announceMessage('已取消区域编辑')
-}
-
-// 重置当前区域表单
-function resetCurrentRegion() {
-  currentRegion.id = ''
-  currentRegion.name = ''
-  currentRegion.type = 'detection'
-  currentRegion.points = []
-  currentRegion.sensitivity = 60
-  currentRegion.threshold = 0.7
-  currentRegion.interval = 2
-  currentRegion.minSize = 30
-  currentRegion.alertDelay = 2
-  currentRegion.enabled = true
-
-  // 清除 RegionConfigManager 的选择
-  if (regionConfigManager) {
-    regionConfigManager.clearSelection()
-  }
-}
-
-// 删除区域
-async function deleteRegion(regionId: string) {
-  const region = regionStore.getRegionById(regionId)
-  if (!region) {
-    message.error('区域不存在')
-    return
-  }
-
+const clearAllRegions = () => {
   dialog.warning({
-    title: '确认删除',
-    content: `确定要删除区域 "${region.name || region.id}" 吗？此操作不可撤销。`,
-    positiveText: '删除',
+    title: '确认清除',
+    content: '确定要清除所有区域吗？此操作不可撤销。',
+    positiveText: '清除',
     negativeText: '取消',
     onPositiveClick: async () => {
-      try {
-        // 通知 RegionConfigManager 删除区域
-        if (regionConfigManager) {
-          regionConfigManager.deleteRegion(regionId)
+      await regionStore.clearRegions()
+      cancelEdit()
+      drawCanvas()
+      message.success('已清除所有区域')
+    }
+  })
+}
+
+const zoomIn = () => {
+  zoomLevel.value = Math.min(3, zoomLevel.value + 0.2)
+  drawCanvas()
+}
+
+const zoomOut = () => {
+  zoomLevel.value = Math.max(0.2, zoomLevel.value - 0.2)
+  drawCanvas()
+}
+
+const resetZoom = () => {
+  zoomLevel.value = 1
+  drawCanvas()
+}
+
+const resizeCanvas = () => {
+  if (!canvas.value || !canvasContainer.value) return
+
+  const container = canvasContainer.value
+  canvas.value.width = container.clientWidth
+  canvas.value.height = container.clientHeight
+
+  drawCanvas()
+}
+
+const drawCanvas = () => {
+  if (!canvas.value) return
+
+  const ctx = canvas.value.getContext('2d')!
+  const width = canvas.value.width
+  const height = canvas.value.height
+
+  // Clear canvas
+  ctx.clearRect(0, 0, width, height)
+
+  // Draw background
+  if (regionStore.backgroundImage) {
+    const img = new Image()
+    img.onload = () => {
+      ctx.save()
+      ctx.scale(zoomLevel.value, zoomLevel.value)
+      ctx.drawImage(img, 0, 0, width / zoomLevel.value, height / zoomLevel.value)
+      ctx.restore()
+      drawRegionsAndOverlays()
+    }
+    img.src = regionStore.backgroundImage
+  } else {
+    // Draw placeholder background
+    ctx.fillStyle = '#f5f5f5'
+    ctx.fillRect(0, 0, width, height)
+    drawRegionsAndOverlays()
+  }
+}
+
+const drawRegionsAndOverlays = () => {
+  if (!canvas.value) return
+
+  const ctx = canvas.value.getContext('2d')!
+
+  ctx.save()
+  ctx.scale(zoomLevel.value, zoomLevel.value)
+
+  // Draw grid if enabled
+  if (showGrid.value) {
+    drawGrid(ctx)
+  }
+
+  // Draw existing regions
+  regions.value.forEach(region => {
+    drawRegion(ctx, region, region.id === selectedRegionId.value)
+  })
+
+  // Draw current drawing
+  if (isDrawing.value && currentPoints.value.length > 0) {
+    drawCurrentDrawing(ctx)
+  }
+
+  ctx.restore()
+}
+
+const drawGrid = (ctx: CanvasRenderingContext2D) => {
+  const gridSize = 20
+  const width = canvas.value!.width / zoomLevel.value
+  const height = canvas.value!.height / zoomLevel.value
+
+  ctx.strokeStyle = '#e0e0e0'
+  ctx.lineWidth = 0.5
+
+  for (let x = 0; x <= width; x += gridSize) {
+    ctx.beginPath()
+    ctx.moveTo(x, 0)
+    ctx.lineTo(x, height)
+    ctx.stroke()
+  }
+
+  for (let y = 0; y <= height; y += gridSize) {
+    ctx.beginPath()
+    ctx.moveTo(0, y)
+    ctx.lineTo(width, y)
+    ctx.stroke()
+  }
+}
+
+const drawRegion = (ctx: CanvasRenderingContext2D, region: Region, isSelected: boolean) => {
+  if (!region.points || region.points.length < 3) return
+
+  const color = getRegionTypeColor(region.type)
+  const alpha = region.enabled ? 0.3 : 0.1
+
+  // Draw filled polygon
+  ctx.fillStyle = color + Math.round(alpha * 255).toString(16).padStart(2, '0')
+  ctx.beginPath()
+  ctx.moveTo(region.points[0].x, region.points[0].y)
+
+  for (let i = 1; i < region.points.length; i++) {
+    ctx.lineTo(region.points[i].x, region.points[i].y)
+  }
+
+  ctx.closePath()
+  ctx.fill()
+
+  // Draw border
+  ctx.strokeStyle = isSelected ? '#ff6b6b' : color
+  ctx.lineWidth = isSelected ? 3 : 2
+  ctx.stroke()
+
+  // Draw points
+  region.points.forEach((point, index) => {
+    ctx.fillStyle = isSelected ? '#ff6b6b' : color
+    ctx.beginPath()
+    ctx.arc(point.x, point.y, 4, 0, Math.PI * 2)
+    ctx.fill()
+
+    // Draw point index
+    if (showLabels.value) {
+      ctx.fillStyle = '#333'
+      ctx.font = '12px sans-serif'
+      ctx.fillText(index.toString(), point.x + 6, point.y - 6)
+    }
+  })
+
+  // Draw region label
+  if (showLabels.value) {
+    const centerX = region.points.reduce((sum, p) => sum + p.x, 0) / region.points.length
+    const centerY = region.points.reduce((sum, p) => sum + p.y, 0) / region.points.length
+
+    ctx.fillStyle = '#333'
+    ctx.font = 'bold 14px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText(region.name, centerX, centerY)
+
+    ctx.font = '12px sans-serif'
+    ctx.fillText(getRegionTypeLabel(region.type), centerX, centerY + 16)
+  }
+}
+
+const drawCurrentDrawing = (ctx: CanvasRenderingContext2D) => {
+  if (currentPoints.value.length === 0) return
+
+  ctx.strokeStyle = '#2080f0'
+  ctx.lineWidth = 2
+  ctx.setLineDash([5, 5])
+
+  // Draw lines between points
+  if (currentPoints.value.length > 1) {
+    ctx.beginPath()
+    ctx.moveTo(currentPoints.value[0].x, currentPoints.value[0].y)
+
+    for (let i = 1; i < currentPoints.value.length; i++) {
+      ctx.lineTo(currentPoints.value[i].x, currentPoints.value[i].y)
+    }
+
+    ctx.stroke()
+  }
+
+  // Draw points
+  currentPoints.value.forEach((point, index) => {
+    ctx.fillStyle = '#2080f0'
+    ctx.beginPath()
+    ctx.arc(point.x, point.y, 4, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.fillStyle = '#333'
+    ctx.font = '12px sans-serif'
+    ctx.fillText(index.toString(), point.x + 6, point.y - 6)
+  })
+
+  // Draw line to mouse if drawing
+  if (mousePosition.value && currentPoints.value.length > 0) {
+    const lastPoint = currentPoints.value[currentPoints.value.length - 1]
+    ctx.beginPath()
+    ctx.moveTo(lastPoint.x, lastPoint.y)
+    ctx.lineTo(mousePosition.value.canvasX, mousePosition.value.canvasY)
+    ctx.stroke()
+  }
+
+  ctx.setLineDash([])
+}
+
+const getRegionTypeColor = (type: RegionType): string => {
+  const colors = {
+    entrance: '#52c41a',
+    handwash: '#1890ff',
+    sanitize: '#722ed1',
+    work_area: '#fa8c16',
+    restricted: '#f5222d',
+    monitoring: '#13c2c2',
+    custom: '#eb2f96'
+  }
+  return colors[type] || '#666666'
+}
+
+const getRegionTypeLabel = (type: RegionType): string => {
+  const labels = {
+    entrance: '入口区域',
+    handwash: '洗手区域',
+    sanitize: '消毒区域',
+    work_area: '工作区域',
+    restricted: '限制区域',
+    monitoring: '监控区域',
+    custom: '自定义区域'
+  }
+  return labels[type] || '未知类型'
+}
+
+const getRegionTypeIcon = (type: RegionType) => {
+  // Return appropriate icon component based on type
+  return LocationOutline
+}
+
+const getRegionTypeTagType = (type: RegionType) => {
+  const types = {
+    entrance: 'success',
+    handwash: 'info',
+    sanitize: 'warning',
+    work_area: 'default',
+    restricted: 'error',
+    monitoring: 'info',
+    custom: 'default'
+  }
+  return types[type] || 'default'
+}
+
+const getAlertLevelType = (level: string) => {
+  const types = {
+    low: 'info',
+    medium: 'warning',
+    high: 'error',
+    critical: 'error'
+  }
+  return types[level] || 'default'
+}
+
+const getAlertLevelLabel = (level: string): string => {
+  const labels = {
+    low: '低级告警',
+    medium: '中级告警',
+    high: '高级告警',
+    critical: '紧急告警'
+  }
+  return labels[level] || '未知级别'
+}
+
+const getRegionActions = (region: Region) => [
+  {
+    label: '编辑',
+    key: 'edit',
+    icon: () => h('n-icon', null, { default: () => h(CreateOutline) })
+  },
+  {
+    label: region.enabled ? '禁用' : '启用',
+    key: 'toggle',
+    icon: () => h('n-icon', null, {
+      default: () => h(region.enabled ? CloseOutline : CheckmarkCircleOutline)
+    })
+  },
+  {
+    type: 'divider',
+    key: 'd1'
+  },
+  {
+    label: '删除',
+    key: 'delete',
+    icon: () => h('n-icon', null, { default: () => h(TrashOutline) })
+  }
+]
+
+const handleRegionAction = async (key: string, region: Region) => {
+  switch (key) {
+    case 'edit':
+      selectRegion(region)
+      break
+    case 'toggle':
+      await regionStore.updateRegion(region.id, {
+        ...region,
+        enabled: !region.enabled
+      })
+      message.success(`区域已${region.enabled ? '禁用' : '启用'}`)
+      drawCanvas()
+      break
+    case 'delete':
+      dialog.warning({
+        title: '确认删除',
+        content: `确定要删除区域"${region.name}"吗？`,
+        positiveText: '删除',
+        negativeText: '取消',
+        onPositiveClick: async () => {
+          await regionStore.deleteRegion(region.id)
+          message.success('区域删除成功')
+          if (selectedRegionId.value === region.id) {
+            cancelEdit()
+          }
+          drawCanvas()
+        }
+      })
+      break
+  }
+}
+
+const applyTemplate = (template: any) => {
+  dialog.info({
+    title: '应用模板',
+    content: `确定要应用"${template.name}"模板吗？这将清除当前所有区域。`,
+    positiveText: '应用',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      await regionStore.clearRegions()
+
+      // Create regions from template
+      for (const regionTemplate of template.regions) {
+        const region = {
+          name: regionTemplate.name,
+          type: regionTemplate.type,
+          description: `来自模板：${template.name}`,
+          enabled: true,
+          sensitivity: 0.8,
+          minDuration: 5,
+          alertEnabled: true,
+          alertLevel: 'medium',
+          points: [] // User needs to draw these
         }
 
-        await regionStore.deleteRegion(regionId)
-        message.success('区域删除成功')
-        announceMessage(`区域 ${region.name || region.id} 已删除`)
-        renderCanvas() // 重新渲染画布
-      } catch (error: any) {
-        message.error(error.message || '删除区域失败')
+        await regionStore.createRegion(region)
       }
+
+      message.success('模板应用成功，请为每个区域绘制范围')
+      drawCanvas()
     }
   })
 }
 
-// 刷新摄像头列表（真实接口）
-const refreshCameras = async () => {
-  try {
-    await cameraStore.fetchCameras()
-    announceMessage('摄像头列表已刷新')
-  } catch (error) {
-    message.error('刷新摄像头列表失败')
-  }
-}
-
-// 左侧面板宽度调整
-function onLeftPanelResize(width: number) {
-  // 限制面板宽度在合理范围内
-  const constrainedWidth = Math.max(minPanelWidth, Math.min(maxPanelWidth, width))
-  leftPanelWidth.value = constrainedWidth
-
-  // 保存用户偏好到本地存储
-  localStorage.setItem('regionConfig_leftPanelWidth', constrainedWidth.toString())
-
-  // 重新渲染画布以适应新的布局
-  nextTick(() => {
-    renderCanvas()
-  })
-}
-
-// 文件大小格式化函数
-const formatFileSize = (bytes: number): string => {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-}
-
-// 从本地存储恢复面板宽度
-function restorePanelWidth() {
-  const savedWidth = localStorage.getItem('regionConfig_leftPanelWidth')
-  if (savedWidth) {
-    const width = parseInt(savedWidth, 10)
-    if (!isNaN(width) && width >= minPanelWidth && width <= maxPanelWidth) {
-      leftPanelWidth.value = width
-    }
-  }
-}
-
+// Lifecycle
 onMounted(async () => {
-  // 恢复面板宽度设置
-  restorePanelWidth()
+  await cameraStore.fetchCameras()
+  await regionStore.fetchRegions()
 
-  // 初始化 RegionConfigManager
-  if (previewCanvas.value) {
-    regionConfigManager = new RegionConfigManager(previewCanvas.value)
-
-    // 设置背景图片（如果有的话）
-    if (regionStore.backgroundImage) {
-      regionConfigManager.setBackgroundImage(regionStore.backgroundImage as HTMLImageElement)
-    }
-
-    // 加载现有区域到 RegionConfigManager
-    regions.value.forEach(region => {
-      if (region.points && region.points.length > 0) {
-        regionConfigManager?.addRegion({
-          id: region.id,
-          name: region.name || `区域${region.id}`,
-          type: region.type || 'detection',
-          points: region.points,
-          color: region.color || '#18a058',
-          enabled: region.enabled !== false
-        })
-      }
-    })
-
-    // 设置事件回调
-    regionConfigManager.onRegionCreated = (region) => {
-      // 将新创建的区域添加到 store
-      regionStore.addRegion({
-        id: region.id,
-        name: region.name,
-        type: region.type,
-        points: region.points,
-        color: region.color,
-        enabled: region.enabled,
-        sensitivity: 60,
-        threshold: 0.7,
-        interval: 2,
-        minSize: 30,
-        alertDelay: 2
-      })
-      announceMessage(`区域 ${region.name} 已创建`)
-    }
-
-    regionConfigManager.onRegionChanged = (regionId) => {
-      // 区域变更时的处理
-      const region = regionConfigManager?.getRegion(regionId)
-      if (region) {
-        regionStore.updateRegion(regionId, region)
-        announceMessage(`区域 ${region.name} 已更新`)
-      }
-    }
-
-    regionConfigManager.onRegionDeleted = (regionId) => {
-      // 区域删除时的处理
-      regionStore.deleteRegion(regionId)
-      announceMessage('区域已删除')
-    }
-
-    regionConfigManager.onRegionSelected = (regionId) => {
-      // 区域选择时的处理
-      const region = regionStore.getRegionById(regionId)
-      if (region) {
-        regionStore.selectRegion(region)
-        Object.assign(currentRegion, region)
-      }
-    }
-  }
-
-  // 启用无障碍功能
-  enableKeyboardNavigation()
-  // 初始绘制
-  nextTick().then(renderCanvas)
-  // 注册键盘快捷键
-  registerShortcut({
-    id: 'save-config',
-    keys: ['Ctrl', 's'],
-    description: '保存配置',
-    callback: () => {
-      // 保存配置逻辑
-      announceMessage('配置已保存')
-    }
+  nextTick(() => {
+    resizeCanvas()
+    drawCanvas()
   })
 
-  registerShortcut({
-    id: 'new-region',
-    keys: ['Ctrl', 'n'],
-    description: '新建区域',
-    callback: startDrawingMode
-  })
-
-  // 启动性能监控
-  startMonitoring()
-
-  // 拉取摄像头列表
-  try { await cameraStore.fetchCameras() } catch {}
-
-  // 公告页面信息
-  await nextTick()
-  announceMessage('区域配置页面已加载，请在页面顶部选择摄像头开始配置')
+  window.addEventListener('resize', resizeCanvas)
 })
 
 onUnmounted(() => {
-  // 清理快捷键
-  unregisterShortcut('save-config')
-  unregisterShortcut('new-region')
+  window.removeEventListener('resize', resizeCanvas)
+})
 
-  // 停止性能监控
-  stopMonitoring()
+// Watchers
+watch(selectedCamera, async (newCamera) => {
+  if (newCamera) {
+    regionStore.setBackgroundImage('')
+    loading.value = true
+
+    try {
+      // Load camera stream or snapshot
+      // This would typically fetch a snapshot from the camera
+      await new Promise(resolve => setTimeout(resolve, 1000)) // Simulate loading
+      drawCanvas()
+    } catch (error) {
+      console.error('Load camera error:', error)
+      message.error('加载摄像头失败')
+    } finally {
+      loading.value = false
+    }
+  }
+})
+
+watch(() => regionStore.backgroundImage, () => {
+  drawCanvas()
+})
+
+watch([showGrid, showLabels], () => {
+  drawCanvas()
 })
 </script>
 
 <style scoped>
 .region-config-page {
-  padding: 20px;
-  min-height: 100vh;
-  background: var(--body-color);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .guide-alert {
-  margin-bottom: 20px;
-}
-
-.guide-content {
-  margin-top: 12px;
+  margin-bottom: 16px;
 }
 
 .guide-content ol {
-  margin: 8px 0;
+  margin: 8px 0 0 0;
   padding-left: 20px;
 }
 
+.guide-content li {
+  margin: 4px 0;
+}
+
 .region-config-content {
-  margin-top: 20px;
-}
-
-.config-panels {
-  display: grid;
-  grid-template-columns: 400px 1fr;
-  gap: 20px;
-  height: calc(100vh - 220px);
-}
-
-.left-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  overflow-y: auto;
-}
-
-.preview-panel {
-  display: flex;
-  flex-direction: column;
-}
-
-.camera-select-card,
-.region-config-card,
-.rules-config-card,
-.preview-card {
-  height: fit-content;
-}
-
-.camera-info {
-  margin-top: 12px;
-  padding: 12px;
-  background: var(--card-color);
-  border-radius: 6px;
-}
-
-.regions-list {
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.region-item {
-  padding: 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  margin-bottom: 8px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.region-item:hover {
-  border-color: var(--primary-color);
-  background: var(--hover-color);
-}
-
-.region-item.active {
-  border-color: var(--primary-color);
-  background: var(--primary-color-hover);
-}
-
-.region-item.disabled {
-  opacity: 0.6;
-}
-
-.region-item.editing {
-  border-color: var(--warning-color);
-  background: var(--warning-color-hover);
-  box-shadow: 0 0 0 2px var(--warning-color-opacity);
-}
-
-.region-item.editing .region-header {
-  position: relative;
-}
-
-.region-item.editing .region-header::before {
-  content: '编辑中';
-  position: absolute;
-  top: -8px;
-  right: 0;
-  background: var(--warning-color);
-  color: white;
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 3px;
-  z-index: 1;
-}
-
-.region-header {
-  margin-bottom: 8px;
-}
-
-.region-info {
-  display: flex;
-  align-items: center;
-}
-
-.region-details {
-  font-size: 12px;
-  color: var(--text-color-3);
-}
-
-.region-issues {
-  margin-top: 4px;
-  color: var(--warning-color);
-}
-
-/* 主布局样式 */
-.main-layout {
-  height: calc(100vh - 120px);
-  min-height: 600px;
-}
-
-.left-panel {
-  padding: 16px;
-  background: var(--body-color);
-  border-right: 1px solid var(--border-color);
-  overflow-y: auto;
-}
-
-.right-panel {
-  padding: 16px;
-  background: var(--body-color);
-}
-
-/* 左侧面板卡片样式 */
-.camera-selection-card,
-.region-config-card,
-.region-list-card,
-.config-management-card {
-  margin-bottom: 16px;
-}
-
-.camera-selection-card:last-child,
-.region-config-card:last-child,
-.region-list-card:last-child,
-.config-management-card:last-child {
-  margin-bottom: 0;
-}
-
-/* 摄像头选择区域 */
-.camera-select-section {
-  margin-bottom: 16px;
-}
-
-.camera-info {
-  margin-top: 12px;
-}
-
-/* 区域配置表单 */
-.region-form {
-  padding: 16px 0;
-}
-
-.form-section {
-  margin-bottom: 16px;
-}
-
-.form-label {
-  display: block;
-  margin-bottom: 8px;
-  font-weight: 500;
-  color: var(--text-color-1);
-}
-
-/* 区域列表 */
-.region-stats {
-  margin-bottom: 16px;
-  padding: 12px;
-  background: var(--card-color);
-  border-radius: 6px;
-  border: 1px solid var(--border-color);
-}
-
-.region-item {
-  padding: 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  margin-bottom: 8px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  background: var(--card-color);
-}
-
-.region-item:hover {
-  border-color: var(--primary-color);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.region-item.selected {
-  border-color: var(--primary-color);
-  background: var(--primary-color-hover);
-}
-
-.region-item.disabled {
-  opacity: 0.6;
-}
-
-.region-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.region-info {
   flex: 1;
-}
-
-.region-actions {
-  display: flex;
-  gap: 4px;
-}
-
-.region-issues {
-  margin-top: 8px;
-  padding: 8px;
-  background: var(--warning-color-hover);
-  border-radius: 4px;
-}
-
-.empty-regions {
-  text-align: center;
-  padding: 32px 16px;
-}
-
-/* 右侧预览区域 */
-.preview-card {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.preview-container {
-  position: relative;
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 400px;
-  background: var(--card-color);
-  border-radius: 6px;
   overflow: hidden;
 }
 
-.preview-container.drawing-mode {
-  cursor: crosshair;
+.config-layout {
+  height: 100%;
 }
 
-.preview-container.has-background {
-  background: #f5f5f5;
+.left-panel {
+  background: white;
+  border-right: 1px solid #e0e0e0;
+}
+
+.left-panel-content {
+  height: 100%;
+  padding: 16px;
+}
+
+.region-tabs {
+  height: 100%;
+}
+
+.region-form {
+  max-width: 100%;
+}
+
+.region-list-section {
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+
+.region-card {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.region-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.region-card-selected {
+  border-color: #2080f0;
+  box-shadow: 0 0 0 2px rgba(32, 128, 240, 0.2);
+}
+
+.region-card-disabled {
+  opacity: 0.6;
+}
+
+.template-section {
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+
+.template-card {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.template-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .canvas-container {
+  background: #f5f5f5;
   position: relative;
+}
+
+.canvas-wrapper {
+  height: 100%;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+}
+
+.canvas-toolbar {
+  background: white;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e0e0e0;
+  flex-shrink: 0;
+}
+
+.canvas-main {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.region-canvas {
   width: 100%;
   height: 100%;
+  cursor: crosshair;
 }
 
-.preview-canvas {
-  max-width: 100%;
-  max-height: 100%;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s ease;
-  transform-origin: center;
-  background: white;
-}
-
-.preview-canvas:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-/* 画布工具栏样式 */
-.canvas-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.canvas-toolbar .n-button {
-  transition: all 0.3s ease;
-}
-
-.canvas-toolbar .n-button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.zoom-display {
-  min-width: 60px;
-  font-weight: 500;
-}
-
-/* 状态标签动画 */
-.n-tag {
-  transition: all 0.3s ease;
-  animation: fadeInScale 0.3s ease-out;
-}
-
-@keyframes fadeInScale {
-  from {
-    opacity: 0;
-    transform: scale(0.8);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-/* 绘制提示样式 */
-.drawing-hint {
+.canvas-overlay {
   position: absolute;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(24, 160, 88, 0.9);
-  color: white;
-  padding: 8px 16px;
-  border-radius: 20px;
-  font-size: 14px;
-  z-index: 10;
-  backdrop-filter: blur(4px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-}
-
-.region-tooltip {
-  position: absolute;
-  z-index: 100;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   pointer-events: none;
-  transform: translate(-50%, -100%);
-  margin-top: -8px;
 }
 
-/* 画布信息显示 */
-.canvas-info {
+.coordinate-display {
   position: absolute;
-  bottom: 16px;
-  right: 16px;
-  background: rgba(255, 255, 255, 0.9);
-  padding: 8px 12px;
-  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
   font-size: 12px;
-  backdrop-filter: blur(4px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  font-family: monospace;
+  z-index: 10;
 }
 
-/* 响应式设计 */
-@media (max-width: 1200px) {
-  .main-layout {
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .left-panel {
-    width: 100%;
-    max-width: none;
-  }
-
-  .right-panel {
-    width: 100%;
-  }
-
-  .preview-container {
-    min-height: 300px;
-  }
-}
-
-@media (max-width: 768px) {
-  .region-config-container {
-    padding: 12px;
-  }
-
-  .main-layout {
-    gap: 12px;
-  }
-
-  .left-panel .arco-card {
-    margin-bottom: 12px;
-  }
-
-  .camera-selection {
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .camera-selection .arco-select {
-    width: 100%;
-  }
-
-  .region-form {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-
-  .region-form .form-row {
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .region-form .form-row .arco-input-number,
-  .region-form .form-row .arco-select {
-    width: 100%;
-  }
-
-  .region-actions {
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .region-actions .arco-btn {
-    width: 100%;
-  }
-
-  .preview-card .arco-card-header {
-    padding: 12px;
-  }
-
-  .preview-card .arco-card-body {
-    padding: 12px;
-  }
-
-  .preview-container {
-    min-height: 250px;
-  }
-
-  .canvas-toolbar {
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .canvas-toolbar .arco-btn-group {
-    flex: 1;
-    min-width: 120px;
-  }
-
-  .drawing-hint {
-    font-size: 12px;
-    padding: 6px 12px;
-  }
-
-  .canvas-info {
-    bottom: 8px;
-    right: 8px;
-    font-size: 11px;
-    padding: 6px 8px;
-  }
-}
-
-@media (max-width: 480px) {
-  .region-config-container {
-    padding: 8px;
-  }
-
-  .main-layout {
-    gap: 8px;
-  }
-
-  .left-panel .arco-card {
-    margin-bottom: 8px;
-  }
-
-  .region-form {
-    gap: 8px;
-  }
-
-  .region-item {
-    padding: 8px;
-  }
-
-  .region-actions {
-    gap: 6px;
-  }
-
-  .preview-container {
-    min-height: 200px;
-  }
-
-  .canvas-toolbar .arco-btn {
-    padding: 4px 8px;
-    font-size: 12px;
-  }
-
-  .drawing-hint {
-    font-size: 11px;
-    padding: 4px 8px;
-  }
-}
-
-/* 平板端适配 */
-@media (min-width: 769px) and (max-width: 1024px) {
-  .main-layout {
-    gap: 20px;
-  }
-
-  .left-panel {
-    width: 400px;
-  }
-
-  .region-form {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .preview-container {
-    min-height: 350px;
-  }
-}
-
-/* 触摸设备优化 */
-@media (hover: none) and (pointer: coarse) {
-  .region-item {
-    padding: 16px;
-  }
-
-  .arco-btn {
-    min-height: 44px;
-    padding: 8px 16px;
-  }
-
-  .canvas-toolbar .arco-btn {
-    min-height: 40px;
-    min-width: 40px;
-  }
-
-  .preview-canvas {
-    cursor: pointer;
-  }
-
-  .preview-container.drawing-mode {
-    cursor: pointer;
-  }
-}
-
-/* 操作引导和反馈样式 */
-.operation-guide {
+.draw-hint {
   position: absolute;
-  top: 16px;
-  left: 16px;
-  right: 16px;
-  z-index: 20;
-}
-
-.feedback-alert {
-  position: absolute;
-  top: 16px;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
-  z-index: 30;
-  min-width: 200px;
-  max-width: 400px;
-  animation: slideDown 0.3s ease-out;
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
-}
-
-/* 空状态样式 */
-.canvas-empty-state {
-  padding: 60px 20px;
-}
-
-.no-camera-placeholder {
+  transform: translate(-50%, -50%);
+  background: rgba(32, 128, 240, 0.9);
+  color: white;
+  padding: 16px 24px;
+  border-radius: 8px;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  min-height: 400px;
-}
+   align-items: center;
+   gap: 8px;
+   font-size: 14px;
+   z-index: 10;
+ }
 
-/* 响应式设计 */
-@media (max-width: 1200px) {
-  .main-layout .n-layout-sider {
-    width: 350px !important;
-  }
-}
+ .canvas-loading {
+   position: absolute;
+   top: 0;
+   left: 0;
+   right: 0;
+   bottom: 0;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   background: rgba(255, 255, 255, 0.8);
+   z-index: 20;
+ }
 
-@media (max-width: 768px) {
-  .region-config-page {
-    padding: 12px;
-  }
+ .canvas-empty {
+   position: absolute;
+   top: 0;
+   left: 0;
+   right: 0;
+   bottom: 0;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   background: #f5f5f5;
+ }
 
-  .main-layout {
-    height: auto;
-    flex-direction: column;
-  }
+ /* 响应式设计 */
+ @media (max-width: 1200px) {
+   .config-layout .n-layout-sider {
+     width: 350px !important;
+   }
+ }
 
-  .main-layout .n-layout-sider {
-    width: 100% !important;
-    order: 2;
-  }
+ @media (max-width: 768px) {
+   .region-config-page {
+     padding: 12px;
+   }
 
-  .right-panel {
-    order: 1;
-    min-height: 300px;
-  }
+   .config-layout {
+     flex-direction: column;
+   }
 
-  .left-panel {
-    padding: 12px;
-  }
+   .left-panel {
+     width: 100% !important;
+     order: 2;
+   }
 
-  .camera-selection-card,
-  .region-config-card,
-  .region-list-card,
-  .config-management-card {
-    margin-bottom: 12px;
-  }
-}
+   .canvas-container {
+     order: 1;
+     min-height: 300px;
+   }
 
-/* 高对比度模式 */
-@media (prefers-contrast: high) {
-  .region-item {
-    border-width: 2px;
-  }
+   .left-panel-content {
+     padding: 12px;
+   }
+ }
 
-  .preview-canvas {
-    border-width: 2px;
-  }
-}
+ /* 高对比度模式 */
+ @media (prefers-contrast: high) {
+   .region-card {
+     border-width: 2px;
+   }
 
-/* 减少动画模式 */
-@media (prefers-reduced-motion: reduce) {
-  .region-item {
-    transition: none;
-  }
-}
-</style>
+   .region-canvas {
+     border-width: 2px;
+   }
+ }
+
+ /* 减少动画模式 */
+ @media (prefers-reduced-motion: reduce) {
+   .region-card {
+     transition: none;
+   }
+
+   .template-card {
+     transition: none;
+   }
+ }
+ </style>

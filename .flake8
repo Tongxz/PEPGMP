@@ -135,7 +135,6 @@ extend-ignore =
     D415,
 
 # Quotes configuration
-inline-quotes = double
 multiline-quotes = double
 docstring-quotes = double
 avoid-escape = True
