@@ -1,21 +1,29 @@
+#!/usr/bin/env python3
+"""API routes for camera configuration and control."""
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any, Dict, List
 
+import cv2
+import yaml
 from fastapi import APIRouter, HTTPException, Path
 from fastapi.responses import Response
-import cv2
-import numpy as np
-import yaml
 
+from src.services.process_manager import get_process_manager
 
 router = APIRouter()
+# 为本模块创建 logger，避免未定义引用导致 500
+logger = logging.getLogger(__name__)
 
 
 def _project_root() -> str:
-    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    return os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    )
 
 
 def _cameras_path() -> str:
@@ -35,20 +43,35 @@ def _read_yaml(path: str) -> Dict[str, Any]:
 def _write_yaml(path: str, data: Dict[str, Any]) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     # 原子写
-    with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False, dir=os.path.dirname(path)) as tf:
+    with tempfile.NamedTemporaryFile(
+        "w", encoding="utf-8", delete=False, dir=os.path.dirname(path)
+    ) as tf:
         yaml.safe_dump(data, tf, allow_unicode=True, sort_keys=False)
         tmp_name = tf.name
     os.replace(tmp_name, path)
 
 
-@router.get("/api/v1/cameras")
+@router.get("/cameras")
 def list_cameras() -> Dict[str, Any]:
+    """获取所有已配置的摄像头列表.
+
+    Returns:
+        一个包含所有摄像头配置列表的字典.
+    """
     data = _read_yaml(_cameras_path())
     return {"cameras": data.get("cameras", [])}
 
 
-@router.post("/api/v1/cameras")
+@router.post("/cameras")
 def create_camera(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """创建一个新的摄像头配置.
+
+    Args:
+        payload: 包含新摄像头信息的字典.
+
+    Returns:
+        一个表示操作成功的字典，包含新创建的摄像头信息.
+    """
     required = ["id", "name", "source"]
     for k in required:
         if k not in payload:
@@ -63,35 +86,59 @@ def create_camera(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {"ok": True, "camera": payload}
 
 
-@router.put("/api/v1/cameras/{camera_id}")
-def update_camera(camera_id: str = Path(...), payload: Dict[str, Any] = {}) -> Dict[str, Any]:
+@router.put("/cameras/{camera_id}")
+def update_camera(
+    camera_id: str = Path(...), payload: Dict[str, Any] = {}
+) -> Dict[str, Any]:
+    """更新指定摄像头的配置.
+
+    Args:
+        camera_id: 要更新的摄像头的ID.
+        payload: 包含要更新的字段的字典.
+
+    Returns:
+        一个表示操作成功的字典.
+    """
     data = _read_yaml(_cameras_path())
-    cams: List[Dict[str, Any]] = list(data.get("cameras", []))
-    for i, cam in enumerate(cams):
-        if str(cam.get("id")) == camera_id:
-            updated = {**cam, **payload, "id": camera_id}
-            cams[i] = updated
-            data["cameras"] = cams
+    cameras = data.get("cameras", [])
+    for i, cam in enumerate(cameras):
+        if cam.get("id") == camera_id:
+            cameras[i].update(payload)
             _write_yaml(_cameras_path(), data)
-            return {"ok": True, "camera": updated}
+            return {"status": "success"}
     raise HTTPException(status_code=404, detail="Camera not found")
 
 
-@router.delete("/api/v1/cameras/{camera_id}")
+@router.delete("/cameras/{camera_id}")
 def delete_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
+    """删除指定摄像头的配置.
+
+    Args:
+        camera_id: 要删除的摄像头的ID.
+
+    Returns:
+        一个表示操作成功的字典.
+    """
     data = _read_yaml(_cameras_path())
-    cams: List[Dict[str, Any]] = list(data.get("cameras", []))
-    new_cams = [c for c in cams if str(c.get("id")) != camera_id]
-    if len(new_cams) == len(cams):
-        raise HTTPException(status_code=404, detail="Camera not found")
-    data["cameras"] = new_cams
-    _write_yaml(_cameras_path(), data)
-    return {"ok": True}
+    cameras = data.get("cameras", [])
+    for i, cam in enumerate(cameras):
+        if cam.get("id") == camera_id:
+            del cameras[i]
+            _write_yaml(_cameras_path(), data)
+            return {"status": "success"}
+    raise HTTPException(status_code=404, detail="Camera not found")
 
 
-@router.get("/api/v1/cameras/{camera_id}/preview")
-def preview_camera(camera_id: str = Path(...)) -> Response:
-    """返回指定摄像头的一帧 JPEG 预览。"""
+@router.get("/cameras/{camera_id}/preview")
+def preview_camera(camera_id: str = Path(...)) -> Response:  # noqa: C901
+    """返回指定摄像头的一帧 JPEG 预览.
+
+    Args:
+        camera_id: 目标摄像头的ID.
+
+    Returns:
+        一个包含JPEG图像数据的 StreamingResponse.
+    """
     data = _read_yaml(_cameras_path())
     cams: List[Dict[str, Any]] = list(data.get("cameras", []))
     cam = next((c for c in cams if str(c.get("id")) == camera_id), None)
@@ -119,47 +166,121 @@ def preview_camera(camera_id: str = Path(...)) -> Response:
         res = str(cam.get("resolution", "")).lower()
         if "x" in res:
             try:
-                w, h = res.split("x", 1)
-                w = int(w); h = int(h)
+                w_str, h_str = res.split("x", 1)
+                w = int(w_str)
+                h = int(h_str)
                 if w > 0 and h > 0:
                     frame = cv2.resize(frame, (w, h))
             except Exception:
-                pass
-        ok, buf = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+                # Ignore errors if resolution is invalid, proceed with original frame.
+                pass  # nosec B110
+        ok, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
         if not ok:
             raise HTTPException(status_code=500, detail="JPEG encode failed")
-        return Response(content=buf.tobytes(), media_type='image/jpeg')
+        return Response(content=buf.tobytes(), media_type="image/jpeg")
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Preview error: {e}")
 
 
-# --- 新增：进程控制路由 ---
-from src.services.process_manager import get_process_manager
-
-
-@router.post("/api/v1/cameras/{camera_id}/start")
+@router.post("/cameras/{camera_id}/start")
 def start_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
+    """启动指定摄像头的检测进程.
+
+    Args:
+        camera_id: 目标摄像头的ID.
+
+    Returns:
+        一个包含操作结果和进程信息的字典.
+    """
     pm = get_process_manager()
-    return pm.start(camera_id)
+    res = pm.start(camera_id)
+    if not res.get("ok"):
+        logger.error(f"Failed to start camera {camera_id}: {res}")
+        raise HTTPException(
+            status_code=400, detail=res.get("error") or "Failed to start camera"
+        )
+    logger.info(
+        f"Started camera {camera_id}: pid={res.get('pid')} log={res.get('log')}"
+    )
+    return res
 
 
-@router.post("/api/v1/cameras/{camera_id}/stop")
+@router.post("/cameras/{camera_id}/stop")
 def stop_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
+    """停止指定摄像头的检测进程.
+
+    Args:
+        camera_id: 目标摄像头的ID.
+
+    Returns:
+        一个包含操作结果的字典.
+    """
     pm = get_process_manager()
-    return pm.stop(camera_id)
+    res = pm.stop(camera_id)
+    if not res.get("ok"):
+        logger.error(f"Failed to stop camera {camera_id}: {res}")
+        raise HTTPException(
+            status_code=400, detail=res.get("error") or "Failed to stop camera"
+        )
+    logger.info(f"Stopped camera {camera_id}")
+    return res
 
 
-@router.post("/api/v1/cameras/{camera_id}/restart")
+@router.post("/cameras/{camera_id}/restart")
 def restart_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
+    """重启指定摄像头的检测进程.
+
+    Args:
+        camera_id: 目标摄像头的ID.
+
+    Returns:
+        一个包含操作结果和新进程信息的字典.
+    """
     pm = get_process_manager()
-    return pm.restart(camera_id)
+    res = pm.restart(camera_id)
+    if not res.get("ok"):
+        logger.error(f"Failed to restart camera {camera_id}: {res}")
+        raise HTTPException(
+            status_code=400, detail=res.get("error") or "Failed to restart camera"
+        )
+    logger.info(
+        f"Restarted camera {camera_id}: pid={res.get('pid')} log={res.get('log')}"
+    )
+    return res
 
 
-@router.get("/api/v1/cameras/{camera_id}/status")
+@router.get("/cameras/{camera_id}/status")
 def status_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
+    """获取指定摄像头检测进程的状态.
+
+    Args:
+        camera_id: 目标摄像头的ID.
+
+    Returns:
+        一个包含进程运行状态和PID的字典.
+    """
     pm = get_process_manager()
-    return pm.status(camera_id)
+    res = pm.status(camera_id)
+    logger.info(
+        f"Status camera {camera_id}: running={res.get('running')} pid={res.get('pid')}"
+    )
+    return res
 
 
+@router.post("/cameras/refresh")
+def refresh_all_cameras() -> Dict[str, Any]:
+    """刷新所有摄像头状态（占位实现）.
+
+    前端仅用来触发状态刷新流程，随后会重新获取摄像头列表.
+    这里返回简单的确认信息即可，未来可在此集成真实状态探测/进程同步.
+
+    Returns:
+        一个表示操作成功的确认信息字典.
+    """
+    return {
+        "status": "success",
+        "message": "All camera statuses refreshed",
+        "timestamp": datetime.now().isoformat(),
+    }

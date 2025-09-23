@@ -1,0 +1,65 @@
+version: "3.8"
+
+services:
+  # 生产模式下的API服务
+  api:
+    build:
+      context: .
+      # 使用我们优化过的生产Dockerfile
+      dockerfile: Dockerfile
+    container_name: hbd-api-prod
+    ports:
+      - "8000:8000"
+    # 生产模式下，只挂载持久化数据目录
+    volumes:
+      - ./config:/app/config:ro # 配置以只读方式挂载，更安全
+      - ./logs:/app/logs
+      - ./output:/app/output
+    environment:
+      - ENVIRONMENT=production
+    restart: unless-stopped
+    healthcheck:
+      # 使用Dockerfile中定义的健康检查
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - hbd-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all # 生产环境使用所有可用的GPU
+              capabilities: [gpu]
+
+  # 生产模式下的检测进程 (Supervisor)
+  supervisor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hbd-supervisor-prod
+    # supervisor不需要暴露端口
+    volumes:
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+      - ./output:/app/output
+    # 覆盖默认命令，以supervisor模式启动
+    command: python main.py --mode supervisor
+    environment:
+      - ENVIRONMENT=production
+    restart: unless-stopped
+    networks:
+      - hbd-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+networks:
+  hbd-network:
+    driver: bridge

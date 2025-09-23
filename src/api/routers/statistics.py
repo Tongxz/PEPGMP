@@ -1,12 +1,13 @@
+#!/usr/bin/env python3
 """统计信息路由模块.
 
 提供统计数据和违规记录的API端点.
 """
+import json
 import logging
 import os
-import json
 from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Query
 
@@ -16,51 +17,22 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-@router.get("/statistics")
-def get_statistics(region_service: RegionService = Depends(get_region_service)):
-    """获取统计信息.
-
-    Args:
-        region_service: 区域服务依赖项
-
-    Returns:
-        统计信息数据
-    """
-    # This is a placeholder for statistics logic
-    # In a real application, this would query a database or a metrics service
-    return {"message": "Statistics endpoint"}
-
-
-@router.get("/violations")
-def get_violations(region_service: RegionService = Depends(get_region_service)):
-    """获取违规记录.
-
-    Args:
-        region_service: 区域服务依赖项
-
-    Returns:
-        违规记录数据
-    """
-    # This is a placeholder for violation retrieval logic
-    return {"message": "Violations endpoint"}
-
-
 @router.get("/statistics/realtime", summary="实时统计接口")
 def get_realtime_statistics(
-    region_service: RegionService = Depends(get_region_service)
+    region_service: RegionService = Depends(get_region_service),
 ) -> Dict[str, Any]:
     """获取实时统计信息.
 
     Args:
-        region_service: 区域服务依赖项
+        region_service: 区域服务依赖项.
 
     Returns:
-        实时统计数据，包括当前检测状态、违规统计等
+        实时统计数据，包括当前检测状态、违规统计等.
     """
     try:
         # 获取当前时间
         current_time = datetime.now()
-        
+
         # 实时统计数据结构
         realtime_stats = {
             "timestamp": current_time.isoformat(),
@@ -70,35 +42,29 @@ def get_realtime_statistics(
                 "handwashing_detections": 0,
                 "disinfection_detections": 0,
                 "hairnet_detections": 0,
-                "violation_count": 0
+                "violation_count": 0,
             },
-            "region_stats": {
-                "active_regions": 0,
-                "monitored_areas": []
-            },
+            "region_stats": {"active_regions": 0, "monitored_areas": []},
             "performance_metrics": {
                 "average_processing_time": 0.0,
                 "detection_accuracy": 0.0,
-                "system_uptime": "00:00:00"
+                "system_uptime": "00:00:00",
             },
-            "alerts": {
-                "active_alerts": 0,
-                "recent_violations": []
-            }
+            "alerts": {"active_alerts": 0, "recent_violations": []},
         }
-        
+
         # 如果区域服务可用，获取区域相关统计
         if region_service:
             try:
                 # 这里可以添加从区域服务获取实际数据的逻辑
-                realtime_stats["region_stats"]["active_regions"] = 1
-                realtime_stats["region_stats"]["monitored_areas"] = ["默认区域"]
+                realtime_stats["region_stats"]["active_regions"] = 1  # type: ignore
+                realtime_stats["region_stats"]["monitored_areas"] = ["默认区域"]  # type: ignore
             except Exception as e:
                 logger.warning(f"获取区域统计失败: {e}")
-        
+
         logger.info("成功获取实时统计数据")
         return realtime_stats
-        
+
     except Exception as e:
         logger.exception(f"获取实时统计失败: {e}")
         # 返回错误状态但不抛出异常，保证接口可用性
@@ -109,12 +75,14 @@ def get_realtime_statistics(
             "detection_stats": {},
             "region_stats": {},
             "performance_metrics": {},
-            "alerts": {}
+            "alerts": {},
         }
 
 
-def _read_recent_events(max_lines: int = 5000) -> List[Dict[str, Any]]:
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+def _read_recent_events(max_lines: int = 5000) -> List[Dict[str, Any]]:  # noqa: C901
+    project_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    )
     events_file = os.path.join(project_root, "logs", "events_record.jsonl")
     out: List[Dict[str, Any]] = []
     if not os.path.exists(events_file):
@@ -155,9 +123,17 @@ def get_statistics_summary(
     limit: int = Query(1000, ge=1, le=10000),
     camera_id: Optional[str] = Query(None, description="按摄像头过滤（可选）"),
 ) -> Dict[str, Any]:
-    """返回最近 N 分钟内的事件统计与分布。
+    """返回最近 N 分钟内的事件统计与分布.
 
-    可选参数 camera_id 用于仅统计指定摄像头的事件。
+    可选参数 camera_id 用于仅统计指定摄像头的事件.
+
+    Args:
+        minutes: 要查询的最近分钟数.
+        limit: 返回样本的最大数量.
+        camera_id: (可选) 要筛选的摄像头ID.
+
+    Returns:
+        一个包含统计信息的字典.
     """
     rows = _read_recent_events(max_lines=max(limit * 2, 2000))
     since_ts = (datetime.utcnow() - timedelta(minutes=minutes)).timestamp()
@@ -194,12 +170,19 @@ def get_statistics_daily(
     days: int = Query(7, ge=1, le=90),
     camera_id: Optional[str] = Query(None, description="按摄像头过滤（可选）"),
 ) -> List[Dict[str, Any]]:
-    """返回最近 N 天内的每日事件统计。
+    """返回最近 N 天内的每日事件统计.
 
     输出：[{date: 'YYYY-MM-DD', total_events: int, counts_by_type: {etype: count}}]
+
+    Args:
+        days: 要查询的最近天数.
+        camera_id: (可选) 要筛选的摄像头ID.
+
+    Returns:
+        一个包含每日统计信息的列表.
     """
     rows = _read_recent_events(max_lines=200000)
-    from datetime import timezone
+
     # 构建最近 N 天日期集合（UTC）
     today = datetime.utcnow().date()
     days_set = {str((today - timedelta(days=i))) for i in range(days)}
@@ -224,13 +207,15 @@ def get_statistics_daily(
             continue
     # 组装输出（按日期升序）
     out: List[Dict[str, Any]] = []
-    for i in range(days-1, -1, -1):
+    for i in range(days - 1, -1, -1):
         dstr = str(today - timedelta(days=i))
-        out.append({
-            "date": dstr,
-            "total_events": int(total_day.get(dstr, 0)),
-            "counts_by_type": per_day.get(dstr, {}),
-        })
+        out.append(
+            {
+                "date": dstr,
+                "total_events": int(total_day.get(dstr, 0)),
+                "counts_by_type": per_day.get(dstr, {}),
+            }
+        )
     return out
 
 
@@ -240,7 +225,16 @@ def get_statistics_history(
     limit: int = Query(100, ge=1, le=1000),
     camera_id: Optional[str] = Query(None, description="按摄像头过滤（可选）"),
 ) -> List[Dict[str, Any]]:
-    """返回近期事件列表，按时间倒序。"""
+    """返回近期事件列表，按时间倒序.
+
+    Args:
+        minutes: 要查询的最近分钟数.
+        limit: 返回事件的最大数量.
+        camera_id: (可选) 要筛选的摄像头ID.
+
+    Returns:
+        一个包含事件详细信息的列表.
+    """
     rows = _read_recent_events(max_lines=max(limit * 5, 2000))
     since_ts = (datetime.utcnow() - timedelta(minutes=minutes)).timestamp()
     out: List[Dict[str, Any]] = []
@@ -250,14 +244,16 @@ def get_statistics_history(
                 continue
             if camera_id is not None and str(r.get("camera_id", "")) != str(camera_id):
                 continue
-            out.append({
-                "ts": r.get("ts"),
-                "camera_id": r.get("camera_id"),
-                "type": r.get("type"),
-                "track_id": r.get("track_id"),
-                "region": (r.get("evidence", {}) or {}).get("region"),
-                "detail": r.get("evidence", {}),
-            })
+            out.append(
+                {
+                    "ts": r.get("ts"),
+                    "camera_id": r.get("camera_id"),
+                    "type": r.get("type"),
+                    "track_id": r.get("track_id"),
+                    "region": (r.get("evidence", {}) or {}).get("region"),
+                    "detail": r.get("evidence", {}),
+                }
+            )
             if len(out) >= limit:
                 break
         except Exception:
