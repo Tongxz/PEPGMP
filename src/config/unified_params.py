@@ -184,7 +184,12 @@ class UnifiedParams:
         # 新增：默认运行期配置（与 YAML 对齐）
         self.inference = {"profile": "fast"}
         self.runtime = {"frame_skip": 1, "osd_minimal": True, "log_interval": 120}
-        self.cascade = {"enable": False, "heavy_weights": None, "trigger_confidence_range": None, "trigger_roi": None}
+        self.cascade = {
+            "enable": False,
+            "heavy_weights": None,
+            "trigger_confidence_range": None,
+            "trigger_roi": None,
+        }
         self.profiles = {"fast": {}, "balanced": {}, "accurate": {}}
         self.process = {}
         self.capture = {}
@@ -311,10 +316,16 @@ class UnifiedParams:
         env_profile = (env or os.getenv("HBD_PROFILE", "")).strip().lower()
         return env_profile or str(self.inference.get("profile", "fast"))
 
-    def build_effective_config(self, profile: Optional[str] = None, cli_overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def build_effective_config(
+        self,
+        profile: Optional[str] = None,
+        cli_overrides: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         """生成合并后的有效配置（基础 + profiles[profile] + CLI 覆盖）。"""
         prof = (profile or self.get_profile_name()).strip().lower()
-        prof_dict = self.profiles.get(prof, {}) if isinstance(self.profiles, dict) else {}
+        prof_dict = (
+            self.profiles.get(prof, {}) if isinstance(self.profiles, dict) else {}
+        )
         # 基础块合并
         merged = {
             "human_detection": asdict(self.human_detection),

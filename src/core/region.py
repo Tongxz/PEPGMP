@@ -125,8 +125,10 @@ class Region:
         # 预过滤：若与区域AABB有足够重叠则快速判定True；否则继续用中心点/顶点判定
         try:
             ax1, ay1, ax2, ay2 = self._aabb
-            ix1 = max(float(x1), ax1); iy1 = max(float(y1), ay1)
-            ix2 = min(float(x2), ax2); iy2 = min(float(y2), ay2)
+            ix1 = max(float(x1), ax1)
+            iy1 = max(float(y1), ay1)
+            ix2 = min(float(x2), ax2)
+            iy2 = min(float(y2), ay2)
             if ix2 > ix1 and iy2 > iy1:
                 inter = (ix2 - ix1) * (iy2 - iy1)
                 area_bbox = max(1.0, float(x2 - x1) * float(y2 - y1))
@@ -218,10 +220,10 @@ class RegionManager:
         self.region_occupancy = {}  # region_id -> set of track_ids
         self.track_regions = {}  # track_id -> set of region_ids
         self.meta = {
-            "canvas_size": None,      # {width:int,height:int}
+            "canvas_size": None,  # {width:int,height:int}
             "background_size": None,  # {width:int,height:int}
-            "fit_mode": None,         # 'contain'|'cover'|'stretch'
-            "ref_size": None          # 'WxH' string
+            "fit_mode": None,  # 'contain'|'cover'|'stretch'
+            "ref_size": None,  # 'WxH' string
         }
 
         logger.info("RegionManager initialized")
@@ -468,14 +470,20 @@ class RegionManager:
                 try:
                     r_type = region_data.get("type") or region_data.get("region_type")
                     r_id = region_data.get("id") or region_data.get("region_id")
-                    r_points = region_data.get("points") or region_data.get("polygon") or []
+                    r_points = (
+                        region_data.get("points") or region_data.get("polygon") or []
+                    )
                     r_name = region_data.get("name", "")
-                    r_active = region_data.get("is_active", region_data.get("isActive", True))
+                    r_active = region_data.get(
+                        "is_active", region_data.get("isActive", True)
+                    )
                     r_rules = region_data.get("rules", {})
                     r_stats = region_data.get("stats", None)
 
                     if not r_type or not r_id or not r_points:
-                        raise ValueError("Region missing required fields (type/id/points)")
+                        raise ValueError(
+                            "Region missing required fields (type/id/points)"
+                        )
 
                     # 规范化多边形点：支持 [{"x":..,"y":..}] 或 [[x,y]]/[(x,y)]，保留为浮点以便后续按帧尺寸缩放
                     norm_points = []
@@ -496,10 +504,14 @@ class RegionManager:
                                 try:
                                     v = float(v)
                                 except Exception:
-                                    raise ValueError(f"Invalid numeric string in point: {v}")
+                                    raise ValueError(
+                                        f"Invalid numeric string in point: {v}"
+                                    )
                             if isinstance(v, (int, float)):
                                 return float(v)
-                            raise ValueError(f"Invalid point coordinate type: {type(v)}")
+                            raise ValueError(
+                                f"Invalid point coordinate type: {type(v)}"
+                            )
 
                         norm_points.append((_to_float(x), _to_float(y)))
 
@@ -544,13 +556,21 @@ class RegionManager:
             bs = meta.get("background_size") or {}
             fit = meta.get("fit_mode") or "contain"
             ref = meta.get("ref_size") or None
-            if all(k in cs for k in ("width", "height")) and all(k in bs for k in ("width", "height")):
-                cw = int(cs.get("width") or 0); ch = int(cs.get("height") or 0)
-                bw = int(bs.get("width") or 0); bh = int(bs.get("height") or 0)
+            if all(k in cs for k in ("width", "height")) and all(
+                k in bs for k in ("width", "height")
+            ):
+                cw = int(cs.get("width") or 0)
+                ch = int(cs.get("height") or 0)
+                bw = int(bs.get("width") or 0)
+                bh = int(bs.get("height") or 0)
                 if cw > 0 and ch > 0 and bw > 0 and bh > 0:
-                    self.scale_from_canvas_and_bg(cw, ch, bw, bh, frame_width, frame_height, fit_mode=str(fit))
+                    self.scale_from_canvas_and_bg(
+                        cw, ch, bw, bh, frame_width, frame_height, fit_mode=str(fit)
+                    )
                     try:
-                        self._last_mapping = f"canvas_bg_fit(cw={cw},ch={ch},bw={bw},bh={bh},fit={fit})"
+                        self._last_mapping = (
+                            f"canvas_bg_fit(cw={cw},ch={ch},bw={bw},bh={bh},fit={fit})"
+                        )
                     except Exception:
                         pass
                     return
@@ -592,7 +612,7 @@ class RegionManager:
             min_x = 1e18
             min_y = 1e18
             for r in self.regions.values():
-                for (x, y) in r.polygon:
+                for x, y in r.polygon:
                     max_x = max(max_x, float(x))
                     max_y = max(max_y, float(y))
                     min_x = min(min_x, float(x))
@@ -604,7 +624,7 @@ class RegionManager:
             def _apply_scale(sx: float, sy: float):
                 for r in self.regions.values():
                     new_poly = []
-                    for (x, y) in r.polygon:
+                    for x, y in r.polygon:
                         nx = float(x) * sx
                         ny = float(y) * sy
                         new_poly.append((nx, ny))
@@ -617,7 +637,9 @@ class RegionManager:
             # 情况一：归一化坐标
             if max_x <= 1.0 and max_y <= 1.0 and min_x >= 0.0 and min_y >= 0.0:
                 _apply_scale(W, H)
-                logger.info(f"Regions scaled from normalized coords to frame size W={W}, H={H}")
+                logger.info(
+                    f"Regions scaled from normalized coords to frame size W={W}, H={H}"
+                )
                 self._scaled_once = True
                 return
 
@@ -626,7 +648,9 @@ class RegionManager:
                 sx = W / max_x if max_x > 0 else 1.0
                 sy = H / max_y if max_y > 0 else 1.0
                 _apply_scale(sx, sy)
-                logger.info(f"Regions scaled from larger reference (max=({max_x:.1f},{max_y:.1f})) to frame ({W:.0f},{H:.0f}) with sx={sx:.4f}, sy={sy:.4f}")
+                logger.info(
+                    f"Regions scaled from larger reference (max=({max_x:.1f},{max_y:.1f})) to frame ({W:.0f},{H:.0f}) with sx={sx:.4f}, sy={sy:.4f}"
+                )
                 self._scaled_once = True
                 return
 
@@ -635,17 +659,23 @@ class RegionManager:
                 sx = W / max_x if max_x > 0 else 1.0
                 sy = H / max_y if max_y > 0 else 1.0
                 _apply_scale(sx, sy)
-                logger.info(f"Regions scaled up from smaller reference (max=({max_x:.1f},{max_y:.1f})) to frame ({W:.0f},{H:.0f}) with sx={sx:.4f}, sy={sy:.4f}")
+                logger.info(
+                    f"Regions scaled up from smaller reference (max=({max_x:.1f},{max_y:.1f})) to frame ({W:.0f},{H:.0f}) with sx={sx:.4f}, sy={sy:.4f}"
+                )
                 self._scaled_once = True
                 return
 
             # 情况四：已是像素坐标且与帧相近，无需缩放
-            logger.info("Regions appear to be in pixel coordinates; no scaling applied.")
+            logger.info(
+                "Regions appear to be in pixel coordinates; no scaling applied."
+            )
             self._scaled_once = True
         except Exception as e:
             logger.warning(f"scale_to_frame_if_needed failed: {e}")
 
-    def scale_from_reference(self, ref_width: int, ref_height: int, frame_width: int, frame_height: int):
+    def scale_from_reference(
+        self, ref_width: int, ref_height: int, frame_width: int, frame_height: int
+    ):
         """按指定参考分辨率缩放到当前帧分辨率。
 
         用于前端标注在 ref_width x ref_height 画布下保存的像素坐标，
@@ -664,7 +694,7 @@ class RegionManager:
             sy = float(frame_height) / float(ref_height)
             for r in self.regions.values():
                 new_poly = []
-                for (x, y) in r.polygon:
+                for x, y in r.polygon:
                     nx = float(x) * sx
                     ny = float(y) * sy
                     new_poly.append((nx, ny))
@@ -674,14 +704,22 @@ class RegionManager:
                 except Exception:
                     pass
             self._scaled_once = True
-            logger.info(f"Regions scaled from reference ({ref_width}x{ref_height}) to frame ({frame_width}x{frame_height}) with sx={sx:.4f}, sy={sy:.4f}")
+            logger.info(
+                f"Regions scaled from reference ({ref_width}x{ref_height}) to frame ({frame_width}x{frame_height}) with sx={sx:.4f}, sy={sy:.4f}"
+            )
         except Exception as e:
             logger.warning(f"scale_from_reference failed: {e}")
 
-    def scale_from_canvas_and_bg(self, canvas_width: int, canvas_height: int,
-                                 bg_width: int, bg_height: int,
-                                 frame_width: int, frame_height: int,
-                                 fit_mode: str = "contain"):
+    def scale_from_canvas_and_bg(
+        self,
+        canvas_width: int,
+        canvas_height: int,
+        bg_width: int,
+        bg_height: int,
+        frame_width: int,
+        frame_height: int,
+        fit_mode: str = "contain",
+    ):
         """将基于前端画布坐标标注的区域，映射到当前视频帧坐标。
 
         参数:
@@ -697,15 +735,22 @@ class RegionManager:
         try:
             if not self.regions:
                 return
-            if canvas_width <= 0 or canvas_height <= 0 or bg_width <= 0 or bg_height <= 0:
+            if (
+                canvas_width <= 0
+                or canvas_height <= 0
+                or bg_width <= 0
+                or bg_height <= 0
+            ):
                 logger.warning("scale_from_canvas_and_bg ignored: invalid sizes")
                 return
             if getattr(self, "_scaled_once", False):
                 logger.info("Regions already scaled; skip scale_from_canvas_and_bg")
                 return
 
-            cw = float(canvas_width); ch = float(canvas_height)
-            bw = float(bg_width); bh = float(bg_height)
+            cw = float(canvas_width)
+            ch = float(canvas_height)
+            bw = float(bg_width)
+            bh = float(bg_height)
 
             if fit_mode not in ("contain", "cover", "stretch"):
                 fit_mode = "contain"
@@ -738,7 +783,7 @@ class RegionManager:
 
             for r in self.regions.values():
                 new_poly = []
-                for (x, y) in r.polygon:
+                for x, y in r.polygon:
                     nx, ny = _map_point(x, y)
                     new_poly.append((nx, ny))
                 r.polygon = new_poly
@@ -748,7 +793,9 @@ class RegionManager:
                     pass
 
             self._scaled_once = True
-            logger.info(f"Regions mapped from canvas({canvas_width}x{canvas_height}, fit={fit_mode}) with bg({bg_width}x{bg_height}) to frame({frame_width}x{frame_height}).")
+            logger.info(
+                f"Regions mapped from canvas({canvas_width}x{canvas_height}, fit={fit_mode}) with bg({bg_width}x{bg_height}) to frame({frame_width}x{frame_height})."
+            )
         except Exception as e:
             logger.warning(f"scale_from_canvas_and_bg failed: {e}")
 

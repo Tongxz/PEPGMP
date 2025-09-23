@@ -69,10 +69,17 @@ class MultiObjectTracker:
     基于IoU匹配的简单追踪算法
     """
 
-    def __init__(self, max_disappeared: int = 10, iou_threshold: float = 0.3,
-                 dist_threshold: float = 200.0, match_strategy: str = "hungarian",
-                 iou_weight: float = 0.6, recycle_ids: bool = False,
-                 force_revival: bool = False, force_revival_dist: Optional[float] = None):
+    def __init__(
+        self,
+        max_disappeared: int = 10,
+        iou_threshold: float = 0.3,
+        dist_threshold: float = 200.0,
+        match_strategy: str = "hungarian",
+        iou_weight: float = 0.6,
+        recycle_ids: bool = False,
+        force_revival: bool = False,
+        force_revival_dist: Optional[float] = None,
+    ):
         """
         初始化追踪器
 
@@ -89,7 +96,11 @@ class MultiObjectTracker:
         self.iou_weight = iou_weight  # 0..1, remaining weight for distance
         self.recycle_ids = recycle_ids
         self.force_revival = force_revival
-        self.force_revival_dist = force_revival_dist if force_revival_dist is not None else dist_threshold * 1.5
+        self.force_revival_dist = (
+            force_revival_dist
+            if force_revival_dist is not None
+            else dist_threshold * 1.5
+        )
         self._recycle_pool: List[int] = []
 
         logger.info(
@@ -151,7 +162,10 @@ class MultiObjectTracker:
                 iou = self.calculate_iou(predicted_bbox, detection["bbox"])
                 iou_matrix[i, j] = iou
                 # 计算中心距离
-                tx, ty = ((predicted_bbox[0] + predicted_bbox[2]) / 2.0, (predicted_bbox[1] + predicted_bbox[3]) / 2.0)
+                tx, ty = (
+                    (predicted_bbox[0] + predicted_bbox[2]) / 2.0,
+                    (predicted_bbox[1] + predicted_bbox[3]) / 2.0,
+                )
                 db = detection["bbox"]
                 dx, dy = ((db[0] + db[2]) / 2.0, (db[1] + db[3]) / 2.0)
                 dist_matrix[i, j] = np.hypot(tx - dx, ty - dy)
@@ -160,7 +174,10 @@ class MultiObjectTracker:
         # 注意：匈牙利算法求最小代价
         if len(track_ids) > 0 and len(detections) > 0:
             norm_dist = np.clip(dist_matrix / max(1e-5, self.dist_threshold), 0.0, 1.0)
-            cost_matrix = self.iou_weight * (1.0 - iou_matrix) + (1.0 - self.iou_weight) * norm_dist
+            cost_matrix = (
+                self.iou_weight * (1.0 - iou_matrix)
+                + (1.0 - self.iou_weight) * norm_dist
+            )
         else:
             cost_matrix = np.zeros_like(iou_matrix)
 
@@ -181,7 +198,9 @@ class MultiObjectTracker:
         unmatched_track_ids = {track_ids[idx] for idx in unmatched_track_indices}
 
         # 尝试“距离复活”：优先复用本帧未匹配的旧track，其次复活非active的track；否则创建新track
-        unmatched_detections = list(set(range(len(detections))) - set(matched_detections))
+        unmatched_detections = list(
+            set(range(len(detections))) - set(matched_detections)
+        )
         revived_infos = []  # 收集本帧复活并更新的track信息，纳入输出
         revived_track_ids = set()
         for det_idx in unmatched_detections:
@@ -203,18 +222,22 @@ class MultiObjectTracker:
                     best_dist = dist
                     best_tid = tid
             # 允许强制复活更宽松的距离阈值
-            revival_limit = self.force_revival_dist if self.force_revival else self.dist_threshold
+            revival_limit = (
+                self.force_revival_dist if self.force_revival else self.dist_threshold
+            )
             if best_tid is not None and best_dist <= revival_limit:
                 # 复活该track并更新
                 tr = self.tracks[best_tid]
                 tr.update(detection["bbox"], detection["confidence"])
-                revived_infos.append({
-                    "track_id": tr.track_id,
-                    "bbox": tr.bbox,
-                    "confidence": tr.confidence,
-                    "age": tr.age,
-                    "hits": tr.hits,
-                })
+                revived_infos.append(
+                    {
+                        "track_id": tr.track_id,
+                        "bbox": tr.bbox,
+                        "confidence": tr.confidence,
+                        "age": tr.age,
+                        "hits": tr.hits,
+                    }
+                )
                 revived_track_ids.add(best_tid)
                 # 若该track属于本帧未匹配集合，从未匹配集合中移除，避免后续miss递增
                 if best_tid in unmatched_track_ids:
@@ -228,10 +251,14 @@ class MultiObjectTracker:
                 if self.recycle_ids and self._recycle_pool:
                     reuse_id = min(self._recycle_pool)
                     self._recycle_pool.remove(reuse_id)
-                    new_track = Track(reuse_id, detection["bbox"], detection["confidence"])
+                    new_track = Track(
+                        reuse_id, detection["bbox"], detection["confidence"]
+                    )
                     self.tracks[reuse_id] = new_track
                 else:
-                    new_track = Track(self.next_id, detection["bbox"], detection["confidence"])
+                    new_track = Track(
+                        self.next_id, detection["bbox"], detection["confidence"]
+                    )
                     self.tracks[self.next_id] = new_track
                     self.next_id += 1
 
@@ -252,20 +279,27 @@ class MultiObjectTracker:
         for track_idx, det_idx in zip(matched_tracks, matched_detections):
             tid = track_ids[track_idx]
             t = self.tracks[tid]
-            current_active.append({
-                "track_id": t.track_id,
-                "bbox": t.bbox,
-                "confidence": t.confidence,
-                "age": t.age,
-                "hits": t.hits,
-            })
+            current_active.append(
+                {
+                    "track_id": t.track_id,
+                    "bbox": t.bbox,
+                    "confidence": t.confidence,
+                    "age": t.age,
+                    "hits": t.hits,
+                }
+            )
         # 合并复活的tracks到输出
         if revived_infos:
             current_active.extend(revived_infos)
         return current_active
 
     def _match_tracks_detections(
-        self, iou_matrix: np.ndarray, dist_matrix: np.ndarray, cost_matrix: np.ndarray, track_ids: List[int], detections: List[Dict]
+        self,
+        iou_matrix: np.ndarray,
+        dist_matrix: np.ndarray,
+        cost_matrix: np.ndarray,
+        track_ids: List[int],
+        detections: List[Dict],
     ) -> Tuple[List[int], List[int]]:
         """匹配追踪目标和检测结果（支持匈牙利或贪心），并应用IoU与距离门限"""
         num_t = len(track_ids)
@@ -280,6 +314,7 @@ class MultiObjectTracker:
         if self.match_strategy == "hungarian":
             try:
                 from scipy.optimize import linear_sum_assignment
+
                 row_ind, col_ind = linear_sum_assignment(cost_matrix)
                 for r, c in zip(row_ind, col_ind):
                     iou = iou_matrix[r, c]
@@ -290,13 +325,19 @@ class MultiObjectTracker:
                         matched_detections.append(c)
             except Exception:
                 # 回退到贪心
-                matched_tracks, matched_detections = self._greedy_match(iou_matrix, dist_matrix)
+                matched_tracks, matched_detections = self._greedy_match(
+                    iou_matrix, dist_matrix
+                )
         else:
-            matched_tracks, matched_detections = self._greedy_match(iou_matrix, dist_matrix)
+            matched_tracks, matched_detections = self._greedy_match(
+                iou_matrix, dist_matrix
+            )
 
         return matched_tracks, matched_detections
 
-    def _greedy_match(self, iou_matrix: np.ndarray, dist_matrix: np.ndarray) -> Tuple[List[int], List[int]]:
+    def _greedy_match(
+        self, iou_matrix: np.ndarray, dist_matrix: np.ndarray
+    ) -> Tuple[List[int], List[int]]:
         matched_tracks: List[int] = []
         matched_detections: List[int] = []
         available_track_indices = list(range(iou_matrix.shape[0]))

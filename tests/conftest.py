@@ -125,7 +125,6 @@ def pytest_collection_modifyitems(items):
         "test__extract_head_roi_from_bbox_keypoints",  # 关键点处理错误：不可哈希类型
         "test_confidence_threshold",  # 置信度阈值变更：默认值从0.5变为0.6
         "test_preprocess_image",  # 方法名变更：_preprocess_image方法不存在
-        
         # HairnetDetectionPipeline接口变更的测试
         "test_detect_hairnet_compliance_with_mock_detections",  # mock对象接口变更
         "test_get_detection_statistics",  # API变更：方法不存在

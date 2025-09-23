@@ -2,30 +2,21 @@
 # ➜ 如使用 macOS/CPU 或 Apple Silicon，可通过官方 nightlies 安装：
 # pip install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/cpu
 
+bandit>=1.7.5
 # 代码质量工具
 black>=23.0.0
-isort>=5.12.0
-flake8>=6.0.0
-mypy>=1.5.0
-bandit>=1.7.5
-pre-commit>=3.3.0
-
-# 安全和认证
-PyJWT>=2.8.0
 cryptography>=41.0.0
-python-jose[cryptography]>=3.3.0
-passlib[bcrypt]>=1.7.4
-
-# 监控和日志
-prometheus-client>=0.17.0
 
 # Web框架
 fastapi>=0.100.0
 flake8>=6.0.0
+flake8>=6.0.0
+isort>=5.12.0
 jinja2>=3.1.0
 
 # 日志和监控
 loguru>=0.7.0
+mypy>=1.5.0
 
 # 数据处理
 numpy>=1.24.0,<2.0
@@ -33,12 +24,21 @@ numpy>=1.24.0,<2.0
 # 计算机视觉
 opencv-python>=4.8.0
 pandas>=2.0.0
+passlib[bcrypt]>=1.7.4
 Pillow>=9.5.0
+pre-commit>=3.3.0
+
+# 监控和日志
+prometheus-client>=0.17.0
 psycopg2-binary>=2.9.0
+
+# 安全和认证
+PyJWT>=2.8.0
 
 # 开发工具
 pytest>=7.4.0
 python-dotenv>=1.0.0
+python-jose[cryptography]>=3.3.0
 python-multipart>=0.0.6
 
 # 配置管理

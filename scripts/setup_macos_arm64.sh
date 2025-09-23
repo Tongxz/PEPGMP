@@ -138,6 +138,3 @@ echo "- 若 MPS 不可用，代码会回退到 CPU（速度较慢，建议缩小
 echo "- 如遇 torchvision::nms 在 MPS 未实现，可先导出: PYTORCH_ENABLE_MPS_FALLBACK=1"
 
 ok "环境搭建完成（macOS/ARM64）"
-
-
-

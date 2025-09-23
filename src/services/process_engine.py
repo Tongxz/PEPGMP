@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, Tuple, Any
-import time
 import logging
+import time
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 
 @dataclass
@@ -12,7 +12,9 @@ class PersonState:
     has_hairnet: bool = False
     current_region: Optional[str] = None
     visited_regions: Set[str] = field(default_factory=set)
-    enter_ts: Dict[str, float] = field(default_factory=dict)  # region -> enter timestamp
+    enter_ts: Dict[str, float] = field(
+        default_factory=dict
+    )  # region -> enter timestamp
     status: str = "IN_PROGRESS"  # COMPLIANT / VIOLATION
     # 连续性计数：用于平滑 HANDWASHING_ACTIVE
     hand_in_sink_consec: int = 0
@@ -109,7 +111,11 @@ class ProcessEngine:
         try:
             if self._persons:
                 for tid_all, st_all in list(self._persons.items()):
-                    if tid_all not in seen_tids and isinstance(st_all.current_region, str) and st_all.current_region:
+                    if (
+                        tid_all not in seen_tids
+                        and isinstance(st_all.current_region, str)
+                        and st_all.current_region
+                    ):
                         inferred_changes.append((tid_all, st_all.current_region, None))
                         # 清空当前区域，避免重复追加离开
                         st_all.current_region = None
@@ -134,41 +140,67 @@ class ProcessEngine:
                     enter_ts = st.enter_ts.get(prev_r)
                     if enter_ts:
                         dwell = now - float(enter_ts)
-                        logger.info(f"Person {tid} left region '{prev_r}' after {dwell:.1f} seconds")
-                        
+                        logger.info(
+                            f"Person {tid} left region '{prev_r}' after {dwell:.1f} seconds"
+                        )
+
                         # stand 区域（站立区域）
                         if prev_r == self.cfg.region_stand:
                             min_dwell = float(self.cfg.min_dwell_seconds_stand)
                             if dwell < min_dwell:
-                                logger.warning(f"Person {tid} insufficient dwell time in stand: {dwell:.1f}s < {min_dwell}s")
-                                self._maybe_emit(events, tid, "INSUFFICIENT_DWELL_TIME", now, {
-                                    "region": prev_r,
-                                    "dwell_seconds": round(dwell, 3),
-                                    "required_seconds": min_dwell
-                                })
+                                logger.warning(
+                                    f"Person {tid} insufficient dwell time in stand: {dwell:.1f}s < {min_dwell}s"
+                                )
+                                self._maybe_emit(
+                                    events,
+                                    tid,
+                                    "INSUFFICIENT_DWELL_TIME",
+                                    now,
+                                    {
+                                        "region": prev_r,
+                                        "dwell_seconds": round(dwell, 3),
+                                        "required_seconds": min_dwell,
+                                    },
+                                )
 
                         # sink 区域
                         if prev_r == self.cfg.region_sink:
                             min_dwell = float(self.cfg.min_dwell_seconds_sink)
                             if dwell < min_dwell:
-                                logger.warning(f"Person {tid} insufficient dwell time in sink: {dwell:.1f}s < {min_dwell}s")
-                                self._maybe_emit(events, tid, "INSUFFICIENT_DWELL_TIME", now, {
-                                    "region": prev_r,
-                                    "dwell_seconds": round(dwell, 3),
-                                    "required_seconds": min_dwell
-                                })
-                        
+                                logger.warning(
+                                    f"Person {tid} insufficient dwell time in sink: {dwell:.1f}s < {min_dwell}s"
+                                )
+                                self._maybe_emit(
+                                    events,
+                                    tid,
+                                    "INSUFFICIENT_DWELL_TIME",
+                                    now,
+                                    {
+                                        "region": prev_r,
+                                        "dwell_seconds": round(dwell, 3),
+                                        "required_seconds": min_dwell,
+                                    },
+                                )
+
                         # dryer 区域
                         if prev_r == self.cfg.region_dryer:
                             min_dwell = float(self.cfg.min_dwell_seconds_dryer)
                             if dwell < min_dwell:
-                                logger.warning(f"Person {tid} insufficient dwell time in dryer: {dwell:.1f}s < {min_dwell}s")
-                                self._maybe_emit(events, tid, "INSUFFICIENT_DWELL_TIME", now, {
-                                    "region": prev_r,
-                                    "dwell_seconds": round(dwell, 3),
-                                    "required_seconds": min_dwell
-                                })
-                        
+                                logger.warning(
+                                    f"Person {tid} insufficient dwell time in dryer: {dwell:.1f}s < {min_dwell}s"
+                                )
+                                self._maybe_emit(
+                                    events,
+                                    tid,
+                                    "INSUFFICIENT_DWELL_TIME",
+                                    now,
+                                    {
+                                        "region": prev_r,
+                                        "dwell_seconds": round(dwell, 3),
+                                        "required_seconds": min_dwell,
+                                    },
+                                )
+
                         # 清理时间戳
                         del st.enter_ts[prev_r]
             except Exception as e:
@@ -176,17 +208,16 @@ class ProcessEngine:
 
             # 规则1：发网准入
             if new_r == self.cfg.region_sink and not st.has_hairnet:
-                self._maybe_emit(events, tid, "NO_HAIRNET_AT_SINK", now, {
-                    "region": new_r
-                })
+                self._maybe_emit(
+                    events, tid, "NO_HAIRNET_AT_SINK", now, {"region": new_r}
+                )
 
             # 规则2：流程顺序（洗手→工作区 跳过烘干）
             if prev_r == self.cfg.region_sink and new_r == self.cfg.region_work:
                 if self.cfg.region_dryer not in st.visited_regions:
-                    self._maybe_emit(events, tid, "SKIP_DRYING", now, {
-                        "from": prev_r,
-                        "to": new_r
-                    })
+                    self._maybe_emit(
+                        events, tid, "SKIP_DRYING", now, {"from": prev_r, "to": new_r}
+                    )
 
         # 规则1（补充）：当前帧内在洗手池区域且未戴发网，持续性触发（受冷却控制）
         try:
@@ -196,8 +227,14 @@ class ProcessEngine:
                     continue
                 st = self._persons.get(tid)
                 rn = p.get("region")
-                if st and rn == self.cfg.region_sink and not bool(p.get("has_hairnet", st.has_hairnet)):
-                    self._maybe_emit(events, tid, "NO_HAIRNET_AT_SINK", now, {"region": rn})
+                if (
+                    st
+                    and rn == self.cfg.region_sink
+                    and not bool(p.get("has_hairnet", st.has_hairnet))
+                ):
+                    self._maybe_emit(
+                        events, tid, "NO_HAIRNET_AT_SINK", now, {"region": rn}
+                    )
         except Exception:
             pass
 
@@ -215,12 +252,20 @@ class ProcessEngine:
                 if rn == self.cfg.region_stand and hand_in_sink:
                     st.hand_in_sink_consec = int(st.hand_in_sink_consec) + 1
                     if st.hand_in_sink_consec >= int(self.cfg.handwash_min_consecutive):
-                        self._maybe_emit(events, tid, "HANDWASHING_ACTIVE", now, {
-                            "region": rn,
-                            "hand_in_sink": True,
-                            "consecutive": st.hand_in_sink_consec,
-                            "required_consecutive": int(self.cfg.handwash_min_consecutive),
-                        })
+                        self._maybe_emit(
+                            events,
+                            tid,
+                            "HANDWASHING_ACTIVE",
+                            now,
+                            {
+                                "region": rn,
+                                "hand_in_sink": True,
+                                "consecutive": st.hand_in_sink_consec,
+                                "required_consecutive": int(
+                                    self.cfg.handwash_min_consecutive
+                                ),
+                            },
+                        )
                 else:
                     st.hand_in_sink_consec = 0
                 self._persons[tid] = st
@@ -231,12 +276,17 @@ class ProcessEngine:
 
         # 注：return 之前已返回；以下逻辑应在返回前运行
 
-    def _maybe_emit(self, events: List[Event], tid: int, etype: str, ts: float, evidence: Dict[str, Any]) -> None:
+    def _maybe_emit(
+        self,
+        events: List[Event],
+        tid: int,
+        etype: str,
+        ts: float,
+        evidence: Dict[str, Any],
+    ) -> None:
         key = (tid, etype)
         last = self._cooldown.get(key, 0.0)
         if ts - last < self.cfg.cooldown_seconds:
             return
         self._cooldown[key] = ts
         events.append(Event(type=etype, track_id=tid, ts=ts, evidence=evidence))
-
-

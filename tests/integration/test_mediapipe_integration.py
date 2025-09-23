@@ -18,8 +18,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-
-
 def test_mediapipe_integration():
     """
     测试 MediaPipe 集成功能
@@ -32,7 +30,7 @@ def test_mediapipe_integration():
     )
 
     # 加载测试图像
-    test_image_path = Path("tests/fixtures/images/hand_test_image.jpg") # 假设这个图片存在
+    test_image_path = Path("tests/fixtures/images/hand_test_image.jpg")  # 假设这个图片存在
     test_image = cv2.imread(str(test_image_path))
     if test_image is None:
         logger.warning(f"无法读取测试图像: {test_image_path}，跳过测试")
@@ -80,7 +78,7 @@ def test_mediapipe_integration():
     assert isinstance(handwashing_confidence, float)
     assert isinstance(enhanced_regions, list)
     assert handwashing_confidence >= 0.0
-    
+
     # 不返回值，符合pytest规范
 
 

@@ -3,19 +3,19 @@ Author: Zhou <tongxz96@gmail.com>
 Date:   Tue Sep 16 11:23:12 2025 +0800
 
     feat: 实现GPU性能优化解决方案
-    
+
     🚀 核心功能:
     - 新增GPU加速管理器，自动检测和配置最佳GPU设置
     - 实现加速检测流水线，支持批处理和异步并行处理
     - 创建Windows GPU优化器，一键生成优化配置
     - 集成性能监控工具，实时跟踪GPU利用率和性能指标
-    
+
     ⚡ 性能提升:
     - 推理速度: 2-5倍提升 (15 FPS → 45-75 FPS)
     - GPU利用率: 3倍提升 (20-30% → 70-90%)
     - 批处理能力: 8-32倍提升 (1帧 → 8-32帧)
     - 内存效率: 2-3倍提升
-    
+
     📁 新增文件:
     - src/utils/gpu_acceleration.py - GPU加速管理器
     - src/core/accelerated_detection_pipeline.py - 加速检测流水线
@@ -23,7 +23,7 @@ Date:   Tue Sep 16 11:23:12 2025 +0800
     - deployment/windows_gpu_optimization/ - Windows优化包
     - docs/Windows_GPU_优化部署指南.md - 详细部署指南
     - GPU性能优化README.md - 总览文档
-    
+
     🔧 优化特性:
     - 自动GPU设备选择 (CUDA/MPS/CPU)
     - 智能批处理大小计算
@@ -31,7 +31,7 @@ Date:   Tue Sep 16 11:23:12 2025 +0800
     - 混合精度推理
     - 内存管理优化
     - TensorRT集成支持
-    
+
     🎯 解决Windows GPU环境下运行缓慢问题，充分发挥硬件设备性能
 
  ...7\350\203\275\344\274\230\345\214\226README.md" | 252 [32m++++++++++[m

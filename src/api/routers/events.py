@@ -6,12 +6,15 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Query
 
-
 router = APIRouter()
 
 
 def _read_events(lines: int = 2000) -> List[Dict[str, Any]]:
-    events_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "logs", "events_record.jsonl")
+    events_file = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
+        "logs",
+        "events_record.jsonl",
+    )
     out: List[Dict[str, Any]] = []
     if not os.path.exists(events_file):
         return out
@@ -72,6 +75,3 @@ def recent_events(
         except Exception:
             continue
     return out
-
-
-

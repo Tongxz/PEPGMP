@@ -1,18 +1,19 @@
 from __future__ import annotations
 
-import os
 import json
+import os
 from typing import Dict, Tuple
 
 from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
 
-
 router = APIRouter()
 
 
 def _read_event_counts(max_lines: int = 5000) -> Dict[str, int]:
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    project_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    )
     events_file = os.path.join(project_root, "logs", "events_record.jsonl")
     counts: Dict[str, int] = {}
     total = 0
@@ -72,6 +73,3 @@ def metrics():
         lines.append(f'hbd_events_total{{type="{et}"}} {c}')
     lines.append(f"hbd_events_total {total}")
     return "\n".join(lines) + "\n"
-
-
-

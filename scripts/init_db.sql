@@ -147,12 +147,12 @@ CREATE TRIGGER update_configs_updated_at BEFORE UPDATE ON system_configs
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- 插入默认管理员用户
-INSERT INTO users (username, email, password_hash, role) VALUES 
+INSERT INTO users (username, email, password_hash, role) VALUES
 ('admin', 'admin@example.com', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj6hsxq5S/kS', 'admin')
 ON CONFLICT (username) DO NOTHING;
 
 -- 插入默认系统配置
-INSERT INTO system_configs (config_key, config_value, description) VALUES 
+INSERT INTO system_configs (config_key, config_value, description) VALUES
 ('detection_confidence_threshold', '0.5', '检测置信度阈值'),
 ('max_detection_history_days', '30', '检测记录保留天数'),
 ('alert_notification_enabled', 'true', '是否启用告警通知'),
@@ -161,7 +161,7 @@ ON CONFLICT (config_key) DO NOTHING;
 
 -- 创建视图：最近24小时检测统计
 CREATE OR REPLACE VIEW recent_detection_stats AS
-SELECT 
+SELECT
     c.id as camera_id,
     c.name as camera_name,
     COUNT(d.id) as total_detections,
@@ -170,14 +170,14 @@ SELECT
     COUNT(CASE WHEN d.attributes->>'has_hairnet' = 'false' THEN 1 END) as hairnet_violations,
     AVG(d.confidence) as avg_confidence
 FROM cameras c
-LEFT JOIN detections d ON c.id = d.camera_id 
+LEFT JOIN detections d ON c.id = d.camera_id
     AND d.detected_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
 WHERE c.is_active = true
 GROUP BY c.id, c.name;
 
 -- 创建视图：活跃告警
 CREATE OR REPLACE VIEW active_alerts AS
-SELECT 
+SELECT
     a.*,
     c.name as camera_name,
     z.name as zone_name
@@ -195,26 +195,26 @@ DECLARE
 BEGIN
     -- 获取数据保留天数配置
     SELECT (config_value::text)::integer INTO retention_days
-    FROM system_configs 
+    FROM system_configs
     WHERE config_key = 'max_detection_history_days';
-    
+
     IF retention_days IS NULL THEN
         retention_days := 30; -- 默认保留30天
     END IF;
-    
+
     -- 删除过期的检测记录
-    DELETE FROM detections 
+    DELETE FROM detections
     WHERE detected_at < CURRENT_TIMESTAMP - (retention_days || ' days')::interval;
-    
+
     -- 删除过期的统计数据
-    DELETE FROM statistics 
+    DELETE FROM statistics
     WHERE stat_date < CURRENT_DATE - (retention_days || ' days')::interval;
-    
+
     -- 删除已解决的告警（保留7天）
-    DELETE FROM alerts 
-    WHERE status = 'resolved' 
+    DELETE FROM alerts
+    WHERE status = 'resolved'
     AND resolved_at < CURRENT_TIMESTAMP - INTERVAL '7 days';
-    
+
 END;
 $$ LANGUAGE plpgsql;
 

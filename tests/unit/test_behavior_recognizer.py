@@ -44,12 +44,8 @@ class TestBehaviorRecognizer(unittest.TestCase):
             recognizer.use_advanced_detection,
             "高级模式应该被启用，但初始化失败并被禁用",
         )
-        self.assertIsNotNone(
-            recognizer.pose_detector, "高级模式下姿态检测器应被初始化"
-        )
-        self.assertIsNotNone(
-            recognizer.motion_analyzer, "高级模式下运动分析器应被初始化"
-        )
+        self.assertIsNotNone(recognizer.pose_detector, "高级模式下姿态检测器应被初始化")
+        self.assertIsNotNone(recognizer.motion_analyzer, "高级模式下运动分析器应被初始化")
 
     def test_detect_handwashing_no_hands(self):
         """测试无手部输入的洗手检测"""

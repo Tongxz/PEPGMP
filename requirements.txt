@@ -11,5 +11,5 @@
 # 开发依赖（可选）
 # pip install -e ".[dev]"
 
-# 生产依赖（可选）  
+# 生产依赖（可选）
 # pip install -e ".[production]"

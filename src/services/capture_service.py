@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import os
 import json
+import os
 import time
 from collections import deque
 from dataclasses import asdict
-from typing import Deque, Dict, List, Optional, Tuple, Any
+from typing import Any, Deque, Dict, List, Optional, Tuple
 
 import cv2
 
@@ -30,7 +30,9 @@ class CaptureService:
         self.anonymize_head = bool(anonymize_head)
         self.anonymize_ratio = max(0.0, min(1.0, float(anonymize_ratio)))
         # blur_kernel 应为奇数
-        self.blur_kernel = int(blur_kernel if int(blur_kernel) % 2 == 1 else int(blur_kernel) + 1)
+        self.blur_kernel = int(
+            blur_kernel if int(blur_kernel) % 2 == 1 else int(blur_kernel) + 1
+        )
         os.makedirs(self.output_dir, exist_ok=True)
 
     def save_event(
@@ -70,7 +72,9 @@ class CaptureService:
             pass
         try:
             if self.anonymize_head:
-                anon = self._anonymize_head_region(frame_bgr.copy(), context.get("bbox"))
+                anon = self._anonymize_head_region(
+                    frame_bgr.copy(), context.get("bbox")
+                )
                 cv2.imwrite(os.path.join(event_dir, "snapshot_anon.jpg"), anon)
         except Exception:
             pass
@@ -90,8 +94,12 @@ class CaptureService:
                     cv2.imwrite(os.path.join(event_dir, "crop.jpg"), crop)
                     if self.anonymize_head:
                         try:
-                            crop_anon = self._anonymize_head_region(crop.copy(), [0, 0, crop.shape[1], crop.shape[0]])
-                            cv2.imwrite(os.path.join(event_dir, "crop_anon.jpg"), crop_anon)
+                            crop_anon = self._anonymize_head_region(
+                                crop.copy(), [0, 0, crop.shape[1], crop.shape[0]]
+                            )
+                            cv2.imwrite(
+                                os.path.join(event_dir, "crop_anon.jpg"), crop_anon
+                            )
                         except Exception:
                             pass
             except Exception:
@@ -143,5 +151,3 @@ class CaptureService:
             return image
         except Exception:
             return image
-
-

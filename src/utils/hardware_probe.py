@@ -26,8 +26,10 @@ def _gpu_info_pynvml() -> Dict[str, Any]:
             handle = pynvml.nvmlDeviceGetHandleByIndex(0)
             name = pynvml.nvmlDeviceGetName(handle)
             mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
-            info["gpu_name"] = name.decode("utf-8") if hasattr(name, "decode") else str(name)
-            info["vram_gb"] = round(float(mem.total) / (1024 ** 3), 1)
+            info["gpu_name"] = (
+                name.decode("utf-8") if hasattr(name, "decode") else str(name)
+            )
+            info["vram_gb"] = round(float(mem.total) / (1024**3), 1)
     except Exception as e:
         # 如果pynvml失败，尝试使用torch获取信息
         print(f"pynvml failed: {e}, trying torch fallback")
@@ -56,7 +58,7 @@ def detect_environment() -> Dict[str, Any]:
                     # 使用torch获取显存信息作为pynvml的fallback
                     if torch.cuda.is_available():
                         mem_info = torch.cuda.mem_get_info(0)  # (free, total)
-                        env["vram_gb"] = round(float(mem_info[1]) / (1024 ** 3), 1)
+                        env["vram_gb"] = round(float(mem_info[1]) / (1024**3), 1)
                 except Exception as e:
                     print(f"torch GPU info failed: {e}")
                     pass
@@ -125,5 +127,3 @@ def decide_policy(
     if preferred_profile:
         policy["profile"] = preferred_profile
     return policy
-
-

@@ -126,9 +126,8 @@
           collapse-mode="width"
           :collapsed-width="0"
           :width="leftPanelWidth"
-          :native-scrollbar="false"
+          :native-scrollbar="true"
           class="left-panel"
-          show-trigger="bar"
           @update:width="onLeftPanelResize"
         >
           <div class="left-panel-content">
@@ -154,7 +153,7 @@
                 </template>
 
                 <!-- 绘制区域按钮 -->
-                <div class="draw-region-section" style="margin-bottom: 16px;">
+                <div class="draw-region-section" style="margin-bottom: 16px; margin-left: 12px; margin-right: 12px;">
                   <n-button
                     type="primary"
                     size="large"
@@ -401,23 +400,25 @@
                             </n-tag>
                           </n-space>
 
-                          <n-dropdown
-                            :options="getRegionActions(region)"
-                            @select="(key) => handleRegionAction(key, region)"
-                            trigger="click"
-                            @click.stop
-                          >
-                            <n-button
-                              size="small"
-                              quaternary
-                              circle
+                          <n-space align="center" size="small">
+                            <n-dropdown
+                              :options="getRegionActions(region)"
+                              @select="(key) => handleRegionAction(key, region)"
+                              trigger="click"
                               @click.stop
                             >
-                              <template #icon>
-                                <n-icon><EllipsisVerticalOutline /></n-icon>
-                              </template>
-                            </n-button>
-                          </n-dropdown>
+                              <n-button
+                                size="small"
+                                quaternary
+                                circle
+                                @click.stop
+                              >
+                                <template #icon>
+                                  <n-icon><EllipsisVerticalOutline /></n-icon>
+                                </template>
+                              </n-button>
+                            </n-dropdown>
+                          </n-space>
                         </n-space>
                       </template>
 
@@ -428,20 +429,49 @@
                         <n-text v-if="region.description" depth="3">
                           {{ region.description }}
                         </n-text>
-                        <n-space size="small">
-                          <n-tag size="small" type="info">
-                            敏感度：{{ (region.sensitivity * 100).toFixed(0) }}%
-                          </n-tag>
-                          <n-tag size="small" type="warning">
-                            停留：{{ region.minDuration }}s
-                          </n-tag>
-                          <n-tag
-                            v-if="region.alertEnabled"
-                            size="small"
-                            :type="getAlertLevelType(region.alertLevel)"
-                          >
-                            {{ getAlertLevelLabel(region.alertLevel) }}
-                          </n-tag>
+                        <n-space size="small" justify="space-between" align="center">
+                          <n-space size="small">
+                            <n-tag size="small" type="info">
+                              敏感度：{{ (region.sensitivity * 100).toFixed(0) }}%
+                            </n-tag>
+                            <n-tag size="small" type="warning">
+                              停留：{{ region.minDuration }}s
+                            </n-tag>
+                            <n-tag
+                              v-if="region.alertEnabled"
+                              size="small"
+                              :type="getAlertLevelType(region.alertLevel)"
+                            >
+                              {{ getAlertLevelLabel(region.alertLevel) }}
+                            </n-tag>
+                          </n-space>
+                          
+                          <!-- 编辑和删除按钮放在右下角，与n-tag水平对齐 -->
+                          <n-space size="small">
+                            <n-button
+                              size="small"
+                              type="primary"
+                              quaternary
+                              @click.stop="selectRegion(region)"
+                            >
+                              <template #icon>
+                                <n-icon><CreateOutline /></n-icon>
+                              </template>
+                              编辑
+                            </n-button>
+                            
+                            <n-button
+                              size="small"
+                              type="error"
+                              quaternary
+                              @click.stop="handleDeleteRegion(region)"
+                            >
+                              <template #icon>
+                                <n-icon><TrashOutline /></n-icon>
+                              </template>
+                              删除
+                            </n-button>
+                          </n-space>
                         </n-space>
                       </n-space>
                     </n-card>
@@ -470,63 +500,6 @@
                   </n-space>
                 </div>
               </n-tab-pane>
-
-              <!-- Tab 3: 预设模板 -->
-              <n-tab-pane name="templates" tab="预设模板">
-                <template #tab>
-                  <n-space align="center" size="small">
-                    <n-icon><TemplateOutline /></n-icon>
-                    <span>预设模板</span>
-                  </n-space>
-                </template>
-
-                <!-- 模板列表 -->
-                <div class="template-section">
-                  <n-space vertical size="medium">
-                    <n-card
-                      v-for="template in regionTemplates"
-                      :key="template.id"
-                      size="small"
-                      hoverable
-                      class="template-card"
-                    >
-                      <template #header>
-                        <n-space align="center" justify="space-between">
-                          <n-space align="center" size="small">
-                            <n-icon :color="template.color" size="16">
-                              <component :is="template.icon" />
-                            </n-icon>
-                            <n-text strong>{{ template.name }}</n-text>
-                          </n-space>
-
-                          <n-button
-                            type="primary"
-                            size="small"
-                            @click="applyTemplate(template)"
-                            :disabled="!selectedCamera && !regionStore.backgroundImage"
-                          >
-                            应用模板
-                          </n-button>
-                        </n-space>
-                      </template>
-
-                      <n-space vertical size="small">
-                        <n-text depth="3">{{ template.description }}</n-text>
-                        <n-space size="small">
-                          <n-tag
-                            v-for="regionType in template.regions"
-                            :key="regionType.type"
-                            size="small"
-                            :type="getRegionTypeTagType(regionType.type)"
-                          >
-                            {{ getRegionTypeLabel(regionType.type) }}
-                          </n-tag>
-                        </n-space>
-                      </n-space>
-                    </n-card>
-                  </n-space>
-                </div>
-              </n-tab-pane>
             </n-tabs>
           </div>
         </n-layout-sider>
@@ -538,34 +511,6 @@
             <div class="canvas-toolbar">
               <n-space align="center" justify="space-between">
                 <n-space align="center" size="small">
-                  <!-- 画布控制 -->
-                  <n-button-group>
-                    <n-button
-                      size="small"
-                      @click="zoomIn"
-                      :disabled="zoomLevel >= 3"
-                    >
-                      <template #icon>
-                        <n-icon><ZoomInOutline /></n-icon>
-                      </template>
-                    </n-button>
-                    <n-button
-                      size="small"
-                      @click="resetZoom"
-                    >
-                      {{ Math.round(zoomLevel * 100) }}%
-                    </n-button>
-                    <n-button
-                      size="small"
-                      @click="zoomOut"
-                      :disabled="zoomLevel <= 0.2"
-                    >
-                      <template #icon>
-                        <n-icon><ZoomOutOutline /></n-icon>
-                      </template>
-                    </n-button>
-                  </n-button-group>
-
                   <!-- 显示选项 -->
                   <n-space size="small">
                     <n-checkbox
@@ -779,11 +724,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick, h } from 'vue'
 import { useMessage, useDialog } from 'naive-ui'
 import { useRegionStore } from '@/stores/region'
 import { useCameraStore } from '@/stores/camera'
-import PageHeader from '@/components/PageHeader.vue'
+import PageHeader from '@/components/common/PageHeader.vue'
 import type { Region, RegionType } from '@/types/region'
 import type { UploadFileInfo } from 'naive-ui'
 
@@ -800,9 +745,7 @@ import {
   ListOutline,
   LayersOutline,
   EllipsisVerticalOutline,
-  TemplateOutline,
-  ZoomInOutline,
-  ZoomOutOutline,
+  RemoveOutline,
   CheckmarkCircleOutline,
   LocationOutline,
   CameraOutline,
@@ -834,7 +777,7 @@ const saving = ref(false)
 const deleting = ref(false)
 
 // Canvas state
-const zoomLevel = ref(1)
+// Removed zoomLevel as canvas zoom functionality is disabled
 const showGrid = ref(true)
 const showLabels = ref(true)
 const showCoordinates = ref(true)
@@ -920,42 +863,7 @@ const batchOptions = [
   }
 ]
 
-const regionTemplates = [
-  {
-    id: 'hospital_entrance',
-    name: '医院入口',
-    description: '适用于医院入口的标准配置',
-    color: '#18a058',
-    icon: 'LocationOutline',
-    regions: [
-      { type: 'entrance', name: '入口检测区' },
-      { type: 'handwash', name: '洗手区域' },
-      { type: 'sanitize', name: '消毒区域' }
-    ]
-  },
-  {
-    id: 'office_workspace',
-    name: '办公区域',
-    description: '适用于办公场所的配置',
-    color: '#2080f0',
-    icon: 'BusinessOutline',
-    regions: [
-      { type: 'work_area', name: '工作区域' },
-      { type: 'monitoring', name: '监控区域' }
-    ]
-  },
-  {
-    id: 'restricted_area',
-    name: '限制区域',
-    description: '高安全级别的限制区域配置',
-    color: '#f0a020',
-    icon: 'WarningOutline',
-    regions: [
-      { type: 'restricted', name: '限制区域' },
-      { type: 'monitoring', name: '监控区域' }
-    ]
-  }
-]
+
 
 const formRules = {
   name: [
@@ -1002,8 +910,8 @@ const handleCanvasMouseDown = (event: MouseEvent) => {
   if (!isDrawing.value) return
 
   const rect = canvas.value!.getBoundingClientRect()
-  const x = (event.clientX - rect.left) / zoomLevel.value
-  const y = (event.clientY - rect.top) / zoomLevel.value
+  const x = event.clientX - rect.left
+  const y = event.clientY - rect.top
 
   currentPoints.value.push({ x, y })
   drawCanvas()
@@ -1013,8 +921,8 @@ const handleCanvasMouseMove = (event: MouseEvent) => {
   const rect = canvas.value!.getBoundingClientRect()
   const x = event.clientX - rect.left
   const y = event.clientY - rect.top
-  const canvasX = x / zoomLevel.value
-  const canvasY = y / zoomLevel.value
+  const canvasX = x
+  const canvasY = y
 
   mousePosition.value = { x, y, canvasX, canvasY }
 
@@ -1035,12 +943,7 @@ const handleCanvasDoubleClick = () => {
 
 const handleCanvasWheel = (event: WheelEvent) => {
   event.preventDefault()
-
-  const delta = event.deltaY > 0 ? -0.1 : 0.1
-  const newZoom = Math.max(0.2, Math.min(3, zoomLevel.value + delta))
-
-  zoomLevel.value = newZoom
-  drawCanvas()
+  // 禁用缩放功能，只阻止默认滚动行为
 }
 
 const finishDrawing = () => {
@@ -1285,21 +1188,6 @@ const clearAllRegions = () => {
   })
 }
 
-const zoomIn = () => {
-  zoomLevel.value = Math.min(3, zoomLevel.value + 0.2)
-  drawCanvas()
-}
-
-const zoomOut = () => {
-  zoomLevel.value = Math.max(0.2, zoomLevel.value - 0.2)
-  drawCanvas()
-}
-
-const resetZoom = () => {
-  zoomLevel.value = 1
-  drawCanvas()
-}
-
 const resizeCanvas = () => {
   if (!canvas.value || !canvasContainer.value) return
 
@@ -1324,10 +1212,7 @@ const drawCanvas = () => {
   if (regionStore.backgroundImage) {
     const img = new Image()
     img.onload = () => {
-      ctx.save()
-      ctx.scale(zoomLevel.value, zoomLevel.value)
-      ctx.drawImage(img, 0, 0, width / zoomLevel.value, height / zoomLevel.value)
-      ctx.restore()
+      ctx.drawImage(img, 0, 0, width, height)
       drawRegionsAndOverlays()
     }
     img.src = regionStore.backgroundImage
@@ -1344,9 +1229,6 @@ const drawRegionsAndOverlays = () => {
 
   const ctx = canvas.value.getContext('2d')!
 
-  ctx.save()
-  ctx.scale(zoomLevel.value, zoomLevel.value)
-
   // Draw grid if enabled
   if (showGrid.value) {
     drawGrid(ctx)
@@ -1361,14 +1243,12 @@ const drawRegionsAndOverlays = () => {
   if (isDrawing.value && currentPoints.value.length > 0) {
     drawCurrentDrawing(ctx)
   }
-
-  ctx.restore()
 }
 
 const drawGrid = (ctx: CanvasRenderingContext2D) => {
   const gridSize = 20
-  const width = canvas.value!.width / zoomLevel.value
-  const height = canvas.value!.height / zoomLevel.value
+  const width = canvas.value!.width
+  const height = canvas.value!.height
 
   ctx.strokeStyle = '#e0e0e0'
   ctx.lineWidth = 0.5
@@ -1572,6 +1452,23 @@ const getRegionActions = (region: Region) => [
   }
 ]
 
+const handleDeleteRegion = (region: Region) => {
+  dialog.warning({
+    title: '确认删除',
+    content: `确定要删除区域"${region.name}"吗？`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      await regionStore.deleteRegion(region.id)
+      message.success('区域删除成功')
+      if (selectedRegionId.value === region.id) {
+        cancelEdit()
+      }
+      drawCanvas()
+    }
+  })
+}
+
 const handleRegionAction = async (key: string, region: Region) => {
   switch (key) {
     case 'edit':
@@ -1604,37 +1501,7 @@ const handleRegionAction = async (key: string, region: Region) => {
   }
 }
 
-const applyTemplate = (template: any) => {
-  dialog.info({
-    title: '应用模板',
-    content: `确定要应用"${template.name}"模板吗？这将清除当前所有区域。`,
-    positiveText: '应用',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      await regionStore.clearRegions()
 
-      // Create regions from template
-      for (const regionTemplate of template.regions) {
-        const region = {
-          name: regionTemplate.name,
-          type: regionTemplate.type,
-          description: `来自模板：${template.name}`,
-          enabled: true,
-          sensitivity: 0.8,
-          minDuration: 5,
-          alertEnabled: true,
-          alertLevel: 'medium',
-          points: [] // User needs to draw these
-        }
-
-        await regionStore.createRegion(region)
-      }
-
-      message.success('模板应用成功，请为每个区域绘制范围')
-      drawCanvas()
-    }
-  })
-}
 
 // Lifecycle
 onMounted(async () => {
@@ -1691,6 +1558,8 @@ watch([showGrid, showLabels], () => {
 
 .guide-alert {
   margin-bottom: 16px;
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 16px;
 }
 
 .guide-content ol {
@@ -1705,6 +1574,7 @@ watch([showGrid, showLabels], () => {
 .region-config-content {
   flex: 1;
   overflow: hidden;
+  border-top: 2px solid #e0e0e0;
 }
 
 .config-layout {
@@ -1714,33 +1584,70 @@ watch([showGrid, showLabels], () => {
 .left-panel {
   background: white;
   border-right: 1px solid #e0e0e0;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  margin: 8px;
 }
 
 .left-panel-content {
   height: 100%;
-  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .region-tabs {
   height: 100%;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background: white;
+  /* 确保与n-scrollbar-container高度一致 */
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.region-tabs :deep(.n-tabs-content) {
+  height: 100%;
+  overflow: hidden;
+}
+
+.region-tabs :deep(.n-tab-pane) {
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .region-form {
   max-width: 100%;
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
 }
 
 .region-list-section {
-  max-height: calc(100vh - 200px);
+  height: 100%;
   overflow-y: auto;
+  background: white;
+  padding: 16px;
+  flex: 1;
+  min-height: 0;
 }
 
 .region-card {
   cursor: pointer;
   transition: all 0.2s;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  margin-bottom: 8px;
 }
 
 .region-card:hover {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-color: #d0d0d0;
 }
 
 .region-card-selected {
@@ -1752,27 +1659,18 @@ watch([showGrid, showLabels], () => {
   opacity: 0.6;
 }
 
-.template-section {
-  max-height: calc(100vh - 200px);
-  overflow-y: auto;
-}
-
-.template-card {
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.template-card:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
 .canvas-container {
   background: #f5f5f5;
   position: relative;
+  min-height: calc(100vh - 120px);
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  margin: 8px;
 }
 
 .canvas-wrapper {
   height: 100%;
+  min-height: calc(100vh - 120px);
   display: flex;
   flex-direction: column;
 }
@@ -1788,11 +1686,13 @@ watch([showGrid, showLabels], () => {
   flex: 1;
   position: relative;
   overflow: hidden;
+  min-height: 500px;
 }
 
 .region-canvas {
   width: 100%;
   height: 100%;
+  min-height: 500px;
   cursor: crosshair;
 }
 
@@ -1902,11 +1802,7 @@ watch([showGrid, showLabels], () => {
  /* 减少动画模式 */
  @media (prefers-reduced-motion: reduce) {
    .region-card {
-     transition: none;
-   }
-
-   .template-card {
-     transition: none;
-   }
- }
+    transition: none;
+  }
+}
  </style>

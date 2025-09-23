@@ -99,12 +99,12 @@ from concurrent.futures import ThreadPoolExecutor
 class AsyncDetectionProcessor:
     def __init__(self):
         self.executor = ThreadPoolExecutor(max_workers=2)
-    
+
     async def process_frame_async(self, frame):
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
-            self.executor, 
-            self.process_frame_sync, 
+            self.executor,
+            self.process_frame_sync,
             frame
         )
 ```
@@ -158,7 +158,7 @@ def draw_simple_detections(frame, detections):
     for detection in detections:
         # 只绘制关键信息，减少绘制操作
         cv2.rectangle(frame, detection['bbox'], (0, 255, 0), 2)
-        cv2.putText(frame, detection['class'], 
+        cv2.putText(frame, detection['class'],
                    (detection['bbox'][0], detection['bbox'][1]-10),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 ```
@@ -171,7 +171,7 @@ class DoubleBufferRenderer:
         self.buffer1 = None
         self.buffer2 = None
         self.current_buffer = 1
-    
+
     def render_frame(self, frame):
         if self.current_buffer == 1:
             self.buffer1 = frame.copy()

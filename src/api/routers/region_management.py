@@ -1,4 +1,5 @@
-from typing import Any, Dict, List
+from typing import Any, Dict
+from typing import List
 from typing import List as _List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -42,8 +43,8 @@ def update_regions_meta(
 ) -> Dict[str, Any]:
     try:
         meta = payload or {}
-        cs = (meta.get("canvas_size") or {})
-        bs = (meta.get("background_size") or {})
+        cs = meta.get("canvas_size") or {}
+        bs = meta.get("background_size") or {}
         fit = meta.get("fit_mode") or None
         ref = meta.get("ref_size") or None
 
@@ -51,11 +52,15 @@ def update_regions_meta(
             "canvas_size": {
                 "width": int(cs.get("width") or 0),
                 "height": int(cs.get("height") or 0),
-            } if cs else None,
+            }
+            if cs
+            else None,
             "background_size": {
                 "width": int(bs.get("width") or 0),
                 "height": int(bs.get("height") or 0),
-            } if bs else None,
+            }
+            if bs
+            else None,
             "fit_mode": str(fit) if fit else None,
             "ref_size": str(ref) if ref else None,
         }
@@ -66,6 +71,7 @@ def update_regions_meta(
         except Exception:
             # 兼容早期注入
             from src.services import region_service as _rs
+
             if getattr(_rs, "region_manager", None) is not None:
                 _rs.region_manager.meta = normalized
 
@@ -114,6 +120,7 @@ def delete_region(
 # 兼容旧版前端的API (/api/regions)
 # ----------------------------
 
+
 def _region_to_ui(r: Dict[str, Any]) -> Dict[str, Any]:
     """将内部Region字典转换为旧前端期望的字段命名。"""
     return {
@@ -160,11 +167,23 @@ def compat_save_regions(
                     "canvas_size": {
                         "width": int(cs.get("width") or 0),
                         "height": int(cs.get("height") or 0),
-                    } if (cs and str(cs.get("width","0")).isdigit() and str(cs.get("height","0")).isdigit()) else None,
+                    }
+                    if (
+                        cs
+                        and str(cs.get("width", "0")).isdigit()
+                        and str(cs.get("height", "0")).isdigit()
+                    )
+                    else None,
                     "background_size": {
                         "width": int(bs.get("width") or 0),
                         "height": int(bs.get("height") or 0),
-                    } if (bs and str(bs.get("width","0")).isdigit() and str(bs.get("height","0")).isdigit()) else None,
+                    }
+                    if (
+                        bs
+                        and str(bs.get("width", "0")).isdigit()
+                        and str(bs.get("height", "0")).isdigit()
+                    )
+                    else None,
                     "fit_mode": str(fit) if fit else None,
                     "ref_size": str(ref) if ref else None,
                 }
@@ -225,6 +244,11 @@ def compat_save_regions(
             region_service.save_to_file()
         except Exception:
             pass
-        return {"status": "success", "created": created, "updated": updated, "removed": removed}
+        return {
+            "status": "success",
+            "created": created,
+            "updated": updated,
+            "removed": removed,
+        }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

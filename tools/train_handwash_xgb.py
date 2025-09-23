@@ -1,17 +1,17 @@
 import argparse
-import os
 import csv
-import numpy as np
+import os
 
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, roc_auc_score
-from xgboost import XGBClassifier
 import joblib
+import numpy as np
+from sklearn.metrics import classification_report, roc_auc_score
+from sklearn.model_selection import train_test_split
+from xgboost import XGBClassifier
 
 
 def load_csv(path: str):
     X, y = [], []
-    with open(path, 'r') as f:
+    with open(path, "r") as f:
         reader = csv.reader(f)
         header = next(reader, None)
         for row in reader:
@@ -23,12 +23,16 @@ def load_csv(path: str):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--features', required=True, help='CSV features file')
-    parser.add_argument('--out', default='models/handwash_xgb.joblib', help='Output model path')
+    parser.add_argument("--features", required=True, help="CSV features file")
+    parser.add_argument(
+        "--out", default="models/handwash_xgb.joblib", help="Output model path"
+    )
     args = parser.parse_args()
 
     X, y = load_csv(args.features)
-    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+    X_train, X_val, y_train, y_val = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
 
     model = XGBClassifier(
         n_estimators=200,
@@ -39,7 +43,7 @@ def main():
         reg_lambda=1.0,
         n_jobs=-1,
         random_state=42,
-        objective='binary:logistic'
+        objective="binary:logistic",
     )
     model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
 
@@ -47,16 +51,14 @@ def main():
     y_proba = model.predict_proba(X_val)[:, 1]
     print(classification_report(y_val, y_pred, digits=3))
     try:
-        print('AUC:', roc_auc_score(y_val, y_proba))
+        print("AUC:", roc_auc_score(y_val, y_proba))
     except Exception:
         pass
 
-    os.makedirs(os.path.dirname(args.out) or '.', exist_ok=True)
+    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     joblib.dump(model, args.out)
-    print('Saved model to', args.out)
+    print("Saved model to", args.out)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
-
-

@@ -58,23 +58,23 @@ def _configure_mediapipe_gpu():
     """智能配置MediaPipe GPU使用策略"""
     try:
         import torch
-        
+
         # 检查CUDA是否可用
         cuda_available = torch.cuda.is_available()
-        
+
         if cuda_available:
             # 检查GPU显存是否足够（至少需要2GB可用显存）
             gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
             allocated_memory_gb = torch.cuda.memory_allocated(0) / (1024**3)
             available_memory_gb = gpu_memory_gb - allocated_memory_gb
-            
+
             # 检查是否为支持的GPU架构（计算能力>=6.0）
             compute_capability = torch.cuda.get_device_capability(0)
             compute_version = compute_capability[0] + compute_capability[1] * 0.1
-            
+
             # GPU使用条件检查
             manual_disable = os.environ.get('MEDIAPIPE_DISABLE_GPU', '').lower() in ['1', 'true', 'yes']
-            
+
             if not manual_disable and available_memory_gb >= 2.0 and compute_version >= 6.0:
                 # 启用GPU加速
                 if 'MEDIAPIPE_DISABLE_GPU' in os.environ:
@@ -88,7 +88,7 @@ def _configure_mediapipe_gpu():
             # CUDA不可用，使用CPU模式
             os.environ['MEDIAPIPE_DISABLE_GPU'] = '1'
             return False
-            
+
     except Exception as e:
         # 异常情况，默认使用CPU模式
         os.environ['MEDIAPIPE_DISABLE_GPU'] = '1'

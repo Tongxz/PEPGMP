@@ -3,9 +3,9 @@
 提供区域管理的服务层接口，包括区域的创建、更新、删除和查询功能.
 """
 import logging
-from typing import Any, Dict, List, Optional, Tuple
 import os
 import threading
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import Depends
 
@@ -94,6 +94,7 @@ class RegionService:
     def save_to_file(self) -> bool:
         """将当前区域配置持久化到磁盘文件."""
         from src.services.region_service import regions_config_path as _cfg
+
         if not _cfg:
             logger.warning("regions_config_path is not set; skip saving to file")
             return False
@@ -108,7 +109,9 @@ class RegionService:
     def remove_regions_not_in(self, keep_ids: List[str]) -> int:
         """删除不在 keep_ids 列表中的区域，返回删除数量."""
         keep = set(keep_ids)
-        to_delete = [rid for rid in self.region_manager.regions.keys() if rid not in keep]
+        to_delete = [
+            rid for rid in self.region_manager.regions.keys() if rid not in keep
+        ]
         for rid in to_delete:
             try:
                 self.region_manager.remove_region(rid)
@@ -217,14 +220,16 @@ def get_region_manager_for_frame(frame_w: int, frame_h: int) -> Optional[RegionM
             region_manager.apply_mapping(int(frame_w), int(frame_h))
             # 打印一次策略与路径
             try:
-                mapping = getattr(region_manager, 'meta', None)
+                mapping = getattr(region_manager, "meta", None)
                 strategy = None
                 # 取一个区域的 _last_mapping 作为策略提示
                 for _r in region_manager.regions.values():
-                    strategy = getattr(_r, '_last_mapping', None)
+                    strategy = getattr(_r, "_last_mapping", None)
                     if strategy:
                         break
-                logger.info(f"Regions ready: path={regions_config_path}, strategy={strategy}")
+                logger.info(
+                    f"Regions ready: path={regions_config_path}, strategy={strategy}"
+                )
             except Exception:
                 pass
         except Exception as e:

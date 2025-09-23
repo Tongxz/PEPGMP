@@ -2,12 +2,13 @@
 
 包含各种检测模型的配置类和统一的配置管理器.
 """
-import os
 import logging
+import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class YOLOConfig:
@@ -201,10 +202,14 @@ class ModelConfig:
             return "cpu"
 
         env_req = (os.getenv("HBD_DEVICE", "") or "").strip().lower()
-        device_req = (requested or env_req or self.yolo.device or "auto").strip().lower()
+        device_req = (
+            (requested or env_req or self.yolo.device or "auto").strip().lower()
+        )
 
         def _mps_available() -> bool:
-            return bool(getattr(torch.backends, "mps", None)) and bool(torch.backends.mps.is_available())
+            return bool(getattr(torch.backends, "mps", None)) and bool(
+                torch.backends.mps.is_available()
+            )
 
         def _cuda_available() -> bool:
             return bool(torch.cuda.is_available())

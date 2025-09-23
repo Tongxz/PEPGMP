@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.api.app import app
-from src.api.dependencies import get_optimized_pipeline, get_hairnet_pipeline
+from src.api.dependencies import get_hairnet_pipeline, get_optimized_pipeline
 from src.services.region_service import get_region_service
 
 
@@ -22,7 +22,7 @@ class TestAPIEndpoints:
         self.client = TestClient(app)
         # 清除之前的依赖覆盖
         app.dependency_overrides.clear()
-    
+
     def teardown_method(self):
         """测试方法清理."""
         # 清除依赖覆盖
@@ -51,7 +51,7 @@ class TestAPIEndpoints:
         files = {"file": ("test.jpg", io.BytesIO(test_image_data), "image/jpeg")}
 
         response = self.client.post("/api/v1/detect/image", files=files)
-        
+
         assert response.status_code == 200
         result = response.json()
         assert result["filename"] == "test.jpg"
@@ -70,7 +70,7 @@ class TestAPIEndpoints:
         files = {"file": ("test.jpg", io.BytesIO(test_image_data), "image/jpeg")}
 
         response = self.client.post("/api/v1/detect/hairnet", files=files)
-        
+
         assert response.status_code == 200
         result = response.json()
         assert result["filename"] == "test.jpg"
@@ -97,7 +97,7 @@ class TestAPIEndpoints:
         files = {"file": ("test.jpg", io.BytesIO(test_image_data), "image/jpeg")}
 
         response = self.client.post("/api/v1/detect/image", files=files)
-        
+
         assert response.status_code == 500
         assert "检测服务未初始化" in response.json()["detail"]
 
@@ -110,7 +110,7 @@ class TestAPIEndpoints:
         files = {"file": ("test.jpg", io.BytesIO(test_image_data), "image/jpeg")}
 
         response = self.client.post("/api/v1/detect/hairnet", files=files)
-        
+
         assert response.status_code == 500
         assert "发网检测服务未初始化" in response.json()["detail"]
 
@@ -121,10 +121,10 @@ class TestAPIEndpoints:
         app.dependency_overrides[get_region_service] = lambda: mock_region_service
 
         response = self.client.get("/api/v1/statistics/realtime")
-        
+
         assert response.status_code == 200
         result = response.json()
-        
+
         # 验证返回数据结构
         assert "timestamp" in result
         assert "system_status" in result
@@ -132,7 +132,7 @@ class TestAPIEndpoints:
         assert "region_stats" in result
         assert "performance_metrics" in result
         assert "alerts" in result
-        
+
         # 验证检测统计数据结构
         detection_stats = result["detection_stats"]
         assert "total_detections_today" in detection_stats
@@ -145,7 +145,7 @@ class TestAPIEndpoints:
         """测试实时统计端点无区域服务情况."""
         app.dependency_overrides[get_region_service] = lambda: None
         response = self.client.get("/api/v1/statistics/realtime")
-        
+
         assert response.status_code == 200
         result = response.json()
         assert result["system_status"] == "active"
@@ -154,7 +154,7 @@ class TestAPIEndpoints:
         """测试统计信息端点."""
         mock_region_service = Mock()
         app.dependency_overrides[get_region_service] = lambda: mock_region_service
-        
+
         response = self.client.get("/api/v1/statistics")
         assert response.status_code == 200
         assert "message" in response.json()
@@ -163,7 +163,7 @@ class TestAPIEndpoints:
         """测试违规记录端点."""
         mock_region_service = Mock()
         app.dependency_overrides[get_region_service] = lambda: mock_region_service
-        
+
         response = self.client.get("/api/v1/violations")
         assert response.status_code == 200
         assert "message" in response.json()

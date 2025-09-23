@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import os
-import sys
-import yaml
-import time
 import signal
 import subprocess
+import sys
+import time
 from typing import Any, Dict, List, Optional
+
+import yaml
 
 
 def _project_root() -> str:
@@ -129,7 +130,12 @@ class ProcessManager:
                 with open(pid_path, "r", encoding="utf-8") as f:
                     pid = int(f.read().strip() or "0")
                 if _is_process_alive(pid):
-                    return {"ok": True, "running": True, "pid": pid, "log": _log_file(camera_id)}
+                    return {
+                        "ok": True,
+                        "running": True,
+                        "pid": pid,
+                        "log": _log_file(camera_id),
+                    }
             except Exception:
                 pass
 
@@ -154,7 +160,13 @@ class ProcessManager:
         )
         with open(pid_path, "w", encoding="utf-8") as pf:
             pf.write(str(proc.pid))
-        return {"ok": True, "running": True, "pid": proc.pid, "log": log_path, "cmd": cmd}
+        return {
+            "ok": True,
+            "running": True,
+            "pid": proc.pid,
+            "log": log_path,
+            "cmd": cmd,
+        }
 
     def stop(self, camera_id: str) -> Dict[str, Any]:
         pid_path = _pid_file(camera_id)
@@ -244,5 +256,3 @@ def get_process_manager() -> ProcessManager:
     if _manager is None:
         _manager = ProcessManager()
     return _manager
-
-

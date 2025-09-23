@@ -47,5 +47,3 @@ def cleanup_old_files(
         except Exception:
             continue
     return deleted
-
-

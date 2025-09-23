@@ -6,8 +6,8 @@ import asyncio
 import base64
 import json
 import logging
-from io import BytesIO
 import os
+from io import BytesIO
 
 import cv2
 import numpy as np
@@ -54,15 +54,17 @@ async def websocket_endpoint(
                         json.dumps({"type": "error", "message": "Invalid JSON format"})
                     )
                 except (WebSocketDisconnect, ConnectionClosedOK):
-                    pass # Client likely disconnected
+                    pass  # Client likely disconnected
             except Exception as e:
                 logger.error(f"WebSocket processing error: {e}", exc_info=True)
                 try:
                     await websocket.send_text(
-                        json.dumps({"type": "error", "message": f"Processing error: {str(e)}"})
+                        json.dumps(
+                            {"type": "error", "message": f"Processing error: {str(e)}"}
+                        )
                     )
                 except (WebSocketDisconnect, ConnectionClosedOK):
-                    pass # Client likely disconnected
+                    pass  # Client likely disconnected
 
     except WebSocketDisconnect:
         logger.info("Client disconnected.")
@@ -101,7 +103,7 @@ async def process_image_detection(session: WebSocketSession, message: dict):
         try:
             await session.websocket.send_text(json.dumps(detection_result))
         except (WebSocketDisconnect, ConnectionClosedOK):
-            pass # Client likely disconnected
+            pass  # Client likely disconnected
 
     except Exception as e:
         logger.error(f"Image detection processing error: {e}", exc_info=True)
@@ -110,7 +112,7 @@ async def process_image_detection(session: WebSocketSession, message: dict):
                 json.dumps({"type": "error", "message": f"Detection failed: {str(e)}"})
             )
         except (WebSocketDisconnect, ConnectionClosedOK):
-            pass # Client likely disconnected
+            pass  # Client likely disconnected
 
 
 @router.websocket("/ws/events")
@@ -120,7 +122,9 @@ async def websocket_events(websocket: WebSocket):
         try:
             from urllib.parse import parse_qs
 
-            qs = parse_qs(websocket.url.query or "") if hasattr(websocket, "url") else {}
+            qs = (
+                parse_qs(websocket.url.query or "") if hasattr(websocket, "url") else {}
+            )
             etype_filter = None
             if isinstance(qs, dict):
                 vals = qs.get("etype")
@@ -129,7 +133,9 @@ async def websocket_events(websocket: WebSocket):
         except Exception:
             etype_filter = None
 
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+        project_root = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        )
         events_file = os.path.join(project_root, "logs", "events_record.jsonl")
 
         last_pos = 0
@@ -155,7 +161,9 @@ async def websocket_events(websocket: WebSocket):
                             obj = json.loads(line)
                             if etype_filter and str(obj.get("type")) != etype_filter:
                                 continue
-                            await websocket.send_text(json.dumps({"type": "event", "data": obj}))
+                            await websocket.send_text(
+                                json.dumps({"type": "event", "data": obj})
+                            )
                         except Exception:
                             continue
                 try:
