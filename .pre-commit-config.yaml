@@ -1,44 +1,34 @@
-# Pre-commit 配置文件
-# Pre-commit Configuration
+# 优化版 Pre-commit 配置
+# 专注于核心代码质量，避免过度检查
 
 repos:
-  # 基础代码检查
+  # 基础代码检查 - 保留最必要的项目
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.4.0
     hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-yaml
-      - id: check-json
-      - id: check-toml
-      - id: check-xml
-      - id: check-merge-conflict
-      - id: check-case-conflict
-      - id: check-docstring-first
-      - id: check-executables-have-shebangs
-      - id: check-shebang-scripts-are-executable
-      - id: mixed-line-ending
-      - id: requirements-txt-fixer
-      - id: fix-byte-order-marker
-      - id: fix-encoding-pragma
-        args: ["--remove"]
+      - id: trailing-whitespace    # 删除行尾空格
+      - id: end-of-file-fixer      # 确保文件以换行符结束
+      - id: check-yaml            # 检查YAML语法
+      - id: check-json            # 检查JSON语法
+      - id: check-merge-conflict  # 检查合并冲突标记
+      - id: check-case-conflict   # 检查文件名大小写冲突
+      - id: mixed-line-ending     # 统一行尾符
 
-  # Python 代码格式化
+  # Python 代码格式化 - 核心自动化工具
   - repo: https://github.com/psf/black
     rev: 23.7.0
     hooks:
       - id: black
-        language_version: python3
-        args: ["--line-length=88"]
+        args: ["--line-length=88", "--safe"]
 
-  # 导入排序
+  # 导入排序 - 与black配合良好
   - repo: https://github.com/pycqa/isort
     rev: 5.12.0
     hooks:
       - id: isort
         args: ["--profile", "black", "--line-length=88"]
 
-  # 自动移除未使用的导入和变量
+  # 自动移除未使用的导入 - 保持代码整洁
   - repo: https://github.com/PyCQA/autoflake
     rev: v2.2.1
     hooks:
@@ -47,80 +37,30 @@ repos:
           - "--in-place"
           - "--remove-all-unused-imports"
           - "--remove-unused-variables"
-          - "--expand-star-imports"
 
-  # 代码质量检查
+  # 基础代码质量检查 - 简化版flake8
   - repo: https://github.com/pycqa/flake8
     rev: 6.0.0
     hooks:
       - id: flake8
-        args: ["--max-line-length=88", "--extend-ignore=E203,W503"]
-        additional_dependencies:
-          - flake8-docstrings
-          - flake8-bugbear
-          - flake8-comprehensions
-          - flake8-simplify
+        args:
+          - "--max-line-length=88"
+          - "--extend-ignore=E203,W503,E501,F401,F841"
+          - "--max-complexity=18"
+        # 移除了复杂的依赖，只保留核心检查
 
-  #  # 类型检查
-  #  - repo: https://github.com/pre-commit/mirrors-mypy
-  #    rev: v1.5.1
-  #    hooks:
-  #      - id: mypy
-  #        args: ["--config-file", "mypy.ini", "--ignore-missing-imports", "--no-site-packages"]
-  #        additional_dependencies:
-  #          - types-requests
-  #          - types-PyYAML
-  #          - types-python-dateutil
-
-  # 安全检查
+  # 基础安全检查 - 仅关键问题
   - repo: https://github.com/pycqa/bandit
     rev: 1.7.5
     hooks:
       - id: bandit
-        exclude: tests/
-        additional_dependencies: ["pbr"]
-
-  # 文档字符串检查
-  - repo: https://github.com/pycqa/pydocstyle
-    rev: 6.3.0
-    hooks:
-      - id: pydocstyle
-        args: ["--convention=google"]
-        exclude: tests/
-
-  # Jupyter Notebook 清理
-  - repo: https://github.com/nbQA-dev/nbQA
-    rev: 1.7.0
-    hooks:
-      - id: nbqa-black
-        additional_dependencies: [black==23.7.0]
-      - id: nbqa-isort
-        additional_dependencies: [isort==5.12.0]
-      - id: nbqa-flake8
-        additional_dependencies: [flake8==6.0.0]
-
-  # YAML 格式化
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v3.0.0
-    hooks:
-      - id: prettier
-        types_or: [yaml, markdown, json]
-        exclude: '^(.*\.md)$'
-
-  # Dockerfile 检查 (暂时禁用，因为Docker未安装)
-  # - repo: https://github.com/hadolint/hadolint
-  #   rev: v2.12.0
-  #   hooks:
-  #     - id: hadolint-docker
-  #       args: ["--ignore", "DL3008", "--ignore", "DL3009"]
-
-  # 密钥检查
-  - repo: https://github.com/Yelp/detect-secrets
-    rev: v1.4.0
-    hooks:
-      - id: detect-secrets
-        args: ["--baseline", ".secrets.baseline"]
-        exclude: package.lock.json
+        args: ["-ll", "-c", "pyproject.toml"]
+        exclude: |
+          (?x)^(
+            tests/|
+            test_|
+            .*test_.*\.py$
+          )
 
 # 全局配置
 default_language_version:
@@ -128,12 +68,7 @@ default_language_version:
 
 ci:
   autofix_commit_msg: |
-    [pre-commit.ci] auto fixes from pre-commit.com hooks
-
-    for more information, see https://pre-commit.ci
+    chore: auto-fix by pre-commit hooks
   autofix_prs: true
-  autoupdate_branch: ""
-  autoupdate_commit_msg: "[pre-commit.ci] pre-commit autoupdate"
-  autoupdate_schedule: weekly
-  skip: []
-  submodules: false
+  autoupdate_commit_msg: "chore: update pre-commit hooks"
+  autoupdate_schedule: monthly

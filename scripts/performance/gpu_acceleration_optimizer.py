@@ -19,7 +19,6 @@ import sys
 from pathlib import Path
 from typing import Any, Dict
 
-
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

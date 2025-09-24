@@ -23,6 +23,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # 使用第一个GPU
 
 try:
     import uvicorn
+
     from src.api.app import app
     from src.core.fast_detection_pipeline import FastDetectionPipeline
     from src.services.detection_service import initialize_detection_services
@@ -31,6 +32,7 @@ except ImportError:
     # 如果直接运行脚本，可能找不到src模块，因此添加路径
     sys.path.insert(0, str(project_root))
     import uvicorn
+
     from src.api.app import app
     from src.core.fast_detection_pipeline import FastDetectionPipeline
     from src.services.detection_service import initialize_detection_services

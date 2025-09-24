@@ -2,7 +2,6 @@
 
 import unittest
 
-
 from src.core.behavior import BehaviorRecognizer
 
 

@@ -107,10 +107,7 @@ from ultralytics import YOLO
 from ..config.unified_params import get_unified_params
 from ..utils.logger import get_logger
 from .detector import BaseDetector
-from .enhanced_hand_detector import (
-    DetectionMode,
-    EnhancedHandDetector,
-)
+from .enhanced_hand_detector import DetectionMode, EnhancedHandDetector
 
 logger = get_logger(__name__)
 

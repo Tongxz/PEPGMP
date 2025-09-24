@@ -7,7 +7,6 @@
 
 import unittest
 
-
 from src.detection.motion_analyzer import MotionAnalyzer, MotionTracker
 
 

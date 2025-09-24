@@ -14,6 +14,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+project_root = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
+
 try:
     from src.api.middleware.error_middleware import setup_error_middleware
     from src.api.middleware.security_middleware import setup_security_middleware
@@ -35,9 +39,6 @@ try:
     from src.utils.error_monitor import start_error_monitoring, stop_error_monitoring
 except ImportError:
     # Add project root to Python path
-    project_root = os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    )
     sys.path.append(project_root)
     from src.api.middleware.error_middleware import setup_error_middleware
     from src.api.middleware.security_middleware import setup_security_middleware
@@ -192,5 +193,4 @@ elif os.path.exists(frontend_path):
         f"Static file directory mounted: {frontend_path} to /frontend (development)"
     )
 else:
-  else:
     logger.warning("Frontend directory not found")

@@ -20,9 +20,11 @@ sys.path.insert(0, str(src_path))
 try:
     import json
     import time
+
     import cv2
-    from utils.logger import setup_project_logger
+
     from utils.gpu_acceleration import initialize_gpu_acceleration
+    from utils.logger import setup_project_logger
 except ImportError:
     # This is a workaround for running scripts directly from the repository root.
     # It adds the 'src' directory to the Python path.
@@ -30,9 +32,11 @@ except ImportError:
     sys.path.insert(0, str(src_path))
     import json
     import time
+
     import cv2
-    from utils.logger import setup_project_logger
+
     from utils.gpu_acceleration import initialize_gpu_acceleration
+    from utils.logger import setup_project_logger
 
 # GPU加速优化（在导入其他模块之前）
 try:

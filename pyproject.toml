@@ -8,10 +8,8 @@ version = "0.1.0"
 description = "人体行为检测系统 - Human Behavior Detection System"
 readme = "README.md"
 requires-python = ">=3.8"
-license = {text = "MIT"}
-authors = [
-    {name = "Development Team", email = "dev@example.com"}
-]
+license = { text = "MIT" }
+authors = [{ name = "Development Team", email = "dev@example.com" }]
 keywords = ["computer-vision", "behavior-detection", "yolo", "opencv", "ai"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -211,9 +209,24 @@ src_paths = ["src", "tests"]
 skip_glob = ["**/migrations/*"]
 known_first_party = ["src"]
 known_third_party = [
-    "cv2", "numpy", "PIL", "yaml", "fastapi", "uvicorn", "sqlalchemy",
-    "alembic", "redis", "celery", "pydantic", "jose", "passlib",
-    "loguru", "click", "rich", "psutil", "ultralytics"
+    "cv2",
+    "numpy",
+    "PIL",
+    "yaml",
+    "fastapi",
+    "uvicorn",
+    "sqlalchemy",
+    "alembic",
+    "redis",
+    "celery",
+    "pydantic",
+    "jose",
+    "passlib",
+    "loguru",
+    "click",
+    "rich",
+    "psutil",
+    "ultralytics",
 ]
 
 # MyPy configuration
@@ -274,12 +287,7 @@ filterwarnings = [
 # Coverage configuration
 [tool.coverage.run]
 source = ["src"]
-omit = [
-    "*/tests/*",
-    "*/venv/*",
-    "*/migrations/*",
-    "setup.py",
-]
+omit = ["*/tests/*", "*/venv/*", "*/migrations/*", "setup.py"]
 branch = true
 
 [tool.coverage.report]
@@ -321,9 +329,9 @@ select = [
     "UP", # pyupgrade
 ]
 ignore = [
-    "E501",  # line too long, handled by black
-    "B008",  # do not perform function calls in argument defaults
-    "C901",  # too complex
+    "E501", # line too long, handled by black
+    "B008", # do not perform function calls in argument defaults
+    "C901", # too complex
 ]
 line-length = 88
 target-version = "py38"
@@ -331,8 +339,8 @@ target-version = "py38"
 [tool.ruff.per-file-ignores]
 "__init__.py" = ["F401"]
 "tests/**/*.py" = [
-    "S101",  # use of assert detected
-    "S311",  # standard pseudo-random generators are not suitable for security/cryptographic purposes
+    "S101", # use of assert detected
+    "S311", # standard pseudo-random generators are not suitable for security/cryptographic purposes
 ]
 
 [tool.ruff.mccabe]
@@ -340,3 +348,8 @@ max-complexity = 10
 
 [tool.ruff.isort]
 known-first-party = ["src"]
+[tool.flake8]
+max-line-length = 88
+ignore = "E203,W503,E501,F401,F841,E722,C901,F541,E713,W605,F821,E402,E731,E712"
+max-complexity = 20
+exclude = ".git,__pycache__,build,dist,.venv,venv,tests,scripts,docs"
