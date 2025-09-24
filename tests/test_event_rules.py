@@ -1,8 +1,7 @@
 import time
 
-import pytest
 
-from src.services.process_engine import Event, ProcessConfig, ProcessEngine
+from src.services.process_engine import ProcessConfig, ProcessEngine
 
 
 def make_engine(**overrides) -> ProcessEngine:

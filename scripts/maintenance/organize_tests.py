@@ -5,8 +5,6 @@
 将根目录下的测试文件整理到合适的位置
 """
 
-import glob
-import os
 import re
 import shutil
 from pathlib import Path

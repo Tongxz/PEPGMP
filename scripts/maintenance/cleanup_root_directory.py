@@ -11,9 +11,6 @@
 6. 保留重要的配置文件和项目文件
 """
 
-import os
-import shutil
-import sys
 from pathlib import Path
 
 # 获取项目根目录

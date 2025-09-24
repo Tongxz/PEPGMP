@@ -18,10 +18,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import cv2
-import matplotlib.pyplot as plt
 import numpy as np
-import psutil
-import torch
 
 # 设置日志
 logging.basicConfig(level=logging.INFO)
@@ -95,7 +92,7 @@ class PerformanceBenchmark:
             frame_start = time.time()
 
             # 使用优化的检测方法
-            result = pipeline.detect(frame)
+            pipeline.detect(frame)
 
             frame_time = time.time() - frame_start
             processing_times.append(frame_time)

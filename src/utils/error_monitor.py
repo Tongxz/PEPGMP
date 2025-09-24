@@ -10,14 +10,14 @@ import logging
 import smtplib
 import threading
 import time
-from collections import defaultdict, deque
+from collections import deque
 from dataclasses import dataclass, field
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
-from .error_handler import ErrorCategory, ErrorInfo, ErrorSeverity, UnifiedErrorHandler
+from .error_handler import ErrorCategory, ErrorSeverity, UnifiedErrorHandler
 
 logger = logging.getLogger(__name__)
 

@@ -1,12 +1,10 @@
 import json
 import logging
-import os
 import queue
 import threading
-import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, Optional
 
 import cv2
 import numpy as np
@@ -132,7 +130,7 @@ class DataCollector:
             behavior_results: 行为检测结果 {behavior_type: confidence}
             frame_metadata: 帧元数据
         """
-        current_time = datetime.now()
+        datetime.now()
 
         if track_id not in self.active_segments:
             self.active_segments[track_id] = {}

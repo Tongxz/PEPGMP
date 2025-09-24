@@ -2,8 +2,7 @@ import base64
 import logging
 import os
 import time
-from dataclasses import asdict
-from typing import Any, Dict, Optional, Tuple
+from typing import Optional
 
 import cv2
 import numpy as np
@@ -222,7 +221,7 @@ def _draw_detections_on_frame_with_tracking(
     pose_detector = optimized_pipeline.pose_detector
     if pose_detector is None:
         return annotated_frame
-    hands_results = pose_detector.detect(frame)
+    pose_detector.detect(frame)
     washing_person_bboxes = [
         res["person_bbox"]
         for res in result.handwash_results
@@ -334,7 +333,7 @@ def _capture_violation(
 
 
 def process_tracked_frame(session, frame, optimized_pipeline):
-    start_time = time.time()
+    time.time()
     person_detections = optimized_pipeline._detect_persons(frame)
     tracker_input = [
         {"bbox": p.get("bbox"), "confidence": p.get("confidence")}

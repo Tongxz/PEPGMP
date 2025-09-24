@@ -13,7 +13,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import List
 
 # 配置日志
 logging.basicConfig(

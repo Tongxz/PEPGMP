@@ -6,7 +6,7 @@
 
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import cv2
 import numpy as np
@@ -14,7 +14,6 @@ import numpy as np
 try:
     from src.core.enhanced_hand_detector import EnhancedHandDetector
     from src.core.motion_analyzer import MotionAnalyzer
-    from src.core.pose_detector import PoseDetector
     from src.utils.logger import get_logger
     from src.utils.visualization import VisualizationManager
 except ImportError as e:

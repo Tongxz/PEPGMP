@@ -331,10 +331,13 @@ import { useSystemStore } from '@/stores/system'
 
 const systemStore = useSystemStore()
 
+// 定义本地状态类型与大小类型（与 StatusIndicator 组件保持一致）
+type LocalStatusType = 'success' | 'warning' | 'error' | 'loading' | 'info'
+
 // 响应式数据
 const activeTab = ref('basic')
 const currentTime = ref(Date.now())
-const timeInterval = ref<NodeJS.Timeout | null>(null)
+const timeInterval = ref<number | null>(null)
 
 // 计算属性
 const systemInfo = computed(() => systemStore.systemInfo)
@@ -376,7 +379,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  if (timeInterval.value) {
+  if (timeInterval.value !== null) {
     clearInterval(timeInterval.value)
   }
 })
@@ -399,40 +402,41 @@ async function refreshServices() {
   }
 }
 
-const getStatusCardClass = (status: string) => {
-  const classes = {
-    'running': 'status-success',
-    'warning': 'status-warning',
-    'error': 'status-error'
+const getStatusCardClass = (status: 'running' | 'warning' | 'error') => {
+  const classes: Record<'running' | 'warning' | 'error', string> = {
+    running: 'status-success',
+    warning: 'status-warning',
+    error: 'status-error'
   }
-  return classes[status] || 'status-default'
+  return classes[status] ?? 'status-default'
 }
 
-const getStatusColor = (status: string) => {
-  const colors = {
-    'running': 'var(--success-color)',
-    'warning': 'var(--warning-color)',
-    'error': 'var(--error-color)'
+const getStatusColor = (status: 'running' | 'warning' | 'error') => {
+  const colors: Record<'running' | 'warning' | 'error', string> = {
+    running: 'var(--success-color)',
+    warning: 'var(--warning-color)',
+    error: 'var(--error-color)'
   }
-  return colors[status] || 'var(--text-color-3)'
+  return colors[status] ?? 'var(--text-color-3)'
 }
 
-const getStatusType = (status: string) => {
-  const types = {
-    'running': 'success',
-    'warning': 'warning',
-    'error': 'error'
+
+const getStatusType = (status: 'running' | 'warning' | 'error'): LocalStatusType => {
+  const types: Record<'running' | 'warning' | 'error', LocalStatusType> = {
+    running: 'success',
+    warning: 'warning',
+    error: 'error'
   }
-  return types[status] || 'default'
+  return types[status] ?? 'info'
 }
 
-const getStatusText = (status: string) => {
-  const texts = {
-    'running': '正常运行',
-    'warning': '警告状态',
-    'error': '错误状态'
+const getStatusText = (status: 'running' | 'warning' | 'error') => {
+  const texts: Record<'running' | 'warning' | 'error', string> = {
+    running: '正常运行',
+    warning: '警告状态',
+    error: '错误状态'
   }
-  return texts[status] || '未知状态'
+  return texts[status] ?? '未知状态'
 }
 
 const getUsageColor = (percentage: number) => {

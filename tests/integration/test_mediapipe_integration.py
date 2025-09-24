@@ -7,11 +7,9 @@ import logging
 from pathlib import Path
 
 import cv2
-import numpy as np
 import pytest
 
 from src.core.behavior import BehaviorRecognizer
-from src.core.optimized_detection_pipeline import DetectionResult
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)

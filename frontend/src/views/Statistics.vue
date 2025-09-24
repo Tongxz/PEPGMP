@@ -20,7 +20,7 @@
 
     <!-- 控制栏 -->
     <div class="controls-section">
-      <DataCard class="controls-card">
+      <DataCard class="controls-card" title="筛选条件">
         <n-space align="center" justify="space-between" wrap>
           <n-space align="center" wrap>
             <div class="control-group">
@@ -459,12 +459,12 @@ function formatTime(timestamp: string) {
 
 function getEventTypeText(type: string) {
   const typeMap: Record<string, string> = {
-    'handwashing': '洗手',
-    'no_handwashing': '未洗手',
-    'person_detected': '人员检测',
-    'hand_detected': '手部检测'
+    handwashing: '洗手',
+    violation: '违规',
+    normal: '正常',
+    warning: '警告'
   }
-  return typeMap[type] || type
+  return typeMap[type] ?? type
 }
 
 async function loadHistoryData() {
@@ -496,13 +496,13 @@ async function loadHistoryData() {
 }
 
 const getEventTypeColor = (type: string) => {
-  const colors = {
-    'handwashing': 'var(--success-color)',
-    'violation': 'var(--error-color)',
-    'normal': 'var(--info-color)',
-    'warning': 'var(--warning-color)'
+  const colors: Record<string, string> = {
+    handwashing: 'var(--success-color)',
+    violation: 'var(--error-color)',
+    normal: 'var(--info-color)',
+    warning: 'var(--warning-color)'
   }
-  return colors[type] || 'var(--text-color)'
+  return colors[type] ?? 'var(--text-color)'
 }
 
 const exportData = () => {

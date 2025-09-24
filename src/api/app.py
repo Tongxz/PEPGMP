@@ -11,32 +11,52 @@ from datetime import datetime
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-# Add project root to Python path
-project_root = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-)
-sys.path.append(project_root)
-
-from src.api.middleware.error_middleware import setup_error_middleware
-from src.api.middleware.security_middleware import setup_security_middleware
-from src.api.routers import (
-    cameras,
-    comprehensive,
-    download,
-    error_monitoring,
-    events,
-    metrics,
-    region_management,
-    security,
-    statistics,
-    system,
-    websocket,
-)
-from src.monitoring.advanced_monitoring import start_monitoring, stop_monitoring
-from src.services import detection_service, region_service, websocket_service
-from src.utils.error_monitor import start_error_monitoring, stop_error_monitoring
+try:
+    from src.api.middleware.error_middleware import setup_error_middleware
+    from src.api.middleware.security_middleware import setup_security_middleware
+    from src.api.routers import (
+        cameras,
+        comprehensive,
+        download,
+        error_monitoring,
+        events,
+        metrics,
+        region_management,
+        security,
+        statistics,
+        system,
+        websocket,
+    )
+    from src.monitoring.advanced_monitoring import start_monitoring, stop_monitoring
+    from src.services import detection_service, region_service
+    from src.utils.error_monitor import start_error_monitoring, stop_error_monitoring
+except ImportError:
+    # Add project root to Python path
+    project_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+    sys.path.append(project_root)
+    from src.api.middleware.error_middleware import setup_error_middleware
+    from src.api.middleware.security_middleware import setup_security_middleware
+    from src.api.routers import (
+        cameras,
+        comprehensive,
+        download,
+        error_monitoring,
+        events,
+        metrics,
+        region_management,
+        security,
+        statistics,
+        system,
+        websocket,
+    )
+    from src.monitoring.advanced_monitoring import start_monitoring, stop_monitoring
+    from src.services import detection_service, region_service
+    from src.utils.error_monitor import start_error_monitoring, stop_error_monitoring
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -143,8 +163,6 @@ app.include_router(system.router, prefix="/api/v1", tags=["System"])
 app.include_router(error_monitoring.router, prefix="/api/v1", tags=["Error Monitoring"])
 app.include_router(security.router, prefix="/api/v1", tags=["Security Management"])
 
-from fastapi.responses import RedirectResponse
-
 
 @app.get("/", include_in_schema=False)
 async def root():
@@ -174,4 +192,5 @@ elif os.path.exists(frontend_path):
         f"Static file directory mounted: {frontend_path} to /frontend (development)"
     )
 else:
+  else:
     logger.warning("Frontend directory not found")

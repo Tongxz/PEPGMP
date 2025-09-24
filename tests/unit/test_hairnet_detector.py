@@ -4,10 +4,8 @@
 Hairnet Detector Unit Tests
 """
 
-import os
-import sys
 import unittest
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import patch
 
 import numpy as np
 import torch
@@ -272,7 +270,6 @@ class TestHairnetDetectionPipeline(unittest.TestCase):
 
     def tearDown(self):
         """测试后清理"""
-        pass
 
 
 if __name__ == "__main__":

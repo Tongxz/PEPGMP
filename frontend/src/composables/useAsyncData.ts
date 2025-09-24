@@ -1,7 +1,7 @@
 /**
  * 异步数据管理组合式函数
  */
-import { ref, computed, watch, onUnmounted, readonly, type Ref } from 'vue'
+import { ref, computed, watch, onUnmounted, readonly, type Ref, type ComputedRef } from 'vue'
 import { MemoryCache } from '@/utils/performance'
 
 export interface AsyncDataOptions<T> {
@@ -163,7 +163,7 @@ export function useAsyncData<T>(
   })
 
   return {
-    data,
+    data: data as Ref<T | null>,
     pending,
     error,
     refresh,
@@ -184,10 +184,23 @@ export interface PaginatedResult<T> {
   hasMore: boolean
 }
 
+// 为分页返回添加显式类型
+export interface PaginatedDataState<T> {
+  data: ComputedRef<T[]>
+  currentPage: Readonly<Ref<number>>
+  total: Readonly<Ref<number>>
+  hasMore: Readonly<Ref<boolean>>
+  pending: Ref<boolean>
+  error: Ref<Error | null>
+  loadMore: () => Promise<void>
+  reset: () => void
+  refresh: () => Promise<void>
+}
+
 export function usePaginatedData<T>(
   fetcher: (page: number, pageSize: number) => Promise<PaginatedResult<T>>,
   options: PaginatedDataOptions<T> = {}
-) {
+): PaginatedDataState<T> {
   const {
     pageSize = 20,
     initialPage = 1,
@@ -197,15 +210,15 @@ export function usePaginatedData<T>(
   const currentPage = ref(initialPage)
   const total = ref(0)
   const hasMore = ref(true)
-  const allData = ref<T[]>([])
+  const allData = ref<any[]>([])
 
   const paginatedFetcher = async () => {
     const result = await fetcher(currentPage.value, pageSize)
 
     if (currentPage.value === 1) {
-      allData.value = result.data
+      allData.value = result.data as any[]
     } else {
-      allData.value.push(...result.data)
+      allData.value = [...allData.value, ...(result.data as any[])]
     }
 
     total.value = result.total
@@ -241,7 +254,7 @@ export function usePaginatedData<T>(
   }
 
   return {
-    data: computed(() => allData.value),
+    data: computed(() => allData.value as unknown as T[]) as ComputedRef<T[]>,
     currentPage: readonly(currentPage),
     total: readonly(total),
     hasMore: readonly(hasMore),
@@ -254,6 +267,10 @@ export function usePaginatedData<T>(
 }
 
 // 无限滚动数据管理
+export interface InfiniteScrollState<T> extends PaginatedDataState<T> {
+  loadMoreElement: Ref<HTMLElement | null>
+}
+
 export function useInfiniteScroll<T>(
   fetcher: (page: number, pageSize: number) => Promise<{
     data: T[]
@@ -263,7 +280,7 @@ export function useInfiniteScroll<T>(
     threshold?: number
     rootMargin?: string
   } = {}
-) {
+): InfiniteScrollState<T> {
   const { threshold = 0.1, rootMargin = '0px', ...paginatedOptions } = options
 
   const paginatedData = usePaginatedData(
@@ -277,7 +294,7 @@ export function useInfiniteScroll<T>(
     paginatedOptions
   )
 
-  const loadMoreElement = ref<HTMLElement>()
+  const loadMoreElement = ref<HTMLElement | null>(null)
 
   const observer = new IntersectionObserver(
     (entries) => {

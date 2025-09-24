@@ -13,17 +13,17 @@
 import argparse
 import os
 import sys
-from pathlib import Path
 
 import cv2
-import numpy as np
 
-# 添加项目根目录到Python路径
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(project_root)
-
-# 导入 YOLOHairnetDetector
-from src.detection.yolo_hairnet_detector import YOLOHairnetDetector
+try:
+    # 导入 YOLOHairnetDetector
+    from src.detection.yolo_hairnet_detector import YOLOHairnetDetector
+except ImportError:
+    # 添加项目根目录到Python路径
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    sys.path.append(project_root)
+    from src.detection.yolo_hairnet_detector import YOLOHairnetDetector
 
 
 def parse_args():

@@ -3,8 +3,6 @@ from __future__ import annotations
 import json
 import os
 import time
-from collections import deque
-from dataclasses import asdict
 from typing import Any, Deque, Dict, List, Optional, Tuple
 
 import cv2

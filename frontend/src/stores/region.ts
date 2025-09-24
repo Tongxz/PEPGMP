@@ -84,8 +84,23 @@ export const useRegionStore = defineStore('region', () => {
     error.value = ''
     try {
       const created = await regionApi.createRegion(regionData)
-      regions.value.push(created)
-      return created
+      // 后端可能仅返回 { status, region_id } 等最小字段，导致 normalize 后信息不完整
+      // 这里与本地提交的数据进行合并，确保前端列表立即展示完整信息
+      const merged: Region = {
+        id: created.id,
+        name: created.name || regionData.name,
+        type: (created.type || regionData.type) as Region['type'],
+        description: created.description ?? regionData.description ?? '',
+        rules: created.rules || regionData.rules || {
+          requireHairnet: false,
+          limitOccupancy: false,
+          timeRestriction: false
+        },
+        points: (created.points && created.points.length > 0) ? created.points : regionData.points,
+        enabled: created.enabled ?? regionData.enabled
+      }
+      regions.value.push(merged)
+      return merged
     } catch (e: any) {
       error.value = e.message || '创建区域失败'
       throw e

@@ -8,11 +8,11 @@ Error Monitoring API Routes
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from ...utils.error_handler import ErrorCategory, ErrorSeverity, get_error_handler
-from ...utils.error_monitor import AlertLevel, get_error_monitor, get_health_checker
+from ...utils.error_monitor import AlertLevel, get_error_monitor
 
 router = APIRouter(prefix="/monitoring", tags=["错误监控"])
 logger = logging.getLogger(__name__)

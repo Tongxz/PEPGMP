@@ -7,9 +7,7 @@
 2. 将不必要的脚本文件从根目录移动到scripts目录
 """
 
-import os
 import shutil
-import sys
 from pathlib import Path
 
 # 获取项目根目录

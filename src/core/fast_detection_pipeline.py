@@ -15,11 +15,10 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import cv2
 import numpy as np
-import torch
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +114,7 @@ class BatchDetector:
 
     def _process_batch(self, batch: List[np.ndarray]) -> List[FastDetectionResult]:
         """批量处理帧"""
-        start_time = time.time()
+        time.time()
 
         # 模拟批量推理（实际应该调用真实的模型）
         batch_time = 0.08  # 80ms for 8 frames = 10ms per frame
@@ -261,7 +260,7 @@ async def test_fast_pipeline():
         frame = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
 
         start_time = time.time()
-        result = await pipeline.detect_async(frame)
+        await pipeline.detect_async(frame)
         processing_time = time.time() - start_time
 
         if i % 10 == 0:

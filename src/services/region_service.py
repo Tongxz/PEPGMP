@@ -220,7 +220,7 @@ def get_region_manager_for_frame(frame_w: int, frame_h: int) -> Optional[RegionM
             region_manager.apply_mapping(int(frame_w), int(frame_h))
             # 打印一次策略与路径
             try:
-                mapping = getattr(region_manager, "meta", None)
+                getattr(region_manager, "meta", None)
                 strategy = None
                 # 取一个区域的 _last_mapping 作为策略提示
                 for _r in region_manager.regions.values():

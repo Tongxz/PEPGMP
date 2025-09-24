@@ -9,7 +9,6 @@ import sys
 from pathlib import Path
 
 import cv2
-import numpy as np
 
 
 def get_fixtures_dir():
@@ -86,7 +85,7 @@ def test_threshold_adjustment():
     for i, person in enumerate(persons, 1):
         print(f"\n--- 人员 {i} ---")
         bbox = person["bbox"]
-        keypoints = person.get("keypoints")
+        person.get("keypoints")
 
         print(f"人体边界框: {bbox}")
 

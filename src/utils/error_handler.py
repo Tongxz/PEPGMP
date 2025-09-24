@@ -14,7 +14,7 @@ from collections import defaultdict, deque
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -277,7 +277,7 @@ class UnifiedErrorHandler:
     ) -> tuple[ErrorSeverity, ErrorCategory]:
         """错误分类"""
         error_str = str(exception).lower()
-        error_type = type(exception).__name__
+        type(exception).__name__
 
         # 根据异常类型和消息内容分类
         if "cuda" in error_str or "gpu" in error_str or "cudnn" in error_str:
@@ -483,7 +483,7 @@ def error_handler(
                         continue
                     else:
                         # 最后一次尝试失败，记录错误
-                        error_info = handle_error(e)
+                        handle_error(e)
                         if fallback_value is not None:
                             logger.info(f"函数 {func.__name__} 使用备用值")
                             return fallback_value

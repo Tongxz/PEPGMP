@@ -18,32 +18,32 @@ def cleanup_old_files(
     """
     now = time.time()
     cutoff = now - float(days) * 86400.0
-    deleted = 0
-    for base in base_paths:
-        if not base:
+    deleted_count = 0
+
+    for base_path in base_paths:
+        if not base_path or not os.path.exists(base_path):
             continue
-        try:
-            if not os.path.exists(base):
-                continue
-            for root, dirs, files in os.walk(base):
-                for fn in files:
-                    try:
-                        if patterns:
-                            ext = os.path.splitext(fn)[1].lower()
-                            if ext not in patterns:
-                                continue
-                        fp = os.path.join(root, fn)
-                        try:
-                            st = os.stat(fp)
-                            mtime = st.st_mtime
-                        except Exception:
-                            continue
-                        if mtime < cutoff:
-                            try:
-                                os.remove(fp)
-                                deleted += 1
-                            except Exception:
-                                pass
-        except Exception:
-            continue
-    return deleted
+
+        for root, _, files in os.walk(base_path):
+            for filename in files:
+                try:
+                    if (
+                        patterns
+                        and os.path.splitext(filename)[1].lower() not in patterns
+                    ):
+                        continue
+
+                    filepath = os.path.join(root, filename)
+
+                    # os.path.getmtime can raise FileNotFoundError, so we handle it.
+                    mtime = os.path.getmtime(filepath)
+
+                    if mtime < cutoff:
+                        os.remove(filepath)
+                        deleted_count += 1
+                except (OSError, FileNotFoundError):
+                    # This can happen if the file is deleted between os.walk and os.remove,
+                    # or if there are permission issues. We'll just skip it.
+                    continue
+
+    return deleted_count

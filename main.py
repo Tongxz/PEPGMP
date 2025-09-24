@@ -17,20 +17,27 @@ from pathlib import Path
 src_path = Path(__file__).parent / "src"
 sys.path.insert(0, str(src_path))
 
-import json
-import time
-
-import cv2
-
-from config import Settings
-from utils.logger import setup_project_logger
+try:
+    import json
+    import time
+    import cv2
+    from utils.logger import setup_project_logger
+    from utils.gpu_acceleration import initialize_gpu_acceleration
+except ImportError:
+    # This is a workaround for running scripts directly from the repository root.
+    # It adds the 'src' directory to the Python path.
+    src_path = Path(__file__).resolve().parent.parent / "src"
+    sys.path.insert(0, str(src_path))
+    import json
+    import time
+    import cv2
+    from utils.logger import setup_project_logger
+    from utils.gpu_acceleration import initialize_gpu_acceleration
 
 # GPU加速优化（在导入其他模块之前）
 try:
-    from utils.gpu_acceleration import initialize_gpu_acceleration
-
     gpu_status = initialize_gpu_acceleration()
-except ImportError:
+except (ImportError, NameError):
     gpu_status = {"device": "cpu", "gpu_available": False}
 
 
@@ -320,14 +327,12 @@ def run_detection(args, logger):
 
         from src.core.behavior import BehaviorRecognizer
         from src.core.optimized_detection_pipeline import OptimizedDetectionPipeline
-        from src.core.region import RegionManager
         from src.core.tracker import MultiObjectTracker
         from src.detection.detector import HumanDetector
         from src.detection.pose_detector import PoseDetectorFactory
         from src.detection.yolo_hairnet_detector import YOLOHairnetDetector
         from src.services.capture_service import CaptureService
         from src.services.process_engine import (  # 记录用（默认关闭）
-            Event,
             ProcessConfig,
             ProcessEngine,
         )
@@ -987,7 +992,7 @@ def run_detection(args, logger):
                     # 打印当前帧 track 与 region 概要
                     try:
                         # 按区域分组统计 - 降到DEBUG级别减少日志开销
-                        if logger.isEnabledFor(_logging.DEBUG):
+                        if logger.isEnabledFor("DEBUG"):
                             by_region = {}
                             for _p in uod_persons:
                                 rn = _p.get("region") or "None"

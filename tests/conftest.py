@@ -7,7 +7,6 @@ Pytest配置文件
 
 # 添加pytest标记功能，用于跳过特定测试
 
-import os
 import sys
 import types
 import unittest.mock

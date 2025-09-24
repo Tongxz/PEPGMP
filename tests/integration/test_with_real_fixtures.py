@@ -8,7 +8,6 @@ import os
 import time
 
 import cv2
-import numpy as np
 
 from src.core.behavior import BehaviorRecognizer
 from src.detection.detector import HumanDetector

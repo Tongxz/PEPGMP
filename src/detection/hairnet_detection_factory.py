@@ -9,7 +9,7 @@
 import logging
 import os
 import sys
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict
 
 # 添加项目根目录到 Python 路径
 project_root = os.path.dirname(

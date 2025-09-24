@@ -8,8 +8,6 @@ Plugin Architecture System
 import importlib
 import importlib.util
 import logging
-import os
-import sys
 import threading
 import time
 from abc import ABC, abstractmethod
@@ -17,7 +15,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -67,22 +65,18 @@ class PluginInterface(ABC):
     @abstractmethod
     def initialize(self, config: Dict[str, Any]) -> bool:
         """初始化插件"""
-        pass
 
     @abstractmethod
     def execute(self, data: Any) -> Any:
         """执行插件功能"""
-        pass
 
     @abstractmethod
     def cleanup(self):
         """清理插件资源"""
-        pass
 
     @abstractmethod
     def get_info(self) -> PluginInfo:
         """获取插件信息"""
-        pass
 
 
 class PluginManager:
@@ -372,12 +366,10 @@ class BasePlugin(PluginInterface):
     @abstractmethod
     def execute(self, data: Any) -> Any:
         """执行插件功能"""
-        pass
 
     @abstractmethod
     def get_info(self) -> PluginInfo:
         """获取插件信息"""
-        pass
 
 
 # 具体插件示例

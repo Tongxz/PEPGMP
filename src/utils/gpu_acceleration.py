@@ -8,9 +8,7 @@ GPU Acceleration Optimization Module
 import logging
 import os
 import sys
-import warnings
-from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +36,7 @@ class GPUAccelerationManager:
         }
 
         try:
-            import torch
+            pass
 
             # 1. 检测可用设备
             device_info = self._detect_best_device()

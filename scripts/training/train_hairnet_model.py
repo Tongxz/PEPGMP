@@ -10,7 +10,6 @@
 import argparse
 import os
 import sys
-from pathlib import Path
 
 
 def parse_args():
@@ -41,7 +40,6 @@ def check_dependencies():
     """检查依赖项"""
     try:
         import ultralytics
-        from ultralytics import YOLO
 
         print(f"Ultralytics版本: {ultralytics.__version__}")
         return True

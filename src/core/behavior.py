@@ -43,8 +43,6 @@ except ImportError:
     )
     from src.config.unified_params import get_unified_params
 
-from src.detection.deep_behavior_recognizer import DeepBehaviorRecognizer
-from src.utils.logger import get_logger
 
 logger = logging.getLogger(__name__)
 

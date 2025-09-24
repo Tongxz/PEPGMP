@@ -6,9 +6,7 @@
 """
 
 import unittest
-from unittest.mock import Mock
 
-import numpy as np
 
 from src.detection.motion_analyzer import MotionAnalyzer, MotionTracker
 
@@ -279,8 +277,6 @@ class TestMotionAnalyzer(unittest.TestCase):
         ]
 
         # 计算手部中心距离
-        left_center = (125, 125)
-        right_center = (225, 125)
         expected_distance = 100.0  # 水平距离
 
         # 通过分析消毒行为间接测试距离计算

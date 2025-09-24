@@ -7,11 +7,9 @@ Architecture Analyzer
 
 import ast
 import logging
-import os
-from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Set
 
 logger = logging.getLogger(__name__)
 

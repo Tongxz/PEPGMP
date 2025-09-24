@@ -10,7 +10,6 @@ Fix XGBoost Model Loading Warning
 """
 
 import logging
-import os
 from pathlib import Path
 
 import joblib

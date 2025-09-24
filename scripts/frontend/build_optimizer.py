@@ -10,7 +10,6 @@ import gzip
 import json
 import logging
 import mimetypes
-import os
 import shutil
 from datetime import datetime
 from pathlib import Path

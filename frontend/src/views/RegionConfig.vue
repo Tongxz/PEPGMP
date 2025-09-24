@@ -33,6 +33,7 @@
         <n-space>
           <!-- 摄像头选择 -->
           <n-select
+            ref="cameraSelectRef"
             v-model:value="selectedCamera"
             :options="cameraOptions"
             placeholder="选择摄像头"
@@ -253,7 +254,7 @@
                         :min="0.1"
                         :max="1.0"
                         :step="0.1"
-                        :format-tooltip="(value) => `${(value * 100).toFixed(0)}%`"
+                        :format-tooltip="formatSensitivityTooltip"
                       />
                       <n-text depth="3" style="font-size: 12px; margin-top: 4px;">
                         敏感度越高，检测越严格
@@ -374,13 +375,11 @@
                       v-for="region in regions"
                       :key="region.id"
                       size="small"
-                      hoverable
                       :class="{
                         'region-card': true,
                         'region-card-selected': selectedRegionId === region.id,
                         'region-card-disabled': !region.enabled
                       }"
-                      @click="selectRegion(region)"
                     >
                       <template #header>
                         <n-space align="center" justify="space-between">
@@ -403,7 +402,7 @@
                           <n-space align="center" size="small">
                             <n-dropdown
                               :options="getRegionActions(region)"
-                              @select="(key) => handleRegionAction(key, region)"
+                              @select="onRegionActionSelect($event, region)"
                               trigger="click"
                               @click.stop
                             >
@@ -432,7 +431,7 @@
                         <n-space size="small" justify="space-between" align="center">
                           <n-space size="small">
                             <n-tag size="small" type="info">
-                              敏感度：{{ (region.sensitivity * 100).toFixed(0) }}%
+                              敏感度：{{ ((region.sensitivity ?? 0.8) * 100).toFixed(0) }}%
                             </n-tag>
                             <n-tag size="small" type="warning">
                               停留：{{ region.minDuration }}s
@@ -445,7 +444,7 @@
                               {{ getAlertLevelLabel(region.alertLevel) }}
                             </n-tag>
                           </n-space>
-                          
+
                           <!-- 编辑和删除按钮放在右下角，与n-tag水平对齐 -->
                           <n-space size="small">
                             <n-button
@@ -459,7 +458,7 @@
                               </template>
                               编辑
                             </n-button>
-                            
+
                             <n-button
                               size="small"
                               type="error"
@@ -582,7 +581,7 @@
                 @mousedown="handleCanvasMouseDown"
                 @mousemove="handleCanvasMouseMove"
                 @mouseup="handleCanvasMouseUp"
-                @dblclick="handleCanvasDoubleClick"
+                @dblclick.stop="handleCanvasDoubleClick"
                 @wheel="handleCanvasWheel"
                 @contextmenu.prevent
               ></canvas>
@@ -646,7 +645,7 @@
                     <n-space>
                       <n-button
                         type="primary"
-                        @click="$refs.cameraSelect?.focus()"
+                        @click="focusCameraSelect"
                       >
                         选择摄像头
                       </n-button>
@@ -729,8 +728,16 @@ import { useMessage, useDialog } from 'naive-ui'
 import { useRegionStore } from '@/stores/region'
 import { useCameraStore } from '@/stores/camera'
 import PageHeader from '@/components/common/PageHeader.vue'
-import type { Region, RegionType } from '@/types/region'
-import type { UploadFileInfo } from 'naive-ui'
+import type { Region } from '@/api/region'
+import type { UploadFileInfo, SelectInst } from 'naive-ui'
+
+type RegionType = Region['type']
+type UIRegionExtras = {
+  sensitivity?: number
+  minDuration?: number
+  alertEnabled?: boolean
+  alertLevel?: 'low' | 'medium' | 'high' | 'critical'
+}
 
 // Icons
 import {
@@ -767,6 +774,7 @@ const dialog = useDialog()
 const canvas = ref<HTMLCanvasElement>()
 const canvasContainer = ref<HTMLElement>()
 const formRef = ref()
+const cameraSelectRef = ref<SelectInst | null>(null)
 
 // State
 const showGuide = ref(true)
@@ -792,9 +800,12 @@ const mousePosition = ref<{
 const isDrawing = ref(false)
 const currentPoints = ref<Array<{ x: number; y: number }>>([])
 const selectedRegionId = ref<string>('')
+// 缓存已加载的背景图片，避免 drawCanvas 中重复创建 Image 导致白屏
+const bgImage = ref<HTMLImageElement | null>(null)
+const drawingAnimationFrame = ref<number | null>(null)
 
 // Form state
-const currentRegion = ref<Partial<Region>>({
+const currentRegion = ref<Partial<Region & UIRegionExtras>>({
   name: '',
   type: 'work_area' as RegionType,
   description: '',
@@ -906,15 +917,121 @@ const startDrawingMode = () => {
   }
 }
 
+const findRegionAtPoint = (canvasX: number, canvasY: number): Region | null => {
+  // 从后往前遍历，优先选择最后绘制的区域（在上层的区域）
+  for (let i = regions.value.length - 1; i >= 0; i--) {
+    const region = regions.value[i]
+    // 将区域的图片坐标转换为画布坐标进行点击检测
+    const canvasPoints = region.points.map(point => imageToCanvasCoords(point.x, point.y))
+    if (isPointInPolygon(canvasX, canvasY, canvasPoints)) {
+      return region
+    }
+  }
+  return null
+}
+
+const isPointInPolygon = (x: number, y: number, points: Array<{ x: number; y: number }>): boolean => {
+  if (!points || points.length < 3) return false
+
+  let inside = false
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const xi = points[i].x
+    const yi = points[i].y
+    const xj = points[j].x
+    const yj = points[j].y
+
+    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+      inside = !inside
+    }
+  }
+  return inside
+}
+
+// 坐标转换函数：画布坐标 -> 图片实际坐标
+const canvasToImageCoords = (canvasX: number, canvasY: number): { x: number; y: number } => {
+  if (!canvas.value?.dataset.imageScale) {
+    return { x: canvasX, y: canvasY }
+  }
+
+  const scaleInfo = JSON.parse(canvas.value.dataset.imageScale)
+  const { offsetX, offsetY, drawWidth, drawHeight, originalWidth, originalHeight } = scaleInfo
+
+  // 将画布坐标转换为图片显示区域内的相对坐标
+  const relativeX = Math.max(0, Math.min(1, (canvasX - offsetX) / drawWidth))
+  const relativeY = Math.max(0, Math.min(1, (canvasY - offsetY) / drawHeight))
+
+  // 转换为图片原始尺寸的坐标
+  const imageX = Math.round(relativeX * originalWidth)
+  const imageY = Math.round(relativeY * originalHeight)
+
+  return { x: imageX, y: imageY }
+}
+
+// 坐标转换函数：图片实际坐标 -> 画布坐标
+const imageToCanvasCoords = (imageX: number, imageY: number): { x: number; y: number } => {
+  if (!canvas.value?.dataset.imageScale) {
+    return { x: imageX, y: imageY }
+  }
+
+  const scaleInfo = JSON.parse(canvas.value.dataset.imageScale)
+  const { offsetX, offsetY, drawWidth, drawHeight, originalWidth, originalHeight } = scaleInfo
+
+  // 将图片坐标转换为相对坐标
+  const relativeX = Math.max(0, Math.min(1, imageX / originalWidth))
+  const relativeY = Math.max(0, Math.min(1, imageY / originalHeight))
+
+  // 转换为画布坐标
+  const canvasX = Math.round(relativeX * drawWidth + offsetX)
+  const canvasY = Math.round(relativeY * drawHeight + offsetY)
+
+  return { x: canvasX, y: canvasY }
+}
+
 const handleCanvasMouseDown = (event: MouseEvent) => {
-  if (!isDrawing.value) return
+  // 只阻止默认行为，不阻止事件冒泡，让双击事件能正常触发
+  event.preventDefault()
+
+  console.log('鼠标点击事件，绘制状态:', isDrawing.value)
 
   const rect = canvas.value!.getBoundingClientRect()
-  const x = event.clientX - rect.left
-  const y = event.clientY - rect.top
+  const canvasX = event.clientX - rect.left
+  const canvasY = event.clientY - rect.top
 
-  currentPoints.value.push({ x, y })
-  drawCanvas()
+  if (isDrawing.value) {
+    // 绘制模式：将画布坐标转换为图片坐标后添加点
+    const imageCoords = canvasToImageCoords(canvasX, canvasY)
+    currentPoints.value.push(imageCoords)
+    console.log('添加点:', imageCoords, '总点数:', currentPoints.value.length)
+
+    // 使用节流重绘
+    if (!drawingAnimationFrame.value) {
+      drawingAnimationFrame.value = requestAnimationFrame(() => {
+        drawCanvas()
+        drawingAnimationFrame.value = null
+      })
+    }
+  } else {
+    // 选择模式：检查是否点击了某个区域
+    const clickedRegion = findRegionAtPoint(canvasX, canvasY)
+    if (clickedRegion) {
+      selectRegion(clickedRegion)
+    } else {
+      // 点击空白处，取消选择
+      selectedRegionId.value = ''
+      currentRegion.value = {
+        name: '',
+        type: 'work_area' as RegionType,
+        description: '',
+        enabled: true,
+        sensitivity: 0.8,
+        minDuration: 5,
+        alertEnabled: true,
+        alertLevel: 'medium',
+        points: []
+      }
+      drawCanvas()
+    }
+  }
 }
 
 const handleCanvasMouseMove = (event: MouseEvent) => {
@@ -926,8 +1043,15 @@ const handleCanvasMouseMove = (event: MouseEvent) => {
 
   mousePosition.value = { x, y, canvasX, canvasY }
 
+  // 只在绘制模式下且有点时才重绘，使用节流避免频繁重绘
   if (isDrawing.value && currentPoints.value.length > 0) {
-    drawCanvas()
+    // 使用 requestAnimationFrame 节流重绘
+    if (!drawingAnimationFrame.value) {
+      drawingAnimationFrame.value = requestAnimationFrame(() => {
+        drawCanvas()
+        drawingAnimationFrame.value = null
+      })
+    }
   }
 }
 
@@ -935,9 +1059,18 @@ const handleCanvasMouseUp = () => {
   // Mouse up logic if needed
 }
 
-const handleCanvasDoubleClick = () => {
+const handleCanvasDoubleClick = (event: MouseEvent) => {
+  // 阻止事件冒泡和默认行为
+  event.preventDefault()
+  event.stopPropagation()
+
+  console.log('双击事件触发，当前绘制状态:', isDrawing.value, '点数:', currentPoints.value.length)
+
   if (isDrawing.value && currentPoints.value.length >= 3) {
+    console.log('完成绘制')
     finishDrawing()
+  } else if (isDrawing.value) {
+    message.warning('至少需要3个点才能完成绘制')
   }
 }
 
@@ -946,13 +1079,16 @@ const handleCanvasWheel = (event: WheelEvent) => {
   // 禁用缩放功能，只阻止默认滚动行为
 }
 
-const finishDrawing = () => {
+const finishDrawing = async () => {
   if (currentPoints.value.length < 3) {
     message.warning('至少需要3个点才能形成区域')
     return
   }
 
+  // 复制当前点到区域
   currentRegion.value.points = [...currentPoints.value]
+
+  // 重置绘制状态
   isDrawing.value = false
   currentPoints.value = []
 
@@ -962,7 +1098,16 @@ const finishDrawing = () => {
     currentRegion.value.name = `${typeLabel}_${Date.now().toString().slice(-4)}`
   }
 
+  // 重新绘制画布，显示完成的区域
+  await nextTick()
   drawCanvas()
+
+  // 完成绘制后自动保存
+  try {
+    await saveCurrentRegion()
+  } catch (e) {
+    console.error('自动保存失败:', e)
+  }
 }
 
 const selectRegion = (region: Region) => {
@@ -1058,7 +1203,7 @@ const deleteCurrentRegion = async () => {
 const saveAllRegions = async () => {
   try {
     saving.value = true
-    await regionStore.saveRegions(selectedCamera.value)
+    await regionStore.saveRegions(regions.value as Region[])
     message.success('配置保存成功')
   } catch (error) {
     console.error('Save all regions error:', error)
@@ -1165,10 +1310,17 @@ const handleImageUpload = (options: { file: UploadFileInfo }) => {
   const reader = new FileReader()
   reader.onload = (e) => {
     const imageUrl = e.target?.result as string
-    regionStore.setBackgroundImage(imageUrl)
-    selectedCamera.value = ''
-    drawCanvas()
-    message.success('图片上传成功')
+    const img = new Image()
+    img.onload = () => {
+      regionStore.setBackgroundImage(img)
+      selectedCamera.value = ''
+      // 图片加载后重新调整画布大小
+      nextTick(() => {
+        resizeCanvas()
+      })
+      message.success('图片上传成功')
+    }
+    img.src = imageUrl
   }
   reader.readAsDataURL(file)
 }
@@ -1192,8 +1344,52 @@ const resizeCanvas = () => {
   if (!canvas.value || !canvasContainer.value) return
 
   const container = canvasContainer.value
-  canvas.value.width = container.clientWidth
-  canvas.value.height = container.clientHeight
+
+  // 如果已缓存背景图片，直接以图片尺寸调整画布大小；否则使用容器尺寸
+  if (bgImage.value) {
+    setCanvasSize(bgImage.value.width, bgImage.value.height)
+  } else {
+    const rect = container.getBoundingClientRect()
+    setCanvasSize(rect.width, rect.height)
+  }
+}
+
+const setCanvasSize = (targetWidth: number, targetHeight: number) => {
+  if (!canvas.value || !canvasContainer.value) return
+
+  const container = canvasContainer.value
+  const containerRect = container.getBoundingClientRect()
+
+  // 计算最大可用尺寸（考虑容器的padding和margin）
+  const maxWidth = containerRect.width - 20 // 留出一些边距
+  const maxHeight = containerRect.height - 20
+
+  // 计算缩放比例，保持图片宽高比
+  const scaleX = maxWidth / targetWidth
+  const scaleY = maxHeight / targetHeight
+  const scale = Math.min(scaleX, scaleY, 1) // 不放大，只缩小
+
+  const canvasWidth = targetWidth * scale
+  const canvasHeight = targetHeight * scale
+
+  // 获取设备像素比，确保高DPI屏幕下的清晰度
+  const dpr = window.devicePixelRatio || 1
+
+  // 设置画布的实际像素尺寸
+  canvas.value.width = canvasWidth * dpr
+  canvas.value.height = canvasHeight * dpr
+
+  // 设置画布的CSS显示尺寸
+  canvas.value.style.width = canvasWidth + 'px'
+  canvas.value.style.height = canvasHeight + 'px'
+
+  // 居中显示画布
+  canvas.value.style.margin = 'auto'
+  canvas.value.style.display = 'block'
+
+  // 缩放绘图上下文以匹配设备像素比（重置变换，避免重复 scale 累积）
+  const ctx = canvas.value.getContext('2d')!
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
   drawCanvas()
 }
@@ -1202,22 +1398,62 @@ const drawCanvas = () => {
   if (!canvas.value) return
 
   const ctx = canvas.value.getContext('2d')!
-  const width = canvas.value.width
-  const height = canvas.value.height
+  // 获取设备像素比，并重置坐标变换为 dpr，避免累积导致绘制异常/白屏
+  const dpr = window.devicePixelRatio || 1
+  if (ctx.setTransform) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  } else {
+    // 兼容旧浏览器
+    // @ts-ignore
+    ctx.resetTransform?.()
+    ctx.scale(dpr, dpr)
+  }
 
-  // Clear canvas
+  // 使用CSS显示尺寸作为绘制尺寸，确保坐标转换的一致性
+  const width = (parseFloat(canvas.value.style.width) || canvas.value.width / dpr)
+  const height = (parseFloat(canvas.value.style.height) || canvas.value.height / dpr)
+
+  // 清空画布（使用CSS尺寸）
   ctx.clearRect(0, 0, width, height)
 
-  // Draw background
-  if (regionStore.backgroundImage) {
-    const img = new Image()
-    img.onload = () => {
-      ctx.drawImage(img, 0, 0, width, height)
-      drawRegionsAndOverlays()
+  // 优先使用已缓存的背景图片，避免在重绘流程中重复异步加载导致瞬时白屏
+  if (bgImage.value) {
+    const img = bgImage.value
+    const imgAspect = img.width / img.height
+    const canvasAspect = width / height
+
+    let drawWidth: number, drawHeight: number, offsetX: number, offsetY: number
+
+    if (imgAspect > canvasAspect) {
+      // 图片更宽，以画布宽度为准
+      drawWidth = width
+      drawHeight = width / imgAspect
+      offsetX = 0
+      offsetY = (height - drawHeight) / 2
+    } else {
+      // 图片更高，以画布高度为准
+      drawHeight = height
+      drawWidth = height * imgAspect
+      offsetX = (width - drawWidth) / 2
+      offsetY = 0
     }
-    img.src = regionStore.backgroundImage
+
+    // 绘制图片
+    ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight)
+
+    // 存储缩放信息，用于坐标转换（使用CSS显示尺寸）
+    canvas.value!.dataset.imageScale = JSON.stringify({
+      offsetX: Math.round(offsetX * 100) / 100,
+      offsetY: Math.round(offsetY * 100) / 100,
+      drawWidth: Math.round(drawWidth * 100) / 100,
+      drawHeight: Math.round(drawHeight * 100) / 100,
+      originalWidth: img.width,
+      originalHeight: img.height
+    })
+
+    drawRegionsAndOverlays()
   } else {
-    // Draw placeholder background
+    // 无已加载图片时绘制占位背景，避免白屏
     ctx.fillStyle = '#f5f5f5'
     ctx.fillRect(0, 0, width, height)
     drawRegionsAndOverlays()
@@ -1247,8 +1483,9 @@ const drawRegionsAndOverlays = () => {
 
 const drawGrid = (ctx: CanvasRenderingContext2D) => {
   const gridSize = 20
-  const width = canvas.value!.width
-  const height = canvas.value!.height
+  // 使用CSS显示尺寸作为网格绘制的基准
+  const width = parseFloat(canvas.value!.style.width) || canvas.value!.width
+  const height = parseFloat(canvas.value!.style.height) || canvas.value!.height
 
   ctx.strokeStyle = '#e0e0e0'
   ctx.lineWidth = 0.5
@@ -1271,16 +1508,19 @@ const drawGrid = (ctx: CanvasRenderingContext2D) => {
 const drawRegion = (ctx: CanvasRenderingContext2D, region: Region, isSelected: boolean) => {
   if (!region.points || region.points.length < 3) return
 
+  // 将区域的图片坐标转换为画布坐标进行绘制
+  const canvasPoints = region.points.map(point => imageToCanvasCoords(point.x, point.y))
+
   const color = getRegionTypeColor(region.type)
   const alpha = region.enabled ? 0.3 : 0.1
 
   // Draw filled polygon
   ctx.fillStyle = color + Math.round(alpha * 255).toString(16).padStart(2, '0')
   ctx.beginPath()
-  ctx.moveTo(region.points[0].x, region.points[0].y)
+  ctx.moveTo(canvasPoints[0].x, canvasPoints[0].y)
 
-  for (let i = 1; i < region.points.length; i++) {
-    ctx.lineTo(region.points[i].x, region.points[i].y)
+  for (let i = 1; i < canvasPoints.length; i++) {
+    ctx.lineTo(canvasPoints[i].x, canvasPoints[i].y)
   }
 
   ctx.closePath()
@@ -1292,7 +1532,7 @@ const drawRegion = (ctx: CanvasRenderingContext2D, region: Region, isSelected: b
   ctx.stroke()
 
   // Draw points
-  region.points.forEach((point, index) => {
+  canvasPoints.forEach((point, index) => {
     ctx.fillStyle = isSelected ? '#ff6b6b' : color
     ctx.beginPath()
     ctx.arc(point.x, point.y, 4, 0, Math.PI * 2)
@@ -1308,8 +1548,8 @@ const drawRegion = (ctx: CanvasRenderingContext2D, region: Region, isSelected: b
 
   // Draw region label
   if (showLabels.value) {
-    const centerX = region.points.reduce((sum, p) => sum + p.x, 0) / region.points.length
-    const centerY = region.points.reduce((sum, p) => sum + p.y, 0) / region.points.length
+    const centerX = canvasPoints.reduce((sum, p) => sum + p.x, 0) / canvasPoints.length
+    const centerY = canvasPoints.reduce((sum, p) => sum + p.y, 0) / canvasPoints.length
 
     ctx.fillStyle = '#333'
     ctx.font = 'bold 14px sans-serif'
@@ -1324,24 +1564,27 @@ const drawRegion = (ctx: CanvasRenderingContext2D, region: Region, isSelected: b
 const drawCurrentDrawing = (ctx: CanvasRenderingContext2D) => {
   if (currentPoints.value.length === 0) return
 
+  // 将当前绘制点的图片坐标转换为画布坐标进行绘制
+  const canvasPoints = currentPoints.value.map(point => imageToCanvasCoords(point.x, point.y))
+
   ctx.strokeStyle = '#2080f0'
   ctx.lineWidth = 2
   ctx.setLineDash([5, 5])
 
   // Draw lines between points
-  if (currentPoints.value.length > 1) {
+  if (canvasPoints.length > 1) {
     ctx.beginPath()
-    ctx.moveTo(currentPoints.value[0].x, currentPoints.value[0].y)
+    ctx.moveTo(canvasPoints[0].x, canvasPoints[0].y)
 
-    for (let i = 1; i < currentPoints.value.length; i++) {
-      ctx.lineTo(currentPoints.value[i].x, currentPoints.value[i].y)
+    for (let i = 1; i < canvasPoints.length; i++) {
+      ctx.lineTo(canvasPoints[i].x, canvasPoints[i].y)
     }
 
     ctx.stroke()
   }
 
   // Draw points
-  currentPoints.value.forEach((point, index) => {
+  canvasPoints.forEach((point, index) => {
     ctx.fillStyle = '#2080f0'
     ctx.beginPath()
     ctx.arc(point.x, point.y, 4, 0, Math.PI * 2)
@@ -1353,8 +1596,8 @@ const drawCurrentDrawing = (ctx: CanvasRenderingContext2D) => {
   })
 
   // Draw line to mouse if drawing
-  if (mousePosition.value && currentPoints.value.length > 0) {
-    const lastPoint = currentPoints.value[currentPoints.value.length - 1]
+  if (mousePosition.value && canvasPoints.length > 0) {
+    const lastPoint = canvasPoints[canvasPoints.length - 1]
     ctx.beginPath()
     ctx.moveTo(lastPoint.x, lastPoint.y)
     ctx.lineTo(mousePosition.value.canvasX, mousePosition.value.canvasY)
@@ -1365,7 +1608,7 @@ const drawCurrentDrawing = (ctx: CanvasRenderingContext2D) => {
 }
 
 const getRegionTypeColor = (type: RegionType): string => {
-  const colors = {
+  const colors: Partial<Record<RegionType, string>> = {
     entrance: '#52c41a',
     handwash: '#1890ff',
     sanitize: '#722ed1',
@@ -1374,11 +1617,11 @@ const getRegionTypeColor = (type: RegionType): string => {
     monitoring: '#13c2c2',
     custom: '#eb2f96'
   }
-  return colors[type] || '#666666'
+  return colors[type] ?? '#666666'
 }
 
 const getRegionTypeLabel = (type: RegionType): string => {
-  const labels = {
+  const labels: Partial<Record<RegionType, string>> = {
     entrance: '入口区域',
     handwash: '洗手区域',
     sanitize: '消毒区域',
@@ -1387,7 +1630,7 @@ const getRegionTypeLabel = (type: RegionType): string => {
     monitoring: '监控区域',
     custom: '自定义区域'
   }
-  return labels[type] || '未知类型'
+  return labels[type] ?? '未知类型'
 }
 
 const getRegionTypeIcon = (type: RegionType) => {
@@ -1396,7 +1639,7 @@ const getRegionTypeIcon = (type: RegionType) => {
 }
 
 const getRegionTypeTagType = (type: RegionType) => {
-  const types = {
+  const types: Partial<Record<RegionType, string>> = {
     entrance: 'success',
     handwash: 'info',
     sanitize: 'warning',
@@ -1405,28 +1648,45 @@ const getRegionTypeTagType = (type: RegionType) => {
     monitoring: 'info',
     custom: 'default'
   }
-  return types[type] || 'default'
+  return types[type] ?? 'default'
 }
 
-const getAlertLevelType = (level: string) => {
-  const types = {
-    low: 'info',
-    medium: 'warning',
-    high: 'error',
-    critical: 'error'
+// 工具函数：敏感度滑块提示格式化
+const formatSensitivityTooltip = (value: number) => `${(value * 100).toFixed(0)}%`
+
+// 告警级别映射函数
+const getAlertLevelType = (level: Region['alertLevel'] | undefined) => {
+  switch (level) {
+    case 'low':
+      return 'info'
+    case 'medium':
+      return 'warning'
+    case 'high':
+    case 'critical':
+      return 'error'
+    default:
+      return 'warning'
   }
-  return types[level] || 'default'
 }
 
-const getAlertLevelLabel = (level: string): string => {
-  const labels = {
-    low: '低级告警',
-    medium: '中级告警',
-    high: '高级告警',
-    critical: '紧急告警'
+const getAlertLevelLabel = (level: Region['alertLevel'] | undefined) => {
+  const map: Record<string, string> = {
+    low: '低',
+    medium: '中',
+    high: '高',
+    critical: '紧急'
   }
-  return labels[level] || '未知级别'
+  return map[level ?? 'medium']
 }
+
+// 聚焦摄像头选择器方法
+const focusCameraSelect = () => {
+  nextTick(() => {
+    cameraSelectRef.value?.focus?.()
+  })
+}
+
+// removed duplicate getAlertLevelLabel (unified above)
 
 const getRegionActions = (region: Region) => [
   {
@@ -1503,6 +1763,13 @@ const handleRegionAction = async (key: string, region: Region) => {
 
 
 
+// 新增：下拉菜单选择事件处理，避免模板中隐式 any
+const onRegionActionSelect = (key: string, region: Region) => {
+  handleRegionAction(key, region)
+}
+
+
+
 // Lifecycle
 onMounted(async () => {
   await cameraStore.fetchCameras()
@@ -1523,7 +1790,7 @@ onUnmounted(() => {
 // Watchers
 watch(selectedCamera, async (newCamera) => {
   if (newCamera) {
-    regionStore.setBackgroundImage('')
+    regionStore.setBackgroundImage(null)
     loading.value = true
 
     try {
@@ -1540,9 +1807,42 @@ watch(selectedCamera, async (newCamera) => {
   }
 })
 
-watch(() => regionStore.backgroundImage, () => {
-  drawCanvas()
-})
+// 当背景图地址变更时，仅在此处加载一次并缓存，避免 drawCanvas 中重复 new Image
+watch(() => regionStore.backgroundImage, (val) => {
+  const urlOrEl = val as any
+  if (!urlOrEl || (typeof urlOrEl === 'string' && urlOrEl.trim() === '')) {
+    bgImage.value = null
+    // 占位背景即可，避免白屏
+    nextTick(() => {
+      console.debug('[RegionConfig] 背景图清空，使用占位背景绘制')
+      drawCanvas()
+    })
+    return
+  }
+
+  if (urlOrEl instanceof HTMLImageElement) {
+    bgImage.value = urlOrEl
+    setCanvasSize(urlOrEl.width, urlOrEl.height)
+    console.debug('[RegionConfig] 使用已有的 HTMLImageElement 背景图绘制')
+    drawCanvas()
+    return
+  }
+
+  // 其余情况按字符串 URL/DataURL 处理
+  const img = new Image()
+  img.onload = () => {
+    bgImage.value = img
+    setCanvasSize(img.width, img.height)
+    console.debug('[RegionConfig] 背景图加载完成，开始绘制')
+    drawCanvas()
+  }
+  img.onerror = () => {
+    bgImage.value = null
+    console.warn('[RegionConfig] 背景图加载失败，使用占位背景绘制')
+    drawCanvas()
+  }
+  img.src = String(urlOrEl)
+}, { immediate: true })
 
 watch([showGrid, showLabels], () => {
   drawCanvas()
@@ -1611,198 +1911,223 @@ watch([showGrid, showLabels], () => {
 
 .region-tabs :deep(.n-tabs-content) {
   height: 100%;
-  overflow: hidden;
+  /* 允许内容区滚动，避免滚动条被隐藏 */
+  overflow: auto;
 }
 
 .region-tabs :deep(.n-tab-pane) {
   height: 100%;
-  overflow: hidden;
+  /* 允许面板滚动 */
+  overflow: auto;
   display: flex;
   flex-direction: column;
 }
 
-.region-form {
-  max-width: 100%;
-  padding: 16px;
-  overflow-y: auto;
-  flex: 1;
-}
+    .region-form {
+      max-width: 100%;
+      padding: 16px;
+      /* 保持表单可滚动 */
+      overflow-y: auto;
+      flex: 1;
+    }
+    .region-list-section {
+      height: 100%;
+      overflow-y: auto;
+      background: white;
+      padding: 16px;
+      flex: 1;
+      min-height: 0;
+    }
 
-.region-list-section {
-  height: 100%;
-  overflow-y: auto;
-  background: white;
-  padding: 16px;
-  flex: 1;
-  min-height: 0;
-}
+    .left-panel-content {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      /* 避免整体隐藏滚动，交给内部容器管理 */
+      overflow: visible;
+    }
 
-.region-card {
-  cursor: pointer;
-  transition: all 0.2s;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  margin-bottom: 8px;
-}
+    .region-card {
+      cursor: pointer;
+      transition: all 0.2s;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      margin-bottom: 8px;
+    }
 
-.region-card:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  border-color: #d0d0d0;
-}
+    .region-card:hover {
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      border-color: #d0d0d0;
+    }
 
-.region-card-selected {
-  border-color: #2080f0;
-  box-shadow: 0 0 0 2px rgba(32, 128, 240, 0.2);
-}
+    .region-card {
+      transition: all 0.3s ease;
+      cursor: default;
+    }
 
-.region-card-disabled {
-  opacity: 0.6;
-}
+    .region-card:hover {
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
 
-.canvas-container {
-  background: #f5f5f5;
-  position: relative;
-  min-height: calc(100vh - 120px);
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  margin: 8px;
-}
+    .region-card-selected {
+      border-color: #2080f0;
+      box-shadow: 0 0 0 2px rgba(32, 128, 240, 0.2);
+      background: rgba(32, 128, 240, 0.05);
+    }
 
-.canvas-wrapper {
-  height: 100%;
-  min-height: calc(100vh - 120px);
-  display: flex;
-  flex-direction: column;
-}
+    .region-card-disabled {
+      opacity: 0.6;
+    }
 
-.canvas-toolbar {
-  background: white;
-  padding: 12px 16px;
-  border-bottom: 1px solid #e0e0e0;
-  flex-shrink: 0;
-}
+    .canvas-container {
+      background: #f5f5f5;
+      position: relative;
+      min-height: calc(100vh - 120px);
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      margin: 8px;
+    }
 
-.canvas-main {
-  flex: 1;
-  position: relative;
-  overflow: hidden;
-  min-height: 500px;
-}
+    .canvas-wrapper {
+      height: 100%;
+      min-height: calc(100vh - 120px);
+      display: flex;
+      flex-direction: column;
+    }
 
-.region-canvas {
-  width: 100%;
-  height: 100%;
-  min-height: 500px;
-  cursor: crosshair;
-}
+    .canvas-toolbar {
+      background: white;
+      padding: 12px 16px;
+      border-bottom: 1px solid #e0e0e0;
+      flex-shrink: 0;
+    }
 
-.canvas-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-}
+    .canvas-main {
+      flex: 1;
+      position: relative;
+      overflow: auto; /* 改为auto，支持滚动 */
+      min-height: 500px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px;
+    }
 
-.coordinate-display {
-  position: absolute;
-  background: rgba(0, 0, 0, 0.8);
-  color: white;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-family: monospace;
-  z-index: 10;
-}
+    .region-canvas {
+      cursor: crosshair;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      background: white;
+    }
 
-.draw-hint {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: rgba(32, 128, 240, 0.9);
-  color: white;
-  padding: 16px 24px;
-  border-radius: 8px;
-  display: flex;
-   align-items: center;
-   gap: 8px;
-   font-size: 14px;
-   z-index: 10;
- }
+    .canvas-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+    }
 
- .canvas-loading {
-   position: absolute;
-   top: 0;
-   left: 0;
-   right: 0;
-   bottom: 0;
-   display: flex;
-   align-items: center;
-   justify-content: center;
-   background: rgba(255, 255, 255, 0.8);
-   z-index: 20;
- }
+    .coordinate-display {
+      position: absolute;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: monospace;
+      z-index: 10;
+    }
 
- .canvas-empty {
-   position: absolute;
-   top: 0;
-   left: 0;
-   right: 0;
-   bottom: 0;
-   display: flex;
-   align-items: center;
-   justify-content: center;
-   background: #f5f5f5;
- }
+    .draw-hint {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(32, 128, 240, 0.9);
+      color: white;
+      padding: 16px 24px;
+      border-radius: 8px;
+      display: flex;
+       align-items: center;
+       gap: 8px;
+       font-size: 14px;
+       z-index: 10;
+     }
 
- /* 响应式设计 */
- @media (max-width: 1200px) {
-   .config-layout .n-layout-sider {
-     width: 350px !important;
-   }
- }
+     .canvas-loading {
+       position: absolute;
+       top: 0;
+       left: 0;
+       right: 0;
+       bottom: 0;
+       display: flex;
+       align-items: center;
+       justify-content: center;
+       background: rgba(255, 255, 255, 0.8);
+       z-index: 20;
+     }
 
- @media (max-width: 768px) {
-   .region-config-page {
-     padding: 12px;
-   }
+     .canvas-empty {
+       position: absolute;
+       top: 0;
+       left: 0;
+       right: 0;
+       bottom: 0;
+       display: flex;
+       align-items: center;
+       justify-content: center;
+       background: #f5f5f5;
+     }
 
-   .config-layout {
-     flex-direction: column;
-   }
+     /* 响应式设计 */
+     @media (max-width: 1200px) {
+       .config-layout .n-layout-sider {
+         width: 350px !important;
+       }
+     }
 
-   .left-panel {
-     width: 100% !important;
-     order: 2;
-   }
+     @media (max-width: 768px) {
+       .region-config-page {
+         padding: 12px;
+       }
 
-   .canvas-container {
-     order: 1;
-     min-height: 300px;
-   }
+       .config-layout {
+         flex-direction: column;
+       }
 
-   .left-panel-content {
-     padding: 12px;
-   }
- }
+       .left-panel {
+         width: 100% !important;
+         order: 2;
+       }
 
- /* 高对比度模式 */
- @media (prefers-contrast: high) {
-   .region-card {
-     border-width: 2px;
-   }
+       .canvas-container {
+         order: 1;
+         min-height: 300px;
+       }
 
-   .region-canvas {
-     border-width: 2px;
-   }
- }
+       .left-panel-content {
+         padding: 12px;
+       }
+     }
 
- /* 减少动画模式 */
- @media (prefers-reduced-motion: reduce) {
-   .region-card {
-    transition: none;
-  }
-}
- </style>
+     /* 高对比度模式 */
+     @media (prefers-contrast: high) {
+       .region-card {
+         border-width: 2px;
+       }
+
+       .region-canvas {
+         border-width: 2px;
+       }
+     }
+
+     /* 减少动画模式 */
+     @media (prefers-reduced-motion: reduce) {
+       .region-card {
+        transition: none;
+      }
+    }
+     </style>

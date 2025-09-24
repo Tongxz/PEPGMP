@@ -6,9 +6,11 @@
 import os
 import sys
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from src.utils.adaptive_optimizer import AdaptiveOptimizer
+try:
+    from src.utils.adaptive_optimizer import AdaptiveOptimizer
+except ImportError:
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.utils.adaptive_optimizer import AdaptiveOptimizer
 
 
 def simulate_hardware_environments():

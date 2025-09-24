@@ -15,10 +15,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.gridspec import GridSpec
 
-# 添加项目路径
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from src.detection.detector import HumanDetector
-from src.detection.hairnet_detector import HairnetDetector
+try:
+    from src.detection.detector import HumanDetector
+    from src.detection.hairnet_detector import HairnetDetector
+except ImportError:
+    # 添加项目路径
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.detection.detector import HumanDetector
+    from src.detection.hairnet_detector import HairnetDetector
 
 
 class ROIVisualizer:

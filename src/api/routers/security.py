@@ -8,7 +8,7 @@ Security API Routes
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
@@ -16,7 +16,6 @@ from ...security.security_manager import (
     AccessControlRule,
     SecurityLevel,
     ThreatType,
-    UserSession,
     get_security_manager,
 )
 
@@ -154,7 +153,7 @@ async def login(request: LoginRequest, http_request: Request):
 async def logout(http_request: Request):
     """用户登出"""
     try:
-        security_manager = get_security_manager()
+        get_security_manager()
 
         # 获取会话ID
         session_id = http_request.cookies.get("session_id")

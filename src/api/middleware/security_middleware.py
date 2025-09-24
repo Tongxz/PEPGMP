@@ -6,10 +6,9 @@ Security Middleware
 """
 
 import logging
-import time
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List
 
-from fastapi import Depends, HTTPException, Request, Response
+from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -47,7 +46,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         client_ip = request.client.host if request.client else "unknown"
         user_agent = request.headers.get("user-agent", "unknown")
         request_path = str(request.url.path)
-        method = request.method
+        request.method
 
         try:
             # 1. 检查访问权限

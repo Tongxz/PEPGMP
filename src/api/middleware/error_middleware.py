@@ -159,7 +159,7 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
         response_time = time.time() - start_time
 
         # 处理错误
-        error_info = self.error_handler.handle_error(exception, context)
+        self.error_handler.handle_error(exception, context)
 
         # 更新统计
         self.request_stats["error_requests"] += 1
@@ -319,7 +319,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             return True
 
         current_time = time.time()
-        window_start = current_time - self.rate_limit_window
+        current_time - self.rate_limit_window
 
         # 清理过期的请求记录
         if client_ip in self.request_counts:

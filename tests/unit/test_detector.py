@@ -7,10 +7,8 @@ Human Detector Unit Tests
 import os
 import sys
 import unittest
-from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
-import cv2
 import numpy as np
 
 # 添加项目根目录到Python路径
@@ -166,7 +164,6 @@ class TestHumanDetector(unittest.TestCase):
 
     def tearDown(self):
         """测试后清理"""
-        pass
 
 
 if __name__ == "__main__":

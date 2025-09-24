@@ -13,7 +13,7 @@ def load_csv(path: str):
     X, y = [], []
     with open(path, "r") as f:
         reader = csv.reader(f)
-        header = next(reader, None)
+        next(reader, None)
         for row in reader:
             *features, label = row
             X.append([float(v) for v in features])

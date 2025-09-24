@@ -13,10 +13,8 @@ Date: 2025-01-21
 """
 
 import json
-import logging
 import time
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import cv2

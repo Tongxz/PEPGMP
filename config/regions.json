@@ -147,39 +147,6 @@
         "last_entry_time": null,
         "last_exit_time": null
       }
-    },
-    {
-      "region_id": "region_1758264270545_efiqqh",
-      "region_type": "work_area",
-      "polygon": [
-        [66, 102.6015625],
-        [81, 171.6015625],
-        [201, 132.6015625],
-        [201, 71.6015625],
-        [122, 65.6015625],
-        [77, 84.6015625],
-        [65, 101.6015625]
-      ],
-      "name": "新区域 6",
-      "is_active": true,
-      "rules": {
-        "required_behaviors": [],
-        "forbidden_behaviors": [],
-        "max_occupancy": -1,
-        "min_duration": 0.0,
-        "max_duration": -1.0,
-        "alert_on_violation": true,
-        "requireHairnet": false,
-        "limitOccupancy": false,
-        "timeRestriction": false
-      },
-      "stats": {
-        "total_entries": 0,
-        "current_occupancy": 0,
-        "violations": 0,
-        "last_entry_time": null,
-        "last_exit_time": null
-      }
     }
   ],
   "meta": {

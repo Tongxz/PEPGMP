@@ -13,15 +13,14 @@ Accelerated Detection Pipeline
 import logging
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from queue import Empty, Queue
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional
 
-import cv2
 import numpy as np
 
-from ..utils.gpu_acceleration import GPUAccelerationManager, get_gpu_manager
+from ..utils.gpu_acceleration import get_gpu_manager
 from .optimized_detection_pipeline import DetectionResult, OptimizedDetectionPipeline
 
 logger = logging.getLogger(__name__)
@@ -447,7 +446,7 @@ class AcceleratedDetectionPipeline:
         logger.info(f"🎥 优化视频流处理 - 目标FPS: {target_fps}")
 
         # 计算最佳设置
-        target_frame_time = 1.0 / target_fps
+        1.0 / target_fps
 
         optimization_config = {
             "frame_skip": max(1, int(30 / target_fps)),  # 跳帧策略

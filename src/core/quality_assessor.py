@@ -7,13 +7,10 @@ Author: Trae AI Assistant
 Date: 2024
 """
 
-import logging
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
-import cv2
-import mediapipe as mp
 import numpy as np
 
 from ..utils.logger import get_logger

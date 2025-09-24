@@ -3,10 +3,8 @@
 测试FastAPI应用程序的各个端点.
 """
 import io
-import json
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
-import pytest
 from fastapi.testclient import TestClient
 
 from src.api.app import app

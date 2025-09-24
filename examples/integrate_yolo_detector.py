@@ -13,22 +13,22 @@ import argparse
 import logging
 import os
 import sys
-from pathlib import Path
 
 import cv2
-import numpy as np
 
 # 配置日志
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
-# 添加项目根目录到Python路径
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(project_root)
-
-# 导入 HairnetDetectionFactory
-from src.detection.hairnet_detection_factory import HairnetDetectionFactory
+try:
+    # 导入 HairnetDetectionFactory
+    from src.detection.hairnet_detection_factory import HairnetDetectionFactory
+except ImportError:
+    # 添加项目根目录到Python路径
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    sys.path.append(project_root)
+    from src.detection.hairnet_detection_factory import HairnetDetectionFactory
 
 
 def parse_args():

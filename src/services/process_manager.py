@@ -82,8 +82,8 @@ class ProcessManager:
         profile = str(cam.get("profile", "accurate"))
         device = str(cam.get("device", "auto"))
         imgsz = str(cam.get("imgsz", "auto"))
-        frame_skip = str(cam.get("frame_skip", "auto"))
-        auto_tune = bool(cam.get("auto_tune", True))
+        str(cam.get("frame_skip", "auto"))
+        bool(cam.get("auto_tune", True))
 
         cmd: List[str] = [
             python_exe,

@@ -33,7 +33,6 @@ def _gpu_info_pynvml() -> Dict[str, Any]:
     except Exception as e:
         # 如果pynvml失败，尝试使用torch获取信息
         print(f"pynvml failed: {e}, trying torch fallback")
-        pass
     return info
 
 
@@ -61,7 +60,6 @@ def detect_environment() -> Dict[str, Any]:
                         env["vram_gb"] = round(float(mem_info[1]) / (1024**3), 1)
                 except Exception as e:
                     print(f"torch GPU info failed: {e}")
-                    pass
         except Exception:
             env["has_cuda"] = False
 

@@ -5,7 +5,7 @@
 """
 import logging
 import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import cv2
 import numpy as np
@@ -110,7 +110,6 @@ from .detector import BaseDetector
 from .enhanced_hand_detector import (
     DetectionMode,
     EnhancedHandDetector,
-    HandDetectionResult,
 )
 
 logger = get_logger(__name__)
@@ -393,7 +392,6 @@ class MediaPipePoseDetector(BaseDetector):
 
     def _load_model(self, model_path: str):
         """MediaPipe不需要加载外部模型文件，此方法为空."""
-        pass
 
     def detect(self, image: np.ndarray) -> List[Dict[str, Any]]:
         """检测人体姿态和手部.
@@ -401,7 +399,7 @@ class MediaPipePoseDetector(BaseDetector):
         为了与YOLOv8的输出格式保持一致，这里将MediaPipe的结果进行转换。
         """
         pose_results = self._detect_pose(image)
-        hand_results = self.detect_hands(image)
+        self.detect_hands(image)
 
         # 在此简化实现中，我们将姿态和手部检测分开处理
         # 一个更完整的实现可能会将手部关键点附加到对应的人体上

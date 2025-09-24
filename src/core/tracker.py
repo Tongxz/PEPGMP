@@ -1,5 +1,5 @@
 import logging
-from collections import defaultdict, deque
+from collections import deque
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np

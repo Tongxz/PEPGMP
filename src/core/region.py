@@ -2,7 +2,7 @@ import json
 import logging
 import time
 from enum import Enum
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 

@@ -1,11 +1,10 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import cv2
 import numpy as np
 import torch
-import torch.nn as nn
 from ultralytics import YOLO
 
 # 导入统一参数配置
@@ -48,12 +47,10 @@ class BaseDetector(ABC):
     @abstractmethod
     def _load_model(self, model_path: str):
         """加载模型"""
-        pass
 
     @abstractmethod
     def detect(self, image: np.ndarray) -> List[Dict]:
         """执行检测"""
-        pass
 
     def visualize(self, image: np.ndarray, detections: List[Dict]) -> np.ndarray:
         """可视化检测结果"""

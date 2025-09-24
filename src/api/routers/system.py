@@ -3,7 +3,6 @@
 import os
 import platform
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException

@@ -6,11 +6,14 @@
 import sys
 from pathlib import Path
 
-# 添加src目录到Python路径
-src_path = Path(__file__).parent / "src"
-sys.path.insert(0, str(src_path))
-
-from src.utils.hardware_probe import decide_policy, detect_environment
+try:
+    from src.utils.hardware_probe import decide_policy, detect_environment
+except ImportError:
+    # This is a workaround for running scripts directly from the repository root.
+    # It adds the 'src' directory to the Python path.
+    src_path = Path(__file__).resolve().parent.parent / "src"
+    sys.path.insert(0, str(src_path))
+    from src.utils.hardware_probe import decide_policy, detect_environment
 
 
 def main():

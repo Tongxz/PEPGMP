@@ -10,14 +10,16 @@ import time
 from pathlib import Path
 
 import cv2
-import numpy as np
 from ultralytics import YOLO
 
-# 添加项目根目录到路径
-sys.path.append(str(Path(__file__).parent))
-
-from src.detection.detector import HumanDetector
-from src.utils.logger import get_logger
+try:
+    from src.detection.detector import HumanDetector
+    from src.utils.logger import get_logger
+except ImportError:
+    # 添加项目根目录到路径
+    sys.path.append(str(Path(__file__).parent.parent))
+    from src.detection.detector import HumanDetector
+    from src.utils.logger import get_logger
 
 # 设置日志
 logger = get_logger(__name__, level="INFO")

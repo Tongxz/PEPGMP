@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Dict, Tuple
+from typing import Dict
 
 from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
@@ -16,7 +16,6 @@ def _read_event_counts(max_lines: int = 5000) -> Dict[str, int]:
     )
     events_file = os.path.join(project_root, "logs", "events_record.jsonl")
     counts: Dict[str, int] = {}
-    total = 0
     if not os.path.exists(events_file):
         return counts
     try:

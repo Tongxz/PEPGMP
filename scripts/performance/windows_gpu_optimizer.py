@@ -14,15 +14,10 @@ Windows GPU Performance Optimizer
 
 import json
 import logging
-import os
 import subprocess
-import sys
-import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict
 
-import numpy as np
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)

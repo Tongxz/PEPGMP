@@ -14,6 +14,11 @@ export interface Region {
   maxOccupancy?: number
   points: Array<{ x: number; y: number }>
   enabled: boolean
+  // UI 扩展字段（前端配置用，不一定由后端提供）
+  sensitivity?: number
+  minDuration?: number
+  alertEnabled?: boolean
+  alertLevel?: 'low' | 'medium' | 'high' | 'critical'
 }
 
 // 后端返回的区域结构（宽松类型）
@@ -56,6 +61,12 @@ function normalizeRegion(item: BackendRegionAny): Region {
     limitOccupancy: Boolean(item.rules?.limitOccupancy) || false,
     timeRestriction: Boolean(item.rules?.timeRestriction) || false
   }
+  // UI 扩展字段默认值（若后端未提供则使用前端默认）
+  const sensitivity = typeof item.rules?.sensitivity === 'number' ? item.rules.sensitivity : 0.8
+  const minDuration = typeof item.rules?.minDuration === 'number' ? item.rules.minDuration : 5
+  const alertEnabled = typeof item.rules?.alertEnabled === 'boolean' ? item.rules.alertEnabled : false
+  const alertLevel = (item.rules?.alertLevel as Region['alertLevel']) ?? 'medium'
+
   return {
     id: String(id),
     name: item.name || '',
@@ -63,7 +74,11 @@ function normalizeRegion(item: BackendRegionAny): Region {
     description: item.description || '',
     rules,
     points,
-    enabled
+    enabled,
+    sensitivity,
+    minDuration,
+    alertEnabled,
+    alertLevel
   }
 }
 
@@ -83,6 +98,8 @@ function toBackendRegionPayload(regionData: Partial<Region>): any {
   if (regionData.enabled !== undefined) payload.is_active = regionData.enabled
   if (regionData.rules) payload.rules = regionData.rules
   if (regionData.description) payload.description = regionData.description
+  // 注意：UI 扩展字段（sensitivity、minDuration、alertEnabled、alertLevel）不直接提交到后端，
+  // 若后端支持可在此进行映射
   return payload
 }
 
@@ -96,109 +113,77 @@ export const regionApi = {
     const params = new URLSearchParams()
     if (cameraId) params.append('camera_id', cameraId)
 
-    const response = await http.get(`management/regions?${params}`)
+    // 与后端路由前缀 /api/v1/management 对齐
+    const response = await http.get(`api/v1/management/regions?${params}`)
     const data = response.data as any
-
     // 兼容两种返回：数组 或 { regions: [...] }
     const list: BackendRegionAny[] = Array.isArray(data)
       ? data
       : Array.isArray(data?.regions)
         ? data.regions
         : []
-
     return list.map(normalizeRegion)
   },
 
-  /**
-   * 创建区域
-   * @param regionData 区域数据
-   */
   async createRegion(regionData: Omit<Region, 'id'>): Promise<Region> {
     const payload = toBackendRegionPayload(regionData)
-    const response = await http.post('management/regions', payload)
+    // 与后端路由前缀 /api/v1/management 对齐
+    const response = await http.post('api/v1/management/regions', payload)
     return normalizeRegion(response.data)
   },
 
-  /**
-   * 更新区域
-   * @param id 区域ID
-   * @param regionData 更新的区域数据
-   */
   async updateRegion(id: string, regionData: Partial<Region>): Promise<Region> {
     const payload = toBackendRegionPayload(regionData)
-    const response = await http.put(`management/regions/${encodeURIComponent(id)}`, payload)
+    // 与后端路由前缀 /api/v1/management 对齐
+    const response = await http.put(`api/v1/management/regions/${encodeURIComponent(id)}`, payload)
     return normalizeRegion(response.data)
   },
 
-  /**
-   * 删除区域
-   * @param id 区域ID
-   */
   async deleteRegion(id: string): Promise<void> {
-    await http.delete(`management/regions/${encodeURIComponent(id)}`)
+    // 与后端路由前缀 /api/v1/management 对齐
+    await http.delete(`api/v1/management/regions/${encodeURIComponent(id)}`)
   },
 
-  /**
-   * 获取单个区域信息
-   * @param id 区域ID
-   */
   async getRegionById(id: string): Promise<Region> {
-    const response = await http.get(`management/regions/${encodeURIComponent(id)}`)
-    return response.data
+    // 与后端路由前缀 /api/v1/management 对齐
+    const response = await http.get(`api/v1/management/regions/${encodeURIComponent(id)}`)
+    return normalizeRegion(response.data)
   },
 
-  /**
-   * 批量保存区域配置
-   * @param regions 区域列表
-   */
   async saveRegions(regions: Region[]): Promise<void> {
-    await http.post('management/regions/batch', { regions })
+    // 与后端路由前缀 /api/v1/management 对齐
+    await http.post('api/v1/management/regions/batch', { regions })
   },
 
-  /**
-   * 清空所有区域
-   */
   async clearRegions(): Promise<void> {
-    await http.delete('management/regions')
+    // 与后端路由前缀 /api/v1/management 对齐
+    await http.delete('api/v1/management/regions')
   },
 
-  /**
-   * 启用/禁用区域
-   * @param id 区域ID
-   * @param enabled 是否启用
-   */
   async toggleRegion(id: string, enabled: boolean): Promise<Region> {
-    const response = await http.put(`management/regions/${encodeURIComponent(id)}`, { enabled })
-    return response.data
+    // 与后端路由前缀 /api/v1/management 对齐
+    const response = await http.put(`api/v1/management/regions/${encodeURIComponent(id)}`, { enabled })
+    return normalizeRegion(response.data)
   },
 
-  /**
-   * 获取区域统计信息
-   * @param id 区域ID
-   */
   async getRegionStats(id: string): Promise<any> {
-    const response = await http.get(`management/regions/${encodeURIComponent(id)}/stats`)
+    // 与后端路由前缀 /api/v1/management 对齐
+    const response = await http.get(`api/v1/management/regions/${encodeURIComponent(id)}/stats`)
     return response.data
   },
 
-  /**
-   * 验证区域配置
-   * @param regionData 区域数据
-   */
   async validateRegion(regionData: Partial<Region>): Promise<{ valid: boolean; errors?: string[] }> {
-    const response = await http.post('management/regions/validate', regionData)
+    // 与后端路由前缀 /api/v1/management 对齐
+    const response = await http.post('api/v1/management/regions/validate', regionData)
     return response.data
   },
 
-  /**
-   * 导入区域配置
-   * @param file 配置文件
-   */
   async importRegions(file: File): Promise<Region[]> {
     const formData = new FormData()
     formData.append('file', file)
 
-    const response = await http.post('management/regions/import', formData, {
+    // 与后端路由前缀 /api/v1/management 对齐
+    const response = await http.post('api/v1/management/regions/import', formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       }
@@ -208,12 +193,9 @@ export const regionApi = {
     return list.map(normalizeRegion)
   },
 
-  /**
-   * 导出区域配置
-   * @param format 导出格式 ('json' | 'yaml')
-   */
   async exportRegions(format: 'json' | 'yaml' = 'json'): Promise<Blob> {
-    const response = await http.get(`management/regions/export?format=${format}`, {
+    // 与后端路由前缀 /api/v1/management 对齐
+    const response = await http.get(`api/v1/management/regions/export?format=${format}`, {
       responseType: 'blob'
     })
     return response.data

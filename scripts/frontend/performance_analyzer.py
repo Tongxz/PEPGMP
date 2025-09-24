@@ -8,13 +8,10 @@ Frontend Performance Analyzer
 
 import json
 import logging
-import os
-import subprocess
-import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)

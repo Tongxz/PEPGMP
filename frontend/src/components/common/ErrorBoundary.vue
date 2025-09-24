@@ -56,7 +56,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onErrorCaptured, nextTick } from 'vue'
+import { ref, onErrorCaptured, nextTick, readonly } from 'vue'
 import { NIcon, NButton, NSpace, NCollapse, NCollapseItem } from 'naive-ui'
 import {
   WarningOutline as ExclamationTriangleIcon,

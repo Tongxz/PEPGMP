@@ -9,13 +9,17 @@ import os
 import sys
 from pathlib import Path
 
-# 添加项目根目录到Python路径
-project_root = Path(__file__).parent.parent
-sys.path.append(str(project_root))
-
-from src.config.unified_params import get_unified_params
-from src.detection.hairnet_detection_factory import HairnetDetectionFactory
-from src.detection.yolo_hairnet_detector import YOLOHairnetDetector
+try:
+    from src.config.unified_params import get_unified_params
+    from src.detection.hairnet_detection_factory import HairnetDetectionFactory
+    from src.detection.yolo_hairnet_detector import YOLOHairnetDetector
+except ImportError:
+    # 添加项目根目录到Python路径
+    project_root = Path(__file__).parent.parent
+    sys.path.append(str(project_root))
+    from src.config.unified_params import get_unified_params
+    from src.detection.hairnet_detection_factory import HairnetDetectionFactory
+    from src.detection.yolo_hairnet_detector import YOLOHairnetDetector
 
 
 def verify_model_files():

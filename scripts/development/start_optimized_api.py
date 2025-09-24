@@ -13,25 +13,29 @@
 import logging
 import os
 import sys
-import time
 from pathlib import Path
 
-# 添加项目根目录到Python路径
-project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root))
-
 # 设置环境变量
+# 必须在导入任何可能依赖这些变量的模块之前完成
+project_root = Path(__file__).resolve().parent.parent
 os.environ["PYTHONPATH"] = str(project_root)
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # 使用第一个GPU
 
-import uvicorn
+try:
+    import uvicorn
+    from src.api.app import app
+    from src.core.fast_detection_pipeline import FastDetectionPipeline
+    from src.services.detection_service import initialize_detection_services
+    from src.utils.adaptive_optimizer import apply_adaptive_optimizations
+except ImportError:
+    # 如果直接运行脚本，可能找不到src模块，因此添加路径
+    sys.path.insert(0, str(project_root))
+    import uvicorn
+    from src.api.app import app
+    from src.core.fast_detection_pipeline import FastDetectionPipeline
+    from src.services.detection_service import initialize_detection_services
+    from src.utils.adaptive_optimizer import apply_adaptive_optimizations
 
-from src.api.app import app
-from src.core.fast_detection_pipeline import FastDetectionPipeline
-from src.services.detection_service import initialize_detection_services
-
-# 导入必要的模块
-from src.utils.adaptive_optimizer import apply_adaptive_optimizations
 
 # 设置日志
 logging.basicConfig(

@@ -1,7 +1,7 @@
 import logging
 import os
 import sys
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import cv2
 import numpy as np
@@ -595,7 +595,7 @@ class HairnetDetector:
                 confidence = probabilities[0][predicted_class_int].item()
 
             # 分析颜色（使用现有方法）
-            color_analysis = self._analyze_hairnet_color(head_region)
+            self._analyze_hairnet_color(head_region)
 
             # 构建结果字典
             has_hairnet = predicted_class == 1  # 假设类别1表示有发网

@@ -13,7 +13,6 @@ from src.core.behavior import BehaviorRecognizer
 
 # Import core detection components
 from src.core.optimized_detection_pipeline import (
-    DetectionResult,
     OptimizedDetectionPipeline,
     VideoStreamOptimizer,
 )
@@ -74,7 +73,7 @@ def initialize_detection_services_for_demo():
             human_detector=detector,
             hairnet_detector=YOLOHairnetDetector(),
             behavior_recognizer=behavior_recognizer,
-            pose_detector=mediapipe_pose_detector,
+            pose_detector=pose_detector,
         )
         hairnet_pipeline = YOLOHairnetDetector(
             device=dev
@@ -577,7 +576,6 @@ def main():
             similarity_threshold=args.sim_threshold,
         )
     last_annotated = None
-    last_result = None
     # Per-track temporal states
     track_states = {}
     # Per-track compliance state machine (lite)
@@ -1248,7 +1246,7 @@ def main():
                                     labels=labels,
                                     track_id=track_id,
                                 )
-                        except Exception as _:
+                        except Exception:
                             pass
 
                     # OSD violations (simple):
@@ -1295,7 +1293,6 @@ def main():
                 # 一次性刷出所有文本
                 annotated = _flush_text(annotated)
                 last_annotated = annotated
-                last_result = result
                 cv2.imshow("Real-time Detection (Direct Camera)", annotated)
 
                 # Write annotated frame if requested
@@ -1399,7 +1396,7 @@ def main():
                 logger.info(
                     f"Detailed detection report saved to {args.save_detail} ({len(detail_reports)} frames)"
                 )
-        except Exception as _:
+        except Exception:
             logger.warning("Failed to save detailed detection report")
         logger.info("Webcam released and windows destroyed.")
 

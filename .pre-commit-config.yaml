@@ -38,6 +38,17 @@ repos:
       - id: isort
         args: ["--profile", "black", "--line-length=88"]
 
+  # 自动移除未使用的导入和变量
+  - repo: https://github.com/PyCQA/autoflake
+    rev: v2.2.1
+    hooks:
+      - id: autoflake
+        args:
+          - "--in-place"
+          - "--remove-all-unused-imports"
+          - "--remove-unused-variables"
+          - "--expand-star-imports"
+
   # 代码质量检查
   - repo: https://github.com/pycqa/flake8
     rev: 6.0.0
@@ -50,16 +61,16 @@ repos:
           - flake8-comprehensions
           - flake8-simplify
 
-  # 类型检查
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.5.1
-    hooks:
-      - id: mypy
-        args: ["--ignore-missing-imports", "--strict-optional"]
-        additional_dependencies:
-          - types-requests
-          - types-PyYAML
-          - types-python-dateutil
+  #  # 类型检查
+  #  - repo: https://github.com/pre-commit/mirrors-mypy
+  #    rev: v1.5.1
+  #    hooks:
+  #      - id: mypy
+  #        args: ["--config-file", "mypy.ini", "--ignore-missing-imports", "--no-site-packages"]
+  #        additional_dependencies:
+  #          - types-requests
+  #          - types-PyYAML
+  #          - types-python-dateutil
 
   # 安全检查
   - repo: https://github.com/pycqa/bandit

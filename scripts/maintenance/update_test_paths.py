@@ -5,8 +5,6 @@
 将测试文件中的图像路径引用更新为使用fixtures目录
 """
 
-import glob
-import os
 import re
 from pathlib import Path
 

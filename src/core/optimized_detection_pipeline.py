@@ -14,18 +14,13 @@ import time
 from collections import OrderedDict
 from dataclasses import dataclass
 from threading import Lock
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import cv2
 import numpy as np
 
 from src.config.unified_params import get_unified_params
-from src.core.behavior import DeepBehaviorRecognizer
-from src.detection.detector import HumanDetector
-from src.detection.hairnet_detector import HairnetDetector
-from src.detection.motion_analyzer import MotionAnalyzer
 from src.detection.pose_detector import PoseDetectorFactory
-from src.utils.logger import get_logger
 
 # 级联相关依赖（可选）
 try:
@@ -803,7 +798,6 @@ class OptimizedDetectionPipeline:
                 x1, y1, x2, y2 = person_bbox
                 # 这里需要完整图像，所以返回估算结果
                 # 实际的手部检测在其他地方进行
-                pass
             except Exception as e:
                 logger.debug(f"姿态检测器手部检测失败，使用估算方法: {e}")
 
@@ -1023,13 +1017,12 @@ class OptimizedDetectionPipeline:
                     # 留空，由上层统一中文渲染
 
             # 手部可视化：无论是否检测到人体，都尝试绘制手部（便于手部近景视频调试）
-            hands_count = 0
             if self.pose_detector is not None:
                 hands_results = []
                 if hasattr(self.pose_detector, "detect_hands"):
                     hands_results = self.pose_detector.detect_hands(image)
 
-                hands_count = len(hands_results)
+                len(hands_results)
 
                 # 绘制手部：优先绘制bbox与来源标签；如有关键点则再绘制骨架
                 for hand_result in hands_results:

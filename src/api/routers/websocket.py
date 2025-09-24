@@ -7,12 +7,10 @@ import base64
 import json
 import logging
 import os
-from io import BytesIO
 
 import cv2
 import numpy as np
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
-from PIL import Image
 from websockets.exceptions import ConnectionClosedOK
 
 from src.services.websocket_service import (
