@@ -1,0 +1,79 @@
+# Stage 1: Builder
+FROM nvidia/cuda:12.4.0-runtime-ubuntu22.04 AS builder
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.10 \
+    python3.10-venv \
+    python3-pip \
+    build-essential \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create virtual environment
+RUN python3.10 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Upgrade pip and install wheel
+RUN pip install --upgrade pip wheel
+
+# Copy and install API-specific dependencies
+# Assuming a requirements.api.txt exists or specify packages here
+COPY requirements.prod.txt /tmp/requirements.prod.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.prod.txt
+
+# Stage 2: Production image
+FROM nvidia/cuda:12.4.0-runtime-ubuntu22.04
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    PATH="/opt/venv/bin:$PATH"
+
+# Install runtime system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.10 \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -m appuser && mkdir -p /app
+
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+
+# Copy only necessary files for API
+WORKDIR /app
+COPY main.py /app/
+COPY src/api /app/src/api/
+COPY src/core /app/src/core/
+COPY src/services /app/src/services/
+COPY src/utils /app/src/utils/
+COPY config /app/config/
+
+# Set permissions
+RUN chown -R appuser:appuser /app
+USER appuser
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Default command for API mode
+CMD ["python", "main.py", "--mode", "api", "--host", "0.0.0.0"]

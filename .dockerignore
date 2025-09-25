@@ -1,128 +1,122 @@
-# Git
+# Version control
 .git
+.github
 .gitignore
+.gitattributes
 
-# Python
-__pycache__
-*.pyc
-*.pyo
-*.pyd
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
 .Python
-build
-develop-eggs
-dist
-downloads
-eggs
-.eggs
-lib
-lib64
-parts
-sdist
-var
-wheels
-*.egg-info
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
 .installed.cfg
 *.egg
-PIPFILE.lock
 
 # Virtual environments
-venv
-env
-ENV
-env.bak
-venv.bak
-.venv
+venv/
+ENV/
+env/
+.env/
+.venv/
 
-# IDE
-.vscode
-.idea
+# IDE specific files
+.idea/
+.vscode/
 *.swp
 *.swo
-*~
-
-# OS
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
+*.sublime-workspace
+*.sublime-project
 
 # Testing
-.pytest_cache
+.pytest_cache/
 .coverage
-htmlcov
-.tox
-.cache
+htmlcov/
+.tox/
 nosetests.xml
 coverage.xml
 *.cover
-.hypothesis
-.mypy_cache
-.dmypy.json
-dmypy.json
+.hypothesis/
+.benchmarks/
+tests/
+testing/
 
 # Documentation
-docs/_build
+docs/
+*.md
+LICENSE
+CHANGELOG.md
+CONTRIBUTING.md
 
-# Logs
-logs
+# Data and logs
+logs/
+output/
+data/
+temp/
 *.log
 
-# Data
-data/temp
-data/images
-data/videos
-data/*.db
-data/*.sqlite
+# Development scripts and tools
+scripts/
+tools/
+examples/
+notebooks/
+*.ipynb
 
-# Models
-models/*.pt
-models/*.onnx
-models/*.trt
+# Frontend specific (for API and Supervisor builds)
+frontend/node_modules/
+frontend/dist/
+frontend/.cache/
+frontend/coverage/
+frontend/npm-debug.log
+frontend/yarn-error.log
+frontend/.env*
+frontend/*.local
 
-# Temporary files
-*.tmp
-*.temp
+# Backend specific (for Frontend builds)
+# Commented out to allow API and Supervisor builds to access these files
+# *.py
+# src/
+# config/
+# models/
+# main.py
+# requirements.txt
+# setup.py
+# pyproject.toml
 
-# Environment variables
-.env
-.env.local
-.env.*.local
-
-# Jupyter
-.ipynb_checkpoints
-
-# Node.js (if any)
-node_modules
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Docker
+# Docker files (to avoid recursive copying)
 Dockerfile*
 docker-compose*
 .dockerignore
 
-# CI/CD
-.github
-.gitlab-ci.yml
-.travis.yml
-.circleci
+# Large files and binaries
+*.weights
+*.pt
+*.onnx
+*.bin
+*.h5
+*.hdf5
+*.pkl
+*.model
+*.tar
+*.gz
+*.zip
+*.rar
+*.7z
 
-# Development scripts
-scripts/setup_dev.sh
-scripts/check_sprint0.py
-
-# Documentation source
-README.md
-CONTRIBUTING.md
-敏捷迭代执行方案.md
-
-# Configuration
-Makefile
-.pre-commit-config.yaml
-pyproject.toml
-.flake8
-mypy.ini
+# Specific to this project
+.benchmarks/
+training/
