@@ -1,35 +1,112 @@
 version: "3.8"
 
+networks:
+  pyt-network:
+    driver: bridge
+
 services:
-  # 开发模式下的应用服务
-  app-dev:
+  api:
     build:
       context: .
-      # 使用开发专用的Dockerfile.dev
-      dockerfile: Dockerfile.dev
-    container_name: hbd-app-dev
+      dockerfile: Dockerfile.api
+    container_name: pyt-api-dev
     ports:
       - "8000:8000"
     volumes:
-      # 挂载所有代码和配置，实现热重载
       - .:/app
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+      - ./output:/app/output
+    command: python main.py --mode api --host 0.0.0.0 --port 8000 --debug
+    env_file:
+      - .env
     environment:
-      - PYTHONPATH=/app
-      - LOG_LEVEL=DEBUG
       - ENVIRONMENT=development
-    # 开发模式下，直接在命令行启动，方便查看日志
-    command: python main.py --mode api --host 0.0.0.0 --debug
+      - LOG_LEVEL=DEBUG
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
-      - hbd-network
-    # 为开发环境配置GPU (如果需要)
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+      - pyt-network
 
-networks:
-  hbd-network:
-    driver: bridge
+
+  supervisor:
+    build:
+      context: .
+      dockerfile: Dockerfile.supervisor
+    container_name: pyt-supervisor-dev
+    volumes:
+      - .:/app
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+      - ./output:/app/output
+    command: python main.py --mode supervisor --debug
+    env_file:
+      - .env
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+    restart: always
+    healthcheck:
+      test: ["CMD", "python", "main.py", "--mode", "supervisor", "--health-check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - pyt-network
+    depends_on:
+      - api
+
+
+  frontend:
+    image: node:20
+    container_name: pyt-frontend-dev
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "5173:5173"
+    env_file:
+      - .env
+    environment:
+      - VITE_API_URL=http://api:8000
+      - NODE_ENV=development
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5173"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - pyt-network
+    depends_on:
+      - api
+
+  database:
+    image: postgres:15-alpine
+    container_name: pyt-db-dev
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_USER=pyt_user
+      - POSTGRES_DB=pyt_db
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pyt_user -d pyt_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pyt-network
+    restart: always
+
+volumes:
+  postgres_data:
+    driver: local

@@ -37,6 +37,9 @@ interface BackendRegionAny {
   description?: string
 }
 
+// 后端API响应类型（与BackendRegionAny相同，用于HTTP响应类型标注）
+type RegionResponse = BackendRegionAny
+
 function toPointArray(src: any): Array<{ x: number; y: number }> {
   if (!Array.isArray(src)) return []
   // 处理形如 [[x,y], [x,y]]
@@ -114,7 +117,7 @@ export const regionApi = {
     if (cameraId) params.append('camera_id', cameraId)
 
     // 与后端路由前缀 /api/v1/management 对齐
-    const response = await http.get(`api/v1/management/regions?${params}`)
+    const response = await http.get<RegionResponse[]>(`/api/v1/management/regions?camera_id=${cameraId}`);
     const data = response.data as any
     // 兼容两种返回：数组 或 { regions: [...] }
     const list: BackendRegionAny[] = Array.isArray(data)
@@ -128,20 +131,18 @@ export const regionApi = {
   async createRegion(regionData: Omit<Region, 'id'>): Promise<Region> {
     const payload = toBackendRegionPayload(regionData)
     // 与后端路由前缀 /api/v1/management 对齐
-    const response = await http.post('api/v1/management/regions', payload)
-    return normalizeRegion(response.data)
+    const response = await http.post<RegionResponse>(`/api/v1/management/regions`, toBackendRegionPayload(regionData)); return normalizeRegion(response.data);
   },
 
   async updateRegion(id: string, regionData: Partial<Region>): Promise<Region> {
     const payload = toBackendRegionPayload(regionData)
     // 与后端路由前缀 /api/v1/management 对齐
-    const response = await http.put(`api/v1/management/regions/${encodeURIComponent(id)}`, payload)
-    return normalizeRegion(response.data)
+    const response = await http.put<RegionResponse>(`/api/v1/management/regions/${id}`, toBackendRegionPayload(regionData)); return normalizeRegion(response.data);
   },
 
   async deleteRegion(id: string): Promise<void> {
     // 与后端路由前缀 /api/v1/management 对齐
-    await http.delete(`api/v1/management/regions/${encodeURIComponent(id)}`)
+    await http.delete(`/api/v1/management/regions/${encodeURIComponent(id)}`);
   },
 
   async getRegionById(id: string): Promise<Region> {
