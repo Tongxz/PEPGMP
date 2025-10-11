@@ -17,7 +17,7 @@ export const cameraApi = {
    * 获取摄像头列表
    */
   async getCameras() {
-    const response = await http.get<{ cameras: Camera[] }>('cameras')
+    const response = await http.get<{ cameras: Camera[] }>('/cameras')
     return response.data.cameras || []
   },
 
@@ -26,7 +26,7 @@ export const cameraApi = {
    * @param cameraData 摄像头数据
    */
   async createCamera(cameraData: Omit<Camera, 'enabled'>) {
-    return await http.post('cameras', cameraData)
+    return await http.post('/cameras', cameraData)
   },
 
   /**
@@ -35,7 +35,7 @@ export const cameraApi = {
    * @param cameraData 更新的摄像头数据
    */
   async updateCamera(id: string, cameraData: Partial<Camera>) {
-    return await http.put(`cameras/${encodeURIComponent(id)}`, cameraData)
+    return await http.put(`/cameras/${encodeURIComponent(id)}`, cameraData)
   },
 
   /**
@@ -43,7 +43,7 @@ export const cameraApi = {
    * @param id 摄像头ID
    */
   async deleteCamera(id: string) {
-    return await http.delete(`cameras/${encodeURIComponent(id)}`)
+    return await http.delete(`/cameras/${encodeURIComponent(id)}`)
   },
 
   /**
@@ -51,7 +51,7 @@ export const cameraApi = {
    * @param id 摄像头ID
    */
   async getCameraById(id: string) {
-    const response = await http.get(`cameras/${encodeURIComponent(id)}`)
+    const response = await http.get(`/cameras/${encodeURIComponent(id)}`)
     return response.data
   },
 
@@ -61,7 +61,7 @@ export const cameraApi = {
    * @param enabled 是否启用
    */
   async toggleCamera(id: string, enabled: boolean) {
-    return await http.put(`cameras/${encodeURIComponent(id)}`, { enabled })
+    return await http.put(`/cameras/${encodeURIComponent(id)}`, { enabled })
   },
 
   /**
@@ -69,7 +69,7 @@ export const cameraApi = {
    * @param id 摄像头ID
    */
   async startCamera(id: string) {
-    return await http.post(`cameras/${encodeURIComponent(id)}/start`)
+    return await http.post(`/cameras/${encodeURIComponent(id)}/start`)
   },
 
   /**
@@ -77,13 +77,13 @@ export const cameraApi = {
    * @param id 摄像头ID
    */
   async stopCamera(id: string) {
-    return await http.post(`cameras/${encodeURIComponent(id)}/stop`)
+    return await http.post(`/cameras/${encodeURIComponent(id)}/stop`)
   },
 
   /**
    * 刷新所有摄像头状态
    */
   async refreshAllStatus() {
-    return await http.post('cameras/refresh')
+    return await http.post('/cameras/refresh')
   }
 }

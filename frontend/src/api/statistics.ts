@@ -33,7 +33,7 @@ export const statisticsApi = {
     const params = new URLSearchParams()
     if (cameraId) params.append('camera_id', cameraId)
 
-    const response = await http.get(`statistics/summary?${params}`)
+    const response = await http.get(`/statistics/summary?${params}`)
     return response.data
   },
 
@@ -47,7 +47,7 @@ export const statisticsApi = {
     params.append('days', days.toString())
     if (cameraId) params.append('camera_id', cameraId)
 
-    const response = await http.get(`statistics/daily?${params}`)
+    const response = await http.get(`/statistics/daily?${params}`)
     return response.data
   },
 
@@ -67,7 +67,7 @@ export const statisticsApi = {
       if (value) queryParams.append(key, value.toString())
     })
 
-    const response = await http.get(`statistics/events?${queryParams}`)
+    const response = await http.get(`/statistics/events?${queryParams}`)
     return response.data.events || []
   },
 
@@ -138,7 +138,7 @@ export const statisticsApi = {
       if (value) queryParams.append(key, value.toString())
     })
 
-    const response = await http.get(`statistics/chart?${queryParams}`)
+    const response = await http.get(`/statistics/chart?${queryParams}`)
     return response.data
   },
 
@@ -157,7 +157,7 @@ export const statisticsApi = {
       if (value) queryParams.append(key, value.toString())
     })
 
-    const response = await http.get(`statistics/export?${queryParams}`, {
+    const response = await http.get(`/statistics/export?${queryParams}`, {
       responseType: 'blob'
     })
     return response.data

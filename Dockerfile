@@ -13,15 +13,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.10 python3.10-venv python3-pip build-essential \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# 仅复制依赖定义文件
-COPY requirements-prod.txt .
+# 仅复制依赖定义文件（使用通用 requirements.txt）
+COPY requirements.txt .
 
 # 在一个独立的虚拟环境中构建依赖，便于后续复制
 RUN python3.10 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # 使用缓存安装依赖，加速后续构建
-RUN --mount=type=cache,target=/root/.cache/pip pip install --no-cache-dir -r requirements-prod.txt
+RUN --mount=type=cache,target=/root/.cache/pip pip install --no-cache-dir -r requirements.txt
 
 # =================================================================
 # 第二阶段: 生产镜像 (Production Image)
