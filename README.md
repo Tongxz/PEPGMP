@@ -44,8 +44,9 @@
 - **日志**: 结构化JSON日志
 
 ### 前端技术栈
-- **核心**: Vanilla JavaScript, HTML5, CSS3
-- **UI组件**: 响应式设计，现代化界面
+- **核心**: Vue 3 + Vite + TypeScript
+- **状态与路由**: Pinia, Vue Router
+- **UI组件**: Naive UI（按类别分包，支持体积优化）
 - **实时通信**: WebSocket支持
 - **可视化**: 实时图表和监控面板
 
@@ -289,6 +290,41 @@ docker-compose up -d
 
 # 生产环境
 docker-compose -f docker-compose.prod.yml up -d
+```
+
+#### 前后端分离（生产）
+
+```bash
+# 1) 构建后端（GPU 支持）
+docker compose -f docker-compose.prod.yml build api
+docker compose -f docker-compose.prod.yml up -d api
+
+# 2) 构建前端（传入 API 地址与基准路径）
+export VITE_API_BASE=http://<HOST>:8000/api/v1
+export BASE_URL=/
+docker compose -f docker-compose.prod.yml build frontend
+docker compose -f docker-compose.prod.yml up -d frontend
+
+# 访问入口
+# 前端:  http://<HOST>:8080/
+# 后端:  http://<HOST>:8000/frontend/  (若使用后端托管静态)
+# API:   http://<HOST>:8000/api/v1
+```
+
+#### 前端环境变量
+
+```bash
+# 开发（通过 Vite 代理转发 /api 到 8000）
+VITE_API_BASE=/api/v1
+BASE_URL=/
+
+# 生产（前后端分离）
+VITE_API_BASE=http://<HOST>:8000/api/v1
+BASE_URL=/
+
+# 生产（后端托管静态 /frontend）
+VITE_API_BASE=http://<HOST>:8000/api/v1
+BASE_URL=/frontend/
 ```
 
 #### 单独Docker运行

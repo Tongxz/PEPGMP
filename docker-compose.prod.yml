@@ -1,140 +1,45 @@
 version: "3.8"
 
-# Define networks
-networks:
-  pyt-network:
-    driver: bridge
-    name: pyt-network
-
 services:
-  # API Service
   api:
     build:
       context: .
-      dockerfile: Dockerfile.api
-    container_name: pyt-api-prod
+      dockerfile: Dockerfile
+    container_name: pyt-api
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: ["gpu"]
+    gpus: all
+    environment:
+      - ENVIRONMENT=production
     ports:
       - "8000:8000"
     volumes:
-      - ./config:/app/config:ro  # Read-only configuration
-      - logs_volume:/app/logs
-      - output_volume:/app/output
-    env_file:
-      - .env.prod
-    environment:
-      - ENVIRONMENT=production
-    restart: always
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+      - ./output:/app/output
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-    networks:
-      - pyt-network
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              capabilities: [gpu]  # Allow GPU sharing
-    labels:
-      com.docker.compose.project: pyt-prod
 
-  # Supervisor Service
-  supervisor:
-    build:
-      context: .
-      dockerfile: Dockerfile.supervisor
-    container_name: pyt-supervisor-prod
-    volumes:
-      - ./config:/app/config:ro
-      - logs_volume:/app/logs
-      - output_volume:/app/output
-    command: python main.py --mode supervisor
-    env_file:
-      - .env.prod
-    environment:
-      - ENVIRONMENT=production
-    restart: always
-    healthcheck:
-      test: ["CMD", "python", "main.py", "--mode", "supervisor", "--health-check"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - pyt-network
-    depends_on:
-      - api
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              capabilities: [gpu]  # Allow GPU sharing
-    labels:
-      com.docker.compose.project: pyt-prod
-
-  # Frontend Service
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend
-    container_name: pyt-frontend-prod
+      args:
+        VITE_API_BASE: ${VITE_API_BASE:-http://localhost:8000/api/v1}
+        BASE_URL: ${BASE_URL:-/}
+    container_name: pyt-frontend
     ports:
-      - "80:80"  # Expose on standard HTTP port
-    env_file:
-      - .env.prod
-    environment:
-      - VUE_APP_API_URL=http://api:8000
-    restart: always
+      - "8080:80"
+    depends_on:
+      - api
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
       interval: 30s
       timeout: 10s
       retries: 3
-    networks:
-      - pyt-network
-    depends_on:
-      - api
-    labels:
-      com.docker.compose.project: pyt-prod
-
-  # Database Service (uncommented for implementation)
-  database:
-    image: postgres:15-alpine
-    container_name: pyt-db-prod
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    env_file:
-      - .env.prod
-    environment:
-      - POSTGRES_USER=pyt_user
-      - POSTGRES_DB=pyt_db
-    secrets:
-      - db_password
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pyt_user"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - pyt-network
-    restart: always
-    labels:
-      com.docker.compose.project: pyt-prod
-
-# Define volumes for persistent data
-volumes:
-  postgres_data:
-    driver: local
-  logs_volume:
-    driver: local
-  output_volume:
-    driver: local
-
-# Define secrets
-secrets:
-  db_password:
-    file: ./secrets/db_password.txt

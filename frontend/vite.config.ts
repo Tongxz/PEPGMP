@@ -1,10 +1,11 @@
+import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
-import vue from '@vitejs/plugin-vue'
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [vue()],
+  base: process.env.BASE_URL || '/',
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -15,8 +16,9 @@ export default defineConfig({
     strictPort: true,
     open: '/',
     proxy: {
+      // 开发环境建议 VITE_API_BASE=/api/v1，所有 API 写相对路径，前缀走 /api
       '/api': {
-        target: 'http://localhost:8000',
+        target: process.env.VITE_PROXY_TARGET || 'http://localhost:8000',
         changeOrigin: true,
         ws: true,
       },
@@ -41,27 +43,27 @@ export default defineConfig({
             }
             // 布局组件
             if (id.includes('card') || id.includes('space') || id.includes('grid') ||
-                id.includes('layout') || id.includes('divider')) {
+              id.includes('layout') || id.includes('divider')) {
               return 'ui-layout'
             }
             // 数据展示组件
             if (id.includes('table') || id.includes('list') || id.includes('tree') ||
-                id.includes('pagination') || id.includes('scrollbar')) {
+              id.includes('pagination') || id.includes('scrollbar')) {
               return 'ui-data'
             }
             // 反馈组件
             if (id.includes('message') || id.includes('notification') || id.includes('modal') ||
-                id.includes('drawer') || id.includes('popover') || id.includes('tooltip')) {
+              id.includes('drawer') || id.includes('popover') || id.includes('tooltip')) {
               return 'ui-feedback'
             }
             // 导航组件
             if (id.includes('tabs') || id.includes('menu') || id.includes('breadcrumb') ||
-                id.includes('steps') || id.includes('anchor')) {
+              id.includes('steps') || id.includes('anchor')) {
               return 'ui-navigation'
             }
             // 选择器组件
             if (id.includes('select') || id.includes('cascader') || id.includes('transfer') ||
-                id.includes('tree-select') || id.includes('auto-complete')) {
+              id.includes('tree-select') || id.includes('auto-complete')) {
               return 'ui-selector'
             }
             // 日期时间组件

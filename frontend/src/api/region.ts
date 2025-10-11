@@ -117,7 +117,7 @@ export const regionApi = {
     if (cameraId) params.append('camera_id', cameraId)
 
     // 与后端路由前缀 /api/v1/management 对齐
-    const response = await http.get<RegionResponse[]>(`/api/v1/management/regions?camera_id=${cameraId}`);
+    const response = await http.get<RegionResponse[]>(`/management/regions?camera_id=${cameraId}`);
     const data = response.data as any
     // 兼容两种返回：数组 或 { regions: [...] }
     const list: BackendRegionAny[] = Array.isArray(data)
@@ -131,51 +131,51 @@ export const regionApi = {
   async createRegion(regionData: Omit<Region, 'id'>): Promise<Region> {
     const payload = toBackendRegionPayload(regionData)
     // 与后端路由前缀 /api/v1/management 对齐
-    const response = await http.post<RegionResponse>(`/api/v1/management/regions`, toBackendRegionPayload(regionData)); return normalizeRegion(response.data);
+    const response = await http.post<RegionResponse>(`/management/regions`, toBackendRegionPayload(regionData)); return normalizeRegion(response.data);
   },
 
   async updateRegion(id: string, regionData: Partial<Region>): Promise<Region> {
     const payload = toBackendRegionPayload(regionData)
     // 与后端路由前缀 /api/v1/management 对齐
-    const response = await http.put<RegionResponse>(`/api/v1/management/regions/${id}`, toBackendRegionPayload(regionData)); return normalizeRegion(response.data);
+    const response = await http.put<RegionResponse>(`/management/regions/${id}`, toBackendRegionPayload(regionData)); return normalizeRegion(response.data);
   },
 
   async deleteRegion(id: string): Promise<void> {
     // 与后端路由前缀 /api/v1/management 对齐
-    await http.delete(`/api/v1/management/regions/${encodeURIComponent(id)}`);
+    await http.delete(`/management/regions/${encodeURIComponent(id)}`);
   },
 
   async getRegionById(id: string): Promise<Region> {
     // 与后端路由前缀 /api/v1/management 对齐
-    const response = await http.get(`api/v1/management/regions/${encodeURIComponent(id)}`)
+    const response = await http.get(`/management/regions/${encodeURIComponent(id)}`)
     return normalizeRegion(response.data)
   },
 
   async saveRegions(regions: Region[]): Promise<void> {
     // 与后端路由前缀 /api/v1/management 对齐
-    await http.post('api/v1/management/regions/batch', { regions })
+    await http.post('/management/regions/batch', { regions })
   },
 
   async clearRegions(): Promise<void> {
     // 与后端路由前缀 /api/v1/management 对齐
-    await http.delete('api/v1/management/regions')
+    await http.delete('/management/regions')
   },
 
   async toggleRegion(id: string, enabled: boolean): Promise<Region> {
     // 与后端路由前缀 /api/v1/management 对齐
-    const response = await http.put(`api/v1/management/regions/${encodeURIComponent(id)}`, { enabled })
+    const response = await http.put(`/management/regions/${encodeURIComponent(id)}`, { enabled })
     return normalizeRegion(response.data)
   },
 
   async getRegionStats(id: string): Promise<any> {
     // 与后端路由前缀 /api/v1/management 对齐
-    const response = await http.get(`api/v1/management/regions/${encodeURIComponent(id)}/stats`)
+    const response = await http.get(`/management/regions/${encodeURIComponent(id)}/stats`)
     return response.data
   },
 
   async validateRegion(regionData: Partial<Region>): Promise<{ valid: boolean; errors?: string[] }> {
     // 与后端路由前缀 /api/v1/management 对齐
-    const response = await http.post('api/v1/management/regions/validate', regionData)
+    const response = await http.post('/management/regions/validate', regionData)
     return response.data
   },
 
@@ -184,7 +184,7 @@ export const regionApi = {
     formData.append('file', file)
 
     // 与后端路由前缀 /api/v1/management 对齐
-    const response = await http.post('api/v1/management/regions/import', formData, {
+    const response = await http.post('/management/regions/import', formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       }
@@ -196,7 +196,7 @@ export const regionApi = {
 
   async exportRegions(format: 'json' | 'yaml' = 'json'): Promise<Blob> {
     // 与后端路由前缀 /api/v1/management 对齐
-    const response = await http.get(`api/v1/management/regions/export?format=${format}`, {
+    const response = await http.get(`/management/regions/export?format=${format}`, {
       responseType: 'blob'
     })
     return response.data

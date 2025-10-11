@@ -1,3 +1,31 @@
+# Frontend production image (Vue3 + Vite build)
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Install deps
+COPY frontend/package*.json ./
+COPY frontend/tsconfig*.json ./
+COPY frontend/vite.config.ts ./
+RUN npm ci
+
+# Build
+COPY frontend ./
+# Support build-time env overrides
+ARG VITE_API_BASE
+ARG BASE_URL
+ENV VITE_API_BASE=${VITE_API_BASE}
+ENV BASE_URL=${BASE_URL}
+RUN npm run build
+
+FROM nginx:1.27-alpine
+
+COPY deployment/nginx/frontend.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+EXPOSE 80
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD wget -qO- http://localhost/ || exit 1
+
 # Stage 1: Build the Vue application
 FROM node:20-alpine AS builder
 
