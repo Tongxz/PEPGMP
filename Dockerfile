@@ -4,7 +4,8 @@
 # 这个阶段负责安装所有编译时依赖，并构建Python依赖包。
 # 它的产物将被复制到最终的生产镜像中，而它本身会被丢弃。
 # =================================================================
-FROM nvidia/cuda:12.4.0-runtime-ubuntu22.04 as builder
+ARG CUDA_IMAGE=nvidia/cuda:12.4.0-runtime-ubuntu22.04
+FROM ${CUDA_IMAGE} AS builder
 
 WORKDIR /app
 
@@ -29,7 +30,8 @@ RUN --mount=type=cache,target=/root/.cache/pip pip install --no-cache-dir -r req
 # 这是最终的、轻量级的生产镜像。
 # 它只包含运行应用所必需的依赖和代码。
 # =================================================================
-FROM nvidia/cuda:12.4.0-runtime-ubuntu22.04
+ARG CUDA_IMAGE=nvidia/cuda:12.4.0-runtime-ubuntu22.04
+FROM ${CUDA_IMAGE}
 
 # 安装运行时所需的系统依赖，包括Python (比构建器少得多)
 RUN apt-get update && apt-get install -y --no-install-recommends \
