@@ -14,8 +14,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.10 python3.10-venv python3-pip build-essential \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# 仅复制依赖定义文件（使用通用 requirements.txt）
-COPY requirements.txt .
+# 复制项目文件（requirements.txt 中有 -e . 需要 pyproject.toml）
+COPY pyproject.toml requirements.txt ./
+COPY src ./src
 
 # 在一个独立的虚拟环境中构建依赖，便于后续复制
 RUN python3.10 -m venv /opt/venv
@@ -34,9 +35,10 @@ ARG CUDA_IMAGE=nvidia/cuda:12.4.0-runtime-ubuntu22.04
 FROM ${CUDA_IMAGE}
 
 # 安装运行时所需的系统依赖，包括Python (比构建器少得多)
+# 注意: libgl1-mesa-glx 在GPU容器中通常不需要(由NVIDIA驱动提供OpenGL)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.10 \
-    libgl1-mesa-glx libglib2.0-0 libgomp1 curl \
+    libglib2.0-0 libgomp1 curl \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 创建非root用户以提升安全
