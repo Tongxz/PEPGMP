@@ -269,6 +269,142 @@ def status_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
     return res
 
 
+@router.get("/cameras/{camera_id}/stats")
+def get_camera_stats(camera_id: str = Path(...)) -> Dict[str, Any]:
+    """获取指定摄像头的详细检测统计信息.
+
+    Args:
+        camera_id: 目标摄像头的ID.
+
+    Returns:
+        包含检测统计数据的字典.
+    """
+    import re
+    from pathlib import Path as FilePath
+
+    pm = get_process_manager()
+    status = pm.status(camera_id)
+
+    stats = {
+        "camera_id": camera_id,
+        "running": status.get("running", False),
+        "pid": status.get("pid", 0),
+        "log_file": status.get("log", ""),
+        "stats": {
+            "total_frames": 0,
+            "processed_frames": 0,
+            "detected_persons": 0,
+            "detected_hairnets": 0,
+            "detected_handwash": 0,
+            "avg_fps": 0.0,
+            "avg_detection_time": 0.0,
+            "last_detection_time": None,
+        },
+    }
+
+    # 如果进程正在运行，尝试从日志文件中提取统计信息
+    if status.get("running") and status.get("log"):
+        log_path = FilePath(status["log"])
+        if log_path.exists():
+            try:
+                # 读取最后100行日志
+                with open(log_path, "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+                    recent_lines = lines[-100:] if len(lines) > 100 else lines
+
+                    for line in reversed(recent_lines):
+                        # 提取检测结果: "检测: 人=2, 发网=1, 洗手=0"
+                        match = re.search(r"检测: 人=(\d+), 发网=(\d+), 洗手=(\d+)", line)
+                        if match:
+                            stats["stats"]["detected_persons"] = int(match.group(1))
+                            stats["stats"]["detected_hairnets"] = int(match.group(2))
+                            stats["stats"]["detected_handwash"] = int(match.group(3))
+
+                        # 提取FPS: "处理FPS: 2.01"
+                        match_fps = re.search(r"处理FPS: ([\d.]+)", line)
+                        if match_fps:
+                            stats["stats"]["avg_fps"] = float(match_fps.group(1))
+
+                        # 提取处理帧数: "处理帧数: 6"
+                        match_processed = re.search(r"处理帧数: (\d+)", line)
+                        if match_processed:
+                            stats["stats"]["processed_frames"] = int(
+                                match_processed.group(1)
+                            )
+
+                        # 提取总帧数: "总帧数: 805"
+                        match_total = re.search(r"总帧数: (\d+)", line)
+                        if match_total:
+                            stats["stats"]["total_frames"] = int(match_total.group(1))
+
+                        # 提取检测时间: "耗时: 0.270s"
+                        match_time = re.search(r"耗时: ([\d.]+)s", line)
+                        if match_time:
+                            stats["stats"]["avg_detection_time"] = float(
+                                match_time.group(1)
+                            )
+
+                        # 提取最后检测时间（日志时间戳）
+                        match_timestamp = re.search(
+                            r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", line
+                        )
+                        if (
+                            match_timestamp
+                            and not stats["stats"]["last_detection_time"]
+                        ):
+                            stats["stats"][
+                                "last_detection_time"
+                            ] = match_timestamp.group(1)
+
+            except Exception as e:
+                logger.warning(f"Failed to parse log file for {camera_id}: {e}")
+
+    return stats
+
+
+@router.get("/cameras/{camera_id}/logs")
+def get_camera_logs(camera_id: str = Path(...), lines: int = 100) -> Dict[str, Any]:
+    """获取指定摄像头的最新日志.
+
+    Args:
+        camera_id: 目标摄像头的ID.
+        lines: 返回的日志行数（默认100）.
+
+    Returns:
+        包含日志内容的字典.
+    """
+    from pathlib import Path as FilePath
+
+    pm = get_process_manager()
+    status = pm.status(camera_id)
+
+    if not status.get("log"):
+        raise HTTPException(status_code=404, detail="Log file not configured")
+
+    log_path = FilePath(status["log"])
+    if not log_path.exists():
+        return {
+            "camera_id": camera_id,
+            "log_file": str(log_path),
+            "lines": [],
+            "message": "Log file not found (process may not have started yet)",
+        }
+
+    try:
+        with open(log_path, "r", encoding="utf-8") as f:
+            all_lines = f.readlines()
+            recent_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
+
+        return {
+            "camera_id": camera_id,
+            "log_file": str(log_path),
+            "total_lines": len(all_lines),
+            "lines": [line.rstrip("\n") for line in recent_lines],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read log file: {e}")
+
+
 @router.post("/cameras/refresh")
 def refresh_all_cameras() -> Dict[str, Any]:
     """刷新所有摄像头状态（占位实现）.

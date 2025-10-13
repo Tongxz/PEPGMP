@@ -309,6 +309,193 @@ def select_device(args, logger):
         return "cpu"
 
 
+def _run_detection_loop(args, logger, pipeline, device):
+    """
+    执行视频检测循环
+
+    Args:
+        args: 命令行参数
+        logger: 日志记录器
+        pipeline: 检测管线实例
+        device: 设备类型 (cpu/cuda/mps)
+    """
+    import signal
+
+    import cv2
+
+    # 全局标志用于优雅退出
+    shutdown_requested = {"flag": False}
+
+    def signal_handler(signum, frame):
+        """处理退出信号"""
+        logger.info(f"收到信号 {signum}，准备退出...")
+        shutdown_requested["flag"] = True
+
+    # 注册信号处理器
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+
+    # 打开视频源
+    source = args.source
+    # 尝试将源转换为整数（摄像头索引）
+    try:
+        source = int(source)
+    except (ValueError, TypeError):
+        pass  # 保持为字符串（文件路径）
+
+    cap = cv2.VideoCapture(source)
+    if not cap.isOpened():
+        logger.error(f"无法打开视频源: {args.source}")
+        return
+
+    # 获取视频信息
+    fps = int(cap.get(cv2.CAP_PROP_FPS)) or 30
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    logger.info(
+        f"视频信息: {width}x{height} @ {fps}FPS, 总帧数: {total_frames if total_frames > 0 else '未知(实时流)'}"
+    )
+
+    # 日志间隔设置（用于跳帧）
+    log_interval = getattr(args, "log_interval", None) or 1
+    if log_interval > 1:
+        logger.info(f"启用帧跳过: 每 {log_interval} 帧处理 1 帧")
+
+    frame_count = 0
+    process_count = 0
+    start_time = time.time()
+    last_log_time = start_time
+
+    try:
+        logger.info("开始视频处理循环...")
+
+        while not shutdown_requested["flag"]:
+            ret, frame = cap.read()
+            if not ret:
+                # 如果是视频文件，尝试循环播放
+                if total_frames > 0:
+                    logger.info("视频文件播放完成，重新开始循环播放...")
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # 重置到第一帧
+                    frame_count = 0  # 重置帧计数
+                    continue
+                else:
+                    logger.warning("视频流读取失败")
+                    break
+
+            frame_count += 1
+
+            # 根据 log_interval 决定是否处理这一帧
+            if log_interval > 1 and frame_count % log_interval != 0:
+                continue
+
+            process_count += 1
+            detection_start = time.time()
+
+            try:
+                # 使用管线进行检测
+                result = pipeline.detect_comprehensive(
+                    frame,
+                    enable_hairnet=True,
+                    enable_handwash=True,
+                    enable_sanitize=True,
+                )
+
+                detection_time = time.time() - detection_start
+
+                # 提取检测结果统计
+                person_count = len(result.person_detections)
+                hairnet_count = len(result.hairnet_results)
+                handwash_count = len(result.handwash_results)
+                sanitize_count = len(result.sanitize_results)
+
+                # 定期打印统计信息（每10帧或每5秒）
+                current_time = time.time()
+                should_log = (
+                    process_count % 10 == 0 or (current_time - last_log_time) >= 5.0
+                )
+
+                if should_log:
+                    elapsed = current_time - start_time
+                    avg_fps = process_count / elapsed if elapsed > 0 else 0
+                    progress = (
+                        f"{frame_count}/{total_frames}"
+                        if total_frames > 0
+                        else str(frame_count)
+                    )
+
+                    logger.info(
+                        f"帧 {progress} | "
+                        f"检测: 人={person_count}, 发网={hairnet_count}, 洗手={handwash_count}, 消毒={sanitize_count} | "
+                        f"耗时: {detection_time:.3f}s | "
+                        f"处理FPS: {avg_fps:.2f}"
+                    )
+                    last_log_time = current_time
+
+                # 可选：保存结果到输出目录
+                if args.output and result.annotated_image is not None:
+                    output_dir = Path(args.output)
+                    output_dir.mkdir(parents=True, exist_ok=True)
+                    output_file = output_dir / f"frame_{frame_count:06d}.jpg"
+                    cv2.imwrite(str(output_file), result.annotated_image)
+
+            except Exception as e:
+                logger.error(f"处理第 {frame_count} 帧时出错: {e}")
+                if args.debug:
+                    import traceback
+
+                    traceback.print_exc()
+                continue
+
+        # 打印最终统计
+        total_time = time.time() - start_time
+        logger.info("=" * 60)
+        logger.info("检测完成统计:")
+        logger.info(f"  总帧数: {frame_count}")
+        logger.info(f"  处理帧数: {process_count}")
+        logger.info(f"  总耗时: {total_time:.2f}s")
+        logger.info(
+            f"  平均处理FPS: {process_count / total_time:.2f}"
+            if total_time > 0
+            else "  平均处理FPS: N/A"
+        )
+
+        # 打印管线统计（如果可用）
+        try:
+            if hasattr(pipeline, "get_stats"):
+                pipeline_stats = pipeline.get_stats()
+                logger.info("  管线统计:")
+                logger.info(f"    总检测次数: {pipeline_stats.get('total_detections', 0)}")
+                logger.info(f"    缓存命中: {pipeline_stats.get('cache_hits', 0)}")
+                logger.info(f"    缓存未命中: {pipeline_stats.get('cache_misses', 0)}")
+                logger.info(
+                    f"    平均处理时间: {pipeline_stats.get('avg_processing_time', 0):.3f}s"
+                )
+            elif hasattr(pipeline, "stats"):
+                logger.info(f"  管线统计: {pipeline.stats}")
+        except Exception as e:
+            logger.debug(f"无法获取管线统计: {e}")
+        logger.info("=" * 60)
+
+    except KeyboardInterrupt:
+        logger.info("接收到键盘中断，正在退出...")
+
+    except Exception as e:
+        logger.error(f"检测循环出现异常: {e}")
+        if args.debug:
+            import traceback
+
+            traceback.print_exc()
+
+    finally:
+        # 资源清理
+        logger.info("释放资源...")
+        cap.release()
+        cv2.destroyAllWindows()
+        logger.info("资源释放完成")
+
+
 def run_detection(args, logger):
     """运行检测模式"""
     logger.info(f"开始检测，输入源: {args.source}")
@@ -406,11 +593,10 @@ def run_detection(args, logger):
             cascade_config=cascade_cfg,
         )
 
-        # 简化的检测循环（移除复杂的处理逻辑）
         logger.info("检测管线初始化完成，开始处理...")
-        # 这里可以添加简化的检测循环逻辑
-        # 注意：pipeline变量已创建但暂未使用，等待后续实现
-        _ = pipeline  # 避免未使用变量警告
+
+        # 实现视频处理循环
+        _run_detection_loop(args, logger, pipeline, device)
 
     except Exception as e:
         logger.error(f"检测过程中出现错误: {e}")
