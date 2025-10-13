@@ -85,5 +85,35 @@ export const cameraApi = {
    */
   async refreshAllStatus() {
     return await http.post('/cameras/refresh')
+  },
+
+  /**
+   * 获取摄像头详细统计信息
+   * @param id 摄像头ID
+   */
+  async getCameraStats(id: string) {
+    const response = await http.get(`/cameras/${encodeURIComponent(id)}/stats`)
+    return response.data
+  },
+
+  /**
+   * 获取摄像头日志
+   * @param id 摄像头ID
+   * @param lines 返回的日志行数（默认100）
+   */
+  async getCameraLogs(id: string, lines: number = 100) {
+    const response = await http.get(`/cameras/${encodeURIComponent(id)}/logs`, {
+      params: { lines }
+    })
+    return response.data
+  },
+
+  /**
+   * 获取摄像头状态
+   * @param id 摄像头ID
+   */
+  async getCameraStatus(id: string) {
+    const response = await http.get(`/cameras/${encodeURIComponent(id)}/status`)
+    return response.data
   }
 }

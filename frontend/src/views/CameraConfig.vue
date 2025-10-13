@@ -258,6 +258,12 @@
           </n-form>
         </n-card>
       </n-modal>
+
+      <!-- 统计监控模态框 -->
+      <CameraStatsModal
+        v-model="statsModalVisible"
+        :camera-id="currentStatsCamera"
+      />
     </div>
   </div>
 </template>
@@ -282,10 +288,15 @@ import {
 } from '@vicons/ionicons5'
 import { useCameraStore } from '@/stores/camera'
 import { PageHeader, DataCard } from '@/components/common'
+import CameraStatsModal from '@/components/CameraStatsModal.vue'
 
 // 使用 Pinia store
 const cameraStore = useCameraStore()
 const message = useMessage()
+
+// 统计模态框状态
+const statsModalVisible = ref(false)
+const currentStatsCamera = ref('')
 
 // 表单相关
 const formRef = ref<FormInst | null>(null)
@@ -412,10 +423,15 @@ const columns: DataTableColumns = [
   {
     title: '操作',
     key: 'actions',
-    width: 280,
+    width: 350,
     render: (row: any) => {
       return h(NSpace, { size: 'small' }, {
         default: () => [
+          h(NButton, {
+            size: 'small',
+            type: 'info',
+            onClick: () => openStatsModal(row.id)
+          }, { default: () => '查看统计' }),
           h(NButton, {
             size: 'small',
             type: 'default',
@@ -577,6 +593,11 @@ function openEditModal(camera: any) {
   mode.value = 'edit'
   fillForm(camera)
   modalVisible.value = true
+}
+
+function openStatsModal(cameraId: string) {
+  currentStatsCamera.value = cameraId
+  statsModalVisible.value = true
 }
 
 function onCloseModal() {
