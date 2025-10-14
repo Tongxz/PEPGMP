@@ -27,6 +27,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../views/Statistics.vue'),
       },
       {
+        path: 'detection-records',
+        name: 'detection-records',
+        component: () => import('../views/DetectionRecords.vue'),
+      },
+      {
         path: 'system-info',
         name: 'system-info',
         component: () => import('../views/SystemInfo.vue'),

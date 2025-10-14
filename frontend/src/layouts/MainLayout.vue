@@ -190,7 +190,8 @@ import {
   MoonOutline,
   ContrastOutline,
   ExpandOutline,
-  ContractOutline
+  ContractOutline,
+  DocumentTextOutline
 } from '@vicons/ionicons5'
 import { StatusIndicator } from '@/components/common'
 import { useTheme } from '@/composables/useTheme'
@@ -250,6 +251,11 @@ const menuOptions = computed<MenuOption[]>(() => {
       icon: () => h(NIcon, null, { default: () => h(StatsChartOutline) })
     },
     {
+      label: '历史记录',
+      key: 'detection-records',
+      icon: () => h(NIcon, null, { default: () => h(DocumentTextOutline) })
+    },
+    {
       label: '系统信息',
       key: 'system-info',
       icon: () => h(NIcon, null, { default: () => h(InformationCircleOutline) })
@@ -265,6 +271,7 @@ const breadcrumbs = computed(() => {
     '/camera-config': '相机配置',
     '/region-config': '区域配置',
     '/statistics': '统计分析',
+    '/detection-records': '历史记录',
     '/system-info': '系统信息'
   }
 

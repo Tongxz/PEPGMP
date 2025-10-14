@@ -219,6 +219,85 @@ def get_statistics_daily(
     return out
 
 
+@router.get("/statistics/events", summary="事件列表查询")
+def get_statistics_events(
+    start_time: Optional[str] = Query(None, description="开始时间 (ISO格式)"),
+    end_time: Optional[str] = Query(None, description="结束时间 (ISO格式)"),
+    event_type: Optional[str] = Query(None, description="事件类型过滤"),
+    camera_id: Optional[str] = Query(None, description="摄像头ID过滤"),
+    limit: int = Query(100, ge=1, le=1000, description="返回数量限制"),
+) -> Dict[str, Any]:
+    """查询事件列表，支持时间范围和多种过滤条件.
+
+    Args:
+        start_time: 开始时间 (ISO格式字符串)
+        end_time: 结束时间 (ISO格式字符串)
+        event_type: 事件类型
+        camera_id: 摄像头ID
+        limit: 返回数量限制
+
+    Returns:
+        包含事件列表的字典
+    """
+    from datetime import datetime as dt
+
+    # 解析时间范围
+    if start_time:
+        try:
+            start_dt = dt.fromisoformat(start_time.replace('Z', '+00:00'))
+            since_ts = start_dt.timestamp()
+        except Exception:
+            since_ts = (datetime.utcnow() - timedelta(hours=24)).timestamp()
+    else:
+        since_ts = (datetime.utcnow() - timedelta(hours=24)).timestamp()
+
+    if end_time:
+        try:
+            end_dt = dt.fromisoformat(end_time.replace('Z', '+00:00'))
+            until_ts = end_dt.timestamp()
+        except Exception:
+            until_ts = datetime.utcnow().timestamp()
+    else:
+        until_ts = datetime.utcnow().timestamp()
+
+    rows = _read_recent_events(max_lines=max(limit * 5, 2000))
+    out: List[Dict[str, Any]] = []
+
+    for r in reversed(rows):
+        try:
+            event_ts = float(r.get("ts", 0.0))
+            
+            # 时间范围过滤
+            if event_ts < since_ts or event_ts > until_ts:
+                continue
+            
+            # 摄像头过滤
+            if camera_id is not None and str(r.get("camera_id", "")) != str(camera_id):
+                continue
+            
+            # 事件类型过滤
+            if event_type is not None and str(r.get("type", "")) != str(event_type):
+                continue
+            
+            out.append({
+                "id": str(r.get("ts", "")) + "_" + str(r.get("track_id", "")),
+                "timestamp": dt.utcfromtimestamp(event_ts).isoformat() + 'Z',
+                "type": r.get("type"),
+                "camera_id": r.get("camera_id"),
+                "confidence": r.get("evidence", {}).get("confidence", 0.0),
+                "track_id": r.get("track_id"),
+                "region": (r.get("evidence", {}) or {}).get("region"),
+                "metadata": r.get("evidence", {}),
+            })
+            
+            if len(out) >= limit:
+                break
+        except Exception:
+            continue
+
+    return {"events": out, "total": len(out)}
+
+
 @router.get("/statistics/history", summary="近期事件历史")
 def get_statistics_history(
     minutes: int = Query(60, ge=1, le=24 * 60),

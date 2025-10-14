@@ -28,6 +28,7 @@ try:
         error_monitoring,
         events,
         metrics,
+        records,
         region_management,
         security,
         statistics,
@@ -49,6 +50,7 @@ except ImportError:
         error_monitoring,
         events,
         metrics,
+        records,
         region_management,
         security,
         statistics,
@@ -68,6 +70,15 @@ async def lifespan(app: FastAPI):
     """应用程序生命周期管理."""
     # Startup
     logger.info("Starting up the application...")
+    
+    # 初始化数据库服务
+    try:
+        from src.services.database_service import get_db_service, close_db_service
+        db_service = await get_db_service()
+        logger.info("数据库服务已初始化")
+    except Exception as e:
+        logger.warning(f"数据库服务初始化失败 (非关键): {e}")
+    
     # Initialize services
     detection_service.initialize_detection_services()
     app.state.optimized_pipeline = detection_service.optimized_pipeline
@@ -96,6 +107,14 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down the application...")
+    
+    # 关闭数据库服务
+    try:
+        from src.services.database_service import close_db_service
+        await close_db_service()
+        logger.info("数据库服务已关闭")
+    except Exception as e:
+        logger.warning(f"数据库服务关闭失败: {e}")
 
     # 停止错误监控
     try:
@@ -163,6 +182,7 @@ app.include_router(cameras.router, prefix="/api/v1", tags=["Cameras"])
 app.include_router(system.router, prefix="/api/v1", tags=["System"])
 app.include_router(error_monitoring.router, prefix="/api/v1", tags=["Error Monitoring"])
 app.include_router(security.router, prefix="/api/v1", tags=["Security Management"])
+app.include_router(records.router, tags=["Records"])
 
 
 @app.get("/", include_in_schema=False)
