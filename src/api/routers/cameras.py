@@ -269,6 +269,119 @@ def status_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
     return res
 
 
+@router.post("/cameras/{camera_id}/activate")
+def activate_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
+    """激活摄像头（允许启动检测）.
+
+    Args:
+        camera_id: 目标摄像头的ID.
+
+    Returns:
+        操作结果字典.
+    """
+    path = _cameras_path()
+    data = _read_yaml(path)
+    cameras: List[Dict[str, Any]] = data.get("cameras", [])
+    
+    cam = next((c for c in cameras if str(c.get("id")) == str(camera_id)), None)
+    if not cam:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    
+    # 更新激活状态
+    cam["active"] = True
+    
+    # 写回配置
+    _write_yaml(path, data)
+    
+    logger.info(f"Activated camera {camera_id}")
+    return {"ok": True, "camera_id": camera_id, "active": True}
+
+
+@router.post("/cameras/{camera_id}/deactivate")
+def deactivate_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
+    """停用摄像头（禁止启动检测，如正在运行则先停止）.
+
+    Args:
+        camera_id: 目标摄像头的ID.
+
+    Returns:
+        操作结果字典.
+    """
+    # 1. 先检查并停止运行中的进程
+    pm = get_process_manager()
+    status = pm.status(camera_id)
+    
+    if status.get("running"):
+        logger.info(f"Camera {camera_id} is running, stopping before deactivation")
+        stop_res = pm.stop(camera_id)
+        if not stop_res.get("ok"):
+            logger.warning(f"Failed to stop camera {camera_id}: {stop_res}")
+    
+    # 2. 更新配置
+    path = _cameras_path()
+    data = _read_yaml(path)
+    cameras: List[Dict[str, Any]] = data.get("cameras", [])
+    
+    cam = next((c for c in cameras if str(c.get("id")) == str(camera_id)), None)
+    if not cam:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    
+    # 更新停用状态
+    cam["active"] = False
+    cam["auto_start"] = False  # 停用时同时关闭自动启动
+    
+    # 写回配置
+    _write_yaml(path, data)
+    
+    logger.info(f"Deactivated camera {camera_id}")
+    return {
+        "ok": True,
+        "camera_id": camera_id,
+        "active": False,
+        "stopped": status.get("running", False)
+    }
+
+
+@router.put("/cameras/{camera_id}/auto-start")
+def toggle_auto_start(
+    camera_id: str = Path(...),
+    auto_start: bool = False
+) -> Dict[str, Any]:
+    """切换摄像头的自动启动设置.
+
+    Args:
+        camera_id: 目标摄像头的ID.
+        auto_start: 是否自动启动.
+
+    Returns:
+        操作结果字典.
+    """
+    path = _cameras_path()
+    data = _read_yaml(path)
+    cameras: List[Dict[str, Any]] = data.get("cameras", [])
+    
+    cam = next((c for c in cameras if str(c.get("id")) == str(camera_id)), None)
+    if not cam:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    
+    # 检查摄像头是否激活
+    is_active = cam.get("active", cam.get("enabled", True))
+    if not is_active:
+        raise HTTPException(
+            status_code=400,
+            detail="摄像头未激活，无法设置自动启动"
+        )
+    
+    # 更新自动启动状态
+    cam["auto_start"] = bool(auto_start)
+    
+    # 写回配置
+    _write_yaml(path, data)
+    
+    logger.info(f"Toggled auto_start for camera {camera_id}: {auto_start}")
+    return {"ok": True, "camera_id": camera_id, "auto_start": bool(auto_start)}
+
+
 @router.get("/cameras/{camera_id}/stats")
 def get_camera_stats(camera_id: str = Path(...)) -> Dict[str, Any]:
     """获取指定摄像头的详细检测统计信息.

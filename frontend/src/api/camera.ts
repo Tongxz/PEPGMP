@@ -7,8 +7,13 @@ export interface Camera {
   source: string
   resolution?: string
   fps?: number
-  enabled: boolean
+  enabled?: boolean      // 兼容旧字段
+  active?: boolean       // 是否激活（允许使用）
+  auto_start?: boolean   // 是否自动启动
   regions_file?: string
+  profile?: string
+  device?: string
+  imgsz?: string | number
 }
 
 // 摄像头API接口
@@ -115,5 +120,30 @@ export const cameraApi = {
   async getCameraStatus(id: string) {
     const response = await http.get(`/cameras/${encodeURIComponent(id)}/status`)
     return response.data
+  },
+
+  /**
+   * 激活摄像头
+   * @param id 摄像头ID
+   */
+  async activateCamera(id: string) {
+    return await http.post(`/cameras/${encodeURIComponent(id)}/activate`)
+  },
+
+  /**
+   * 停用摄像头（会先停止运行中的进程）
+   * @param id 摄像头ID
+   */
+  async deactivateCamera(id: string) {
+    return await http.post(`/cameras/${encodeURIComponent(id)}/deactivate`)
+  },
+
+  /**
+   * 切换自动启动设置
+   * @param id 摄像头ID
+   * @param autoStart 是否自动启动
+   */
+  async toggleAutoStart(id: string, autoStart: boolean) {
+    return await http.put(`/cameras/${encodeURIComponent(id)}/auto-start?auto_start=${autoStart}`)
   }
 }

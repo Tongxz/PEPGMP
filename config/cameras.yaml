@@ -1,19 +1,21 @@
 cameras:
-  - id: cam0
-    name: USB0
-    source: "0"
-    regions_file: config/regions.json
-    profile: accurate
-    device: auto
-    imgsz: auto
-    auto_tune: true
-    enabled: true
-  - id: vid1
-    name: 测试视频
-    source: tests/fixtures/videos/20250724072708.mp4
-    regions_file: config/regions.json
-    profile: accurate
-    device: auto
-    imgsz: auto
-    auto_tune: true
-    enabled: true
+- id: cam0
+  name: USB0
+  source: '0'
+  regions_file: config/regions.json
+  profile: accurate
+  device: auto
+  imgsz: auto
+  auto_tune: true
+  active: true        # 是否激活（允许使用）
+  auto_start: false   # 系统启动时不自动启动，手动控制
+- id: vid1
+  name: 测试视频
+  source: tests/fixtures/videos/20250724072708.mp4
+  regions_file: config/regions.json
+  profile: accurate
+  device: auto
+  imgsz: auto
+  auto_tune: true
+  active: true        # 是否激活
+  auto_start: false   # 系统启动时不自动启动

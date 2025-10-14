@@ -128,6 +128,48 @@ export const useCameraStore = defineStore('camera', () => {
     }
   }
 
+  async function activateCamera(id: string) {
+    loading.value = true
+    error.value = ''
+    try {
+      await cameraApi.activateCamera(id)
+      await fetchCameras() // 重新获取列表以更新状态
+    } catch (e: any) {
+      error.value = e.message || '激活摄像头失败'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function deactivateCamera(id: string) {
+    loading.value = true
+    error.value = ''
+    try {
+      await cameraApi.deactivateCamera(id)
+      await fetchCameras() // 重新获取列表以更新状态
+    } catch (e: any) {
+      error.value = e.message || '停用摄像头失败'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function toggleAutoStart(id: string, autoStart: boolean) {
+    loading.value = true
+    error.value = ''
+    try {
+      await cameraApi.toggleAutoStart(id, autoStart)
+      await fetchCameras() // 重新获取列表以更新状态
+    } catch (e: any) {
+      error.value = e.message || '切换自动启动失败'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
   function reset() {
     cameras.value = []
     selectedCamera.value = null
@@ -153,6 +195,9 @@ export const useCameraStore = defineStore('camera', () => {
     startCamera,
     stopCamera,
     refreshAllStatus,
+    activateCamera,
+    deactivateCamera,
+    toggleAutoStart,
     selectCamera,
     getCameraById,
     clearError,

@@ -123,6 +123,15 @@ class ProcessManager:
         cam = next((c for c in cams if str(c.get("id")) == str(camera_id)), None)
         if not cam:
             return {"ok": False, "error": "Camera not found"}
+        
+        # 检查摄像头是否激活（支持新旧字段）
+        is_active = cam.get("active", cam.get("enabled", True))
+        if not is_active:
+            return {
+                "ok": False,
+                "error": "摄像头未激活，请先激活后再启动"
+            }
+        
         pid_path = _pid_file(camera_id)
         # 若已在运行则返回状态
         if os.path.exists(pid_path):

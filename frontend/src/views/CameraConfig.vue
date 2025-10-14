@@ -395,29 +395,55 @@ const columns: DataTableColumns = [
     width: 80,
     render: (row: any) => row.fps || '-'
   },
-  // 新增启用开关列
+  // 配置状态列
   {
-    title: '启用',
-    key: 'enabled',
+    title: '配置状态',
+    key: 'config_status',
     width: 100,
-    render: (row: any) => h(NSwitch, {
-      value: !!row.enabled,
-      size: 'small',
-      loading: loading.value,
-      'onUpdate:value': (val: boolean) => toggleEnabled(row.id, val)
-    })
-  },
-  {
-    title: '状态',
-    key: 'status',
-    width: 120,
     render: (row: any) => {
-      // 简化状态显示，基于enabled字段
-      if (row.enabled) {
-        return h(NTag, { type: 'success', size: 'small' }, { default: () => '已启用' })
+      const isActive = row.active ?? row.enabled ?? true
+      if (isActive) {
+        return h(NTag, { type: 'success', size: 'small' }, { default: () => '●激活' })
       } else {
-        return h(NTag, { type: 'default', size: 'small' }, { default: () => '已禁用' })
+        return h(NTag, { type: 'default', size: 'small' }, { default: () => '○停用' })
       }
+    }
+  },
+  // 自动启动列
+  {
+    title: '自动启动',
+    key: 'auto_start',
+    width: 100,
+    render: (row: any) => {
+      const isActive = row.active ?? row.enabled ?? true
+      if (!isActive) {
+        return h(NText, { depth: 3 }, { default: () => '-' })
+      }
+      return h(NSwitch, {
+        value: !!row.auto_start,
+        size: 'small',
+        loading: loading.value,
+        'onUpdate:value': (val: boolean) => toggleAutoStartHandler(row.id, val)
+      })
+    }
+  },
+  // 运行状态列（需要实时查询）
+  {
+    title: '运行状态',
+    key: 'runtime_status',
+    width: 150,
+    render: (row: any) => {
+      const isActive = row.active ?? row.enabled ?? true
+      if (!isActive) {
+        return h(NSpace, { vertical: true, size: 'small' }, {
+          default: () => [
+            h(NTag, { type: 'default', size: 'small' }, { default: () => '🚫 禁止启动' }),
+            h(NText, { depth: 3, style: { fontSize: '11px' } }, { default: () => '(请先激活)' })
+          ]
+        })
+      }
+      // TODO: 这里应该查询实时运行状态，暂时简化显示
+      return h(NTag, { type: 'default', size: 'small' }, { default: () => '⚪ 已停止' })
     }
   },
   {
@@ -425,30 +451,31 @@ const columns: DataTableColumns = [
     key: 'actions',
     width: 350,
     render: (row: any) => {
-      return h(NSpace, { size: 'small' }, {
-        default: () => [
+      const isActive = row.active ?? row.enabled ?? true
+      const buttons: any[] = []
+      
+      // 详情按钮（始终显示）
+      buttons.push(
+        h(NButton, {
+          size: 'small',
+          type: 'info',
+          onClick: () => openStatsModal(row.id)
+        }, { default: () => '详情' })
+      )
+      
+      if (!isActive) {
+        // 停用状态：激活、编辑、删除
+        buttons.push(
           h(NButton, {
             size: 'small',
-            type: 'info',
-            onClick: () => openStatsModal(row.id)
-          }, { default: () => '查看统计' }),
+            type: 'success',
+            loading: loading.value,
+            onClick: () => activateCameraHandler(row.id)
+          }, { default: () => '激活' }),
           h(NButton, {
             size: 'small',
-            type: 'default',
             onClick: () => openEditModal(row)
           }, { default: () => '编辑' }),
-          h(NButton, {
-            size: 'small',
-            type: 'primary',
-            loading: loading.value,
-            onClick: () => startCamera(row.id)
-          }, { default: () => '启动' }),
-          h(NButton, {
-            size: 'small',
-            type: 'default',
-            loading: loading.value,
-            onClick: () => stopCamera(row.id)
-          }, { default: () => '停止' }),
           h(NPopconfirm, {
             onPositiveClick: () => deleteCamera(row.id)
           }, {
@@ -457,9 +484,42 @@ const columns: DataTableColumns = [
               type: 'error',
               loading: loading.value
             }, { default: () => '删除' }),
-            default: () => `确认删除摄像头 ${row.id} ?`
+            default: () => `确认删除摄像头 ${row.id}?`
           })
-        ]
+        )
+      } else {
+        // 激活状态：停用、启动、停止、编辑
+        buttons.push(
+          h(NPopconfirm, {
+            onPositiveClick: () => deactivateCameraHandler(row.id)
+          }, {
+            trigger: () => h(NButton, {
+              size: 'small',
+              type: 'warning',
+              loading: loading.value
+            }, { default: () => '停用' }),
+            default: () => '停用将停止检测进程，确认?'
+          }),
+          h(NButton, {
+            size: 'small',
+            type: 'primary',
+            loading: loading.value,
+            onClick: () => startCamera(row.id)
+          }, { default: () => '启动' }),
+          h(NButton, {
+            size: 'small',
+            loading: loading.value,
+            onClick: () => stopCamera(row.id)
+          }, { default: () => '停止' }),
+          h(NButton, {
+            size: 'small',
+            onClick: () => openEditModal(row)
+          }, { default: () => '编辑' })
+        )
+      }
+      
+      return h(NSpace, { size: 'small' }, {
+        default: () => buttons
       })
     }
   }
@@ -550,12 +610,38 @@ async function stopCamera(id: string) {
   }
 }
 
-// 启用/禁用摄像头
-async function toggleEnabled(id: string, enabled: boolean) {
+// 激活摄像头
+async function activateCameraHandler(id: string) {
   try {
     loading.value = true
-    await cameraStore.updateCamera(id, { enabled })
-    message.success(`已${enabled ? '启用' : '禁用'}摄像头`)
+    await cameraStore.activateCamera(id)
+    message.success('摄像头已激活')
+  } catch (error: any) {
+    message.error(error.message || '激活失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+// 停用摄像头
+async function deactivateCameraHandler(id: string) {
+  try {
+    loading.value = true
+    await cameraStore.deactivateCamera(id)
+    message.success('摄像头已停用')
+  } catch (error: any) {
+    message.error(error.message || '停用失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+// 切换自动启动
+async function toggleAutoStartHandler(id: string, autoStart: boolean) {
+  try {
+    loading.value = true
+    await cameraStore.toggleAutoStart(id, autoStart)
+    message.success(`已${autoStart ? '开启' : '关闭'}自动启动`)
   } catch (error: any) {
     message.error(error.message || '操作失败')
   } finally {
