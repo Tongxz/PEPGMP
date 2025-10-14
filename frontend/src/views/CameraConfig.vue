@@ -346,7 +346,7 @@ const statusFilter = ref<'all' | 'enabled' | 'disabled'>('all')
 const autoRefresh = ref(true)
 
 const filteredCameras = computed(() => {
-  let data = cameraStore.cameras
+  let data = cameraStore.camerasWithStatus  // ← 使用带运行状态的列表
   if (statusFilter.value === 'enabled') data = data.filter(c => c.enabled)
   else if (statusFilter.value === 'disabled') data = data.filter(c => !c.enabled)
   const q = searchQuery.value.trim().toLowerCase()
@@ -427,11 +427,11 @@ const columns: DataTableColumns = [
       })
     }
   },
-  // 运行状态列（需要实时查询）
+  // 运行状态列（实时查询）
   {
     title: '运行状态',
     key: 'runtime_status',
-    width: 150,
+    width: 180,
     render: (row: any) => {
       const isActive = row.active ?? row.enabled ?? true
       if (!isActive) {
@@ -442,8 +442,21 @@ const columns: DataTableColumns = [
           ]
         })
       }
-      // TODO: 这里应该查询实时运行状态，暂时简化显示
-      return h(NTag, { type: 'default', size: 'small' }, { default: () => '⚪ 已停止' })
+      
+      // ✅ 显示实时运行状态
+      const status = row.runtime_status
+      if (status?.running) {
+        return h(NSpace, { vertical: true, size: 'small' }, {
+          default: () => [
+            h(NTag, { type: 'success', size: 'small' }, { default: () => '🟢 运行中' }),
+            h(NText, { depth: 3, style: { fontSize: '11px' } }, {
+              default: () => `PID: ${status.pid || '-'}`
+            })
+          ]
+        })
+      } else {
+        return h(NTag, { type: 'default', size: 'small' }, { default: () => '⚪ 已停止' })
+      }
     }
   },
   {
@@ -584,12 +597,12 @@ async function deleteCamera(id: string) {
   }
 }
 
-// 启动摄像头
+// 启动摄像头（改进版：带验证）
 async function startCamera(id: string) {
   try {
     loading.value = true
-    await cameraStore.startCamera(id)
-    message.success('摄像头启动成功')
+    const result = await cameraStore.startCamera(id)
+    message.success(result.message)  // 显示详细消息，包含PID
   } catch (error: any) {
     message.error('启动失败: ' + (error.message || error))
   } finally {
@@ -663,9 +676,9 @@ async function refreshStatus() {
 
 function startStatusInterval() {
   if (statusInterval) window.clearInterval(statusInterval)
-  statusInterval = window.setInterval(() => {
-    cameraStore.refreshAllStatus().catch(() => {})
-  }, 10000)
+  statusInterval = window.setInterval(async () => {
+    await cameraStore.refreshRuntimeStatus()  // ← 只刷新运行状态，更快
+  }, 5000)  // ← 5秒刷新，更及时
 }
 
 // 弹窗控制
@@ -748,6 +761,7 @@ const refreshCameras = async () => {
 
 onMounted(async () => {
   await cameraStore.fetchCameras()
+  await cameraStore.refreshRuntimeStatus()  // ← 初始加载时查询运行状态
   if (autoRefresh.value) startStatusInterval()
 })
 

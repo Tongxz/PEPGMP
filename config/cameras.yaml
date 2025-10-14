@@ -7,8 +7,8 @@ cameras:
   device: auto
   imgsz: auto
   auto_tune: true
-  active: true        # 是否激活（允许使用）
-  auto_start: false   # 系统启动时不自动启动，手动控制
+  active: true
+  auto_start: false
 - id: vid1
   name: 测试视频
   source: tests/fixtures/videos/20250724072708.mp4
@@ -17,5 +17,5 @@ cameras:
   device: auto
   imgsz: auto
   auto_tune: true
-  active: true        # 是否激活
-  auto_start: false   # 系统启动时不自动启动
+  active: true
+  auto_start: false

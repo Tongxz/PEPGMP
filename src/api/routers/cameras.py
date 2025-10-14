@@ -269,6 +269,58 @@ def status_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
     return res
 
 
+@router.post("/cameras/batch-status")
+def batch_camera_status(request_body: Dict[str, Any] = None) -> Dict[str, Any]:
+    """批量查询摄像头运行状态.
+
+    Args:
+        request_body: 请求体，包含 camera_ids 列表，为空则查询所有.
+
+    Returns:
+        摄像头ID到状态的映射字典.
+        {
+            "cam0": {"running": true, "pid": 3931, "log": "/path"},
+            "vid1": {"running": false, "pid": 0, "log": "/path"}
+        }
+    """
+    from fastapi import Body
+    
+    pm = get_process_manager()
+    
+    # 获取摄像头ID列表
+    camera_ids = []
+    if request_body and "camera_ids" in request_body:
+        camera_ids = request_body["camera_ids"]
+    
+    # 如果未指定ID，则查询所有摄像头
+    if not camera_ids:
+        path = _cameras_path()
+        data = _read_yaml(path)
+        cameras = data.get("cameras", [])
+        camera_ids = [str(c.get("id")) for c in cameras]
+    
+    # 批量查询状态
+    result = {}
+    for cam_id in camera_ids:
+        try:
+            status = pm.status(cam_id)
+            result[cam_id] = {
+                "running": status.get("running", False),
+                "pid": status.get("pid", 0),
+                "log": status.get("log", "")
+            }
+        except Exception as e:
+            logger.warning(f"Failed to get status for {cam_id}: {e}")
+            result[cam_id] = {
+                "running": False,
+                "pid": 0,
+                "log": ""
+            }
+    
+    logger.debug(f"Batch status query for {len(camera_ids)} cameras")
+    return result
+
+
 @router.post("/cameras/{camera_id}/activate")
 def activate_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
     """激活摄像头（允许启动检测）.

@@ -1,5 +1,12 @@
 import { http } from '@/lib/http'
 
+// 运行时状态类型
+export interface RuntimeStatus {
+  running: boolean
+  pid?: number
+  log?: string
+}
+
 // 摄像头数据类型
 export interface Camera {
   id: string
@@ -14,6 +21,8 @@ export interface Camera {
   profile?: string
   device?: string
   imgsz?: string | number
+  // 运行时状态（由前端查询后填充）
+  runtime_status?: RuntimeStatus
 }
 
 // 摄像头API接口
@@ -145,5 +154,16 @@ export const cameraApi = {
    */
   async toggleAutoStart(id: string, autoStart: boolean) {
     return await http.put(`/cameras/${encodeURIComponent(id)}/auto-start?auto_start=${autoStart}`)
+  },
+
+  /**
+   * 批量查询摄像头运行状态
+   * @param cameraIds 摄像头ID列表，为空则查询所有
+   */
+  async batchGetStatus(cameraIds?: string[]) {
+    const response = await http.post('/cameras/batch-status', {
+      camera_ids: cameraIds || []
+    })
+    return response.data
   }
 }

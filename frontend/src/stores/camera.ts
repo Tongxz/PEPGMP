@@ -1,15 +1,26 @@
+import { cameraApi, type Camera, type RuntimeStatus } from '@/api/camera'
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import { cameraApi, type Camera } from '@/api/camera'
+import { computed, ref } from 'vue'
 
 export const useCameraStore = defineStore('camera', () => {
   // 状态
   const cameras = ref<Camera[]>([])
+  const runtimeStatus = ref<Record<string, RuntimeStatus>>({})
   const loading = ref(false)
   const error = ref<string>('')
   const selectedCamera = ref<Camera | null>(null)
 
-  // 计算属性
+  // 计算属性 - 带运行状态的摄像头列表
+  const camerasWithStatus = computed(() => {
+    return cameras.value.map(cam => ({
+      ...cam,
+      runtime_status: runtimeStatus.value[cam.id] || {
+        running: false,
+        pid: 0
+      }
+    }))
+  })
+
   const enabledCameras = computed(() => cameras.value.filter(cam => cam.enabled))
   const disabledCameras = computed(() => cameras.value.filter(cam => !cam.enabled))
   const cameraCount = computed(() => cameras.value.length)
@@ -86,12 +97,36 @@ export const useCameraStore = defineStore('camera', () => {
     error.value = ''
   }
 
+  // 刷新运行状态
+  async function refreshRuntimeStatus() {
+    try {
+      const statuses = await cameraApi.batchGetStatus()
+      runtimeStatus.value = statuses
+    } catch (e: any) {
+      console.error('刷新运行状态失败:', e)
+    }
+  }
+
   async function startCamera(id: string) {
     loading.value = true
     error.value = ''
     try {
+      // 1. 发送启动命令
       await cameraApi.startCamera(id)
-      await fetchCameras() // 重新获取列表以更新状态
+
+      // 2. 等待1秒让进程启动
+      await new Promise(resolve => setTimeout(resolve, 1000))
+
+      // 3. 刷新运行状态
+      await refreshRuntimeStatus()
+
+      // 4. 验证进程是否真正启动
+      const status = runtimeStatus.value[id]
+      if (status?.running) {
+        return { success: true, message: `摄像头已启动 (PID: ${status.pid})` }
+      } else {
+        throw new Error('进程未能成功启动，请查看日志')
+      }
     } catch (e: any) {
       error.value = e.message || '启动摄像头失败'
       throw e
@@ -105,7 +140,8 @@ export const useCameraStore = defineStore('camera', () => {
     error.value = ''
     try {
       await cameraApi.stopCamera(id)
-      await fetchCameras() // 重新获取列表以更新状态
+      // 立即刷新运行状态
+      await refreshRuntimeStatus()
     } catch (e: any) {
       error.value = e.message || '停止摄像头失败'
       throw e
@@ -180,15 +216,18 @@ export const useCameraStore = defineStore('camera', () => {
   return {
     // 状态
     cameras,
+    runtimeStatus,
     loading,
     error,
     selectedCamera,
     // 计算属性
+    camerasWithStatus,
     enabledCameras,
     disabledCameras,
     cameraCount,
     // 操作
     fetchCameras,
+    refreshRuntimeStatus,
     createCamera,
     updateCamera,
     deleteCamera,
