@@ -319,9 +319,22 @@ def _run_detection_loop(args, logger, pipeline, device):
         pipeline: 检测管线实例
         device: 设备类型 (cpu/cuda/mps)
     """
+    import asyncio
     import signal
+    from collections import defaultdict
+    from datetime import datetime
 
     import cv2
+
+    # 导入数据库服务
+    try:
+        from src.services.database_service import DatabaseService
+
+        db_enabled = True
+        logger.info("数据库服务已启用")
+    except ImportError as e:
+        db_enabled = False
+        logger.warning(f"数据库服务未启用: {e}")
 
     # 全局标志用于优雅退出
     shutdown_requested = {"flag": False}
@@ -368,6 +381,25 @@ def _run_detection_loop(args, logger, pipeline, device):
     start_time = time.time()
     last_log_time = start_time
 
+    # 数据库相关初始化
+    db_service = None
+    camera_id = getattr(args, "camera_id", "unknown")
+    save_interval = int(os.getenv("DETECTION_SAVE_INTERVAL", "10"))  # 每10帧保存一次
+    
+    # 小时统计
+    hour_stats = defaultdict(int)
+    current_hour = datetime.now().replace(minute=0, second=0, microsecond=0)
+
+    # 初始化数据库（如果启用）
+    if db_enabled:
+        try:
+            db_service = DatabaseService()
+            asyncio.run(db_service.init())
+            logger.info(f"✅ 数据库服务初始化成功，每 {save_interval} 帧保存一次")
+        except Exception as e:
+            logger.error(f"数据库初始化失败: {e}")
+            db_service = None
+
     try:
         logger.info("开始视频处理循环...")
 
@@ -409,6 +441,75 @@ def _run_detection_loop(args, logger, pipeline, device):
                 hairnet_count = len(result.hairnet_results)
                 handwash_count = len(result.handwash_results)
                 sanitize_count = len(result.sanitize_results)
+
+                # 更新小时统计
+                hour_stats["frames"] += 1
+                hour_stats["persons"] += person_count
+                hour_stats["handwash_events"] += handwash_count
+                hour_stats["sanitize_events"] += sanitize_count
+                
+                # 计算违规数量
+                hairnet_violations = sum(
+                    1 for h in result.hairnet_results if not h.get("has_hairnet", True)
+                )
+                hour_stats["hairnet_violations"] += hairnet_violations
+
+                # 保存检测记录到数据库（每N帧保存一次）
+                if db_service and process_count % save_interval == 0:
+                    try:
+                        elapsed = time.time() - start_time
+                        avg_fps = process_count / elapsed if elapsed > 0 else 0
+
+                        # 异步保存检测记录
+                        record_id = asyncio.run(
+                            db_service.save_detection_record(
+                                camera_id=camera_id,
+                                frame_number=frame_count,
+                                result=result,
+                                fps=avg_fps,
+                            )
+                        )
+
+                        # 保存违规事件
+                        for hairnet_result in result.hairnet_results:
+                            if not hairnet_result.get("has_hairnet", True):
+                                asyncio.run(
+                                    db_service.save_violation_event(
+                                        detection_id=record_id,
+                                        camera_id=camera_id,
+                                        violation_type="no_hairnet",
+                                        track_id=hairnet_result.get("track_id"),
+                                        confidence=hairnet_result.get("confidence", 0.0),
+                                        bbox=hairnet_result.get("bbox"),
+                                    )
+                                )
+
+                        logger.debug(f"已保存检测记录: {record_id}")
+
+                    except Exception as e:
+                        logger.error(f"保存检测记录失败: {e}")
+
+                # 检查是否需要更新小时统计
+                now = datetime.now()
+                new_hour = now.replace(minute=0, second=0, microsecond=0)
+                if new_hour > current_hour and db_service:
+                    try:
+                        # 保存上一小时的统计
+                        asyncio.run(
+                            db_service.update_hourly_statistics(
+                                camera_id=camera_id,
+                                hour_start=current_hour,
+                                stats=dict(hour_stats),
+                            )
+                        )
+                        logger.info(f"已保存小时统计: {current_hour}")
+
+                        # 重置统计
+                        hour_stats.clear()
+                        current_hour = new_hour
+
+                    except Exception as e:
+                        logger.error(f"保存小时统计失败: {e}")
 
                 # 定期打印统计信息（每10帧或每5秒）
                 current_time = time.time()
@@ -489,6 +590,26 @@ def _run_detection_loop(args, logger, pipeline, device):
             traceback.print_exc()
 
     finally:
+        # 保存最后的小时统计
+        if db_service and hour_stats:
+            try:
+                asyncio.run(
+                    db_service.update_hourly_statistics(
+                        camera_id=camera_id, hour_start=current_hour, stats=dict(hour_stats)
+                    )
+                )
+                logger.info("已保存最终小时统计")
+            except Exception as e:
+                logger.error(f"保存最终统计失败: {e}")
+
+        # 关闭数据库连接
+        if db_service:
+            try:
+                asyncio.run(db_service.close())
+                logger.info("数据库连接已关闭")
+            except Exception as e:
+                logger.error(f"关闭数据库连接失败: {e}")
+
         # 资源清理
         logger.info("释放资源...")
         cap.release()

@@ -17,5 +17,5 @@ cameras:
   device: auto
   imgsz: auto
   auto_tune: true
-  active: true
+  active: false
   auto_start: false

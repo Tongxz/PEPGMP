@@ -13,3 +13,12 @@
 
 # 生产依赖（可选）
 # pip install -e ".[production]"
+
+# 数据库相关依赖（新增）
+asyncpg>=0.29.0
+databases[postgresql]>=0.8.0
+sqlalchemy>=2.0.0
+
+# Redis客户端
+redis>=5.0.0
+aioredis>=2.0.1
