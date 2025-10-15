@@ -162,18 +162,18 @@ const violationStatus = ref<string | null>(null)
 const violationType = ref<string | null>(null)
 
 const statusOptions = [
-  { label: '全部状态', value: null },
-  { label: '待处理', value: 'pending' },
-  { label: '已确认', value: 'confirmed' },
-  { label: '误报', value: 'false_positive' },
-  { label: '已解决', value: 'resolved' },
+  { label: '全部状态', value: null, type: 'option' },
+  { label: '待处理', value: 'pending', type: 'option' },
+  { label: '已确认', value: 'confirmed', type: 'option' },
+  { label: '误报', value: 'false_positive', type: 'option' },
+  { label: '已解决', value: 'resolved', type: 'option' },
 ]
 
 const typeOptions = [
-  { label: '全部类型', value: null },
-  { label: '未戴发网', value: 'no_hairnet' },
-  { label: '未洗手', value: 'no_handwash' },
-  { label: '未消毒', value: 'no_sanitize' },
+  { label: '全部类型', value: null, type: 'option' },
+  { label: '未戴发网', value: 'no_hairnet', type: 'option' },
+  { label: '未洗手', value: 'no_handwash', type: 'option' },
+  { label: '未消毒', value: 'no_sanitize', type: 'option' },
 ]
 
 // 数据
@@ -381,22 +381,22 @@ async function loadViolations() {
       limit: 100,
       offset: 0,
     }
-    
+
     if (selectedCamera.value && selectedCamera.value !== 'all') {
       params.camera_id = selectedCamera.value
     }
-    
+
     if (violationStatus.value) {
       params.status = violationStatus.value
     }
-    
+
     if (violationType.value) {
       params.violation_type = violationType.value
     }
 
     const res = await http.get('/records/violations', { params })
     violations.value = res.data.violations || []
-    
+
     message.success(`查询到 ${violations.value.length} 条违规记录`)
   } catch (error: any) {
     message.error('加载违规记录失败: ' + (error.response?.data?.detail || error.message))
@@ -427,4 +427,3 @@ onMounted(() => {
   padding: 16px;
 }
 </style>
-
