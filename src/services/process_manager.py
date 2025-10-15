@@ -116,6 +116,10 @@ class ProcessManager:
         for k, v in cam_env.items():
             env[str(k)] = str(v)
 
+        # 将需要的环境变量传递给检测子进程（如 REDIS_URL/VIDEO_STREAM_*）
+        # 注意：start() 会在 Popen 中使用该 env
+        self._last_env = env  # type: ignore[attr-defined]
+
         return cmd
 
     def start(self, camera_id: str) -> Dict[str, Any]:
@@ -123,15 +127,12 @@ class ProcessManager:
         cam = next((c for c in cams if str(c.get("id")) == str(camera_id)), None)
         if not cam:
             return {"ok": False, "error": "Camera not found"}
-        
+
         # 检查摄像头是否激活（支持新旧字段）
         is_active = cam.get("active", cam.get("enabled", True))
         if not is_active:
-            return {
-                "ok": False,
-                "error": "摄像头未激活，请先激活后再启动"
-            }
-        
+            return {"ok": False, "error": "摄像头未激活，请先激活后再启动"}
+
         pid_path = _pid_file(camera_id)
         # 若已在运行则返回状态
         if os.path.exists(pid_path):
@@ -158,6 +159,7 @@ class ProcessManager:
         if os.name == "nt":
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
 
+        # 继承并传入环境变量（含 REDIS_URL 等）
         proc = subprocess.Popen(
             cmd,
             cwd=self.project_root,
@@ -166,6 +168,7 @@ class ProcessManager:
             stdin=subprocess.DEVNULL,
             creationflags=creationflags,
             close_fds=(os.name != "nt"),
+            env=getattr(self, "_last_env", os.environ.copy()),
         )
         with open(pid_path, "w", encoding="utf-8") as pf:
             pf.write(str(proc.pid))

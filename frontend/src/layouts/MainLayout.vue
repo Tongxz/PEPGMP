@@ -260,6 +260,12 @@ const menuOptions = computed<MenuOption[]>(() => {
       key: 'system-info',
       icon: () => h(NIcon, null, { default: () => h(InformationCircleOutline) })
     }
+    ,
+    {
+      label: '告警中心',
+      key: 'alerts',
+      icon: () => h(NIcon, null, { default: () => h(NotificationsOutline) })
+    }
   ]
   return options
 })
@@ -272,7 +278,8 @@ const breadcrumbs = computed(() => {
     '/region-config': '区域配置',
     '/statistics': '统计分析',
     '/detection-records': '历史记录',
-    '/system-info': '系统信息'
+    '/system-info': '系统信息',
+    '/alerts': '告警中心'
   }
 
   const currentPath = route.path

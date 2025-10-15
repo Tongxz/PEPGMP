@@ -17,5 +17,11 @@ cameras:
   device: auto
   imgsz: auto
   auto_tune: true
-  active: false
+  active: true
   auto_start: false
+  env:
+    REDIS_HOST: 127.0.0.1
+    REDIS_PORT: "6379"
+    REDIS_DB: "0"
+    REDIS_PASSWORD: pyt_dev_redis
+    VIDEO_STREAM_USE_REDIS: "1"

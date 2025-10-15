@@ -33,8 +33,13 @@ def _cameras_path() -> str:
 def _read_yaml(path: str) -> Dict[str, Any]:
     if not os.path.exists(path):
         return {"cameras": []}
-    with open(path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except Exception as e:
+        # 避免因配置格式错误导致 500，记录错误并返回空列表
+        logger.error(f"读取摄像头配置失败: {e}")
+        return {"cameras": []}
     if not isinstance(data.get("cameras"), list):
         data["cameras"] = []
     return data
@@ -283,22 +288,21 @@ def batch_camera_status(request_body: Dict[str, Any] = None) -> Dict[str, Any]:
             "vid1": {"running": false, "pid": 0, "log": "/path"}
         }
     """
-    from fastapi import Body
-    
+
     pm = get_process_manager()
-    
+
     # 获取摄像头ID列表
     camera_ids = []
     if request_body and "camera_ids" in request_body:
         camera_ids = request_body["camera_ids"]
-    
+
     # 如果未指定ID，则查询所有摄像头
     if not camera_ids:
         path = _cameras_path()
         data = _read_yaml(path)
         cameras = data.get("cameras", [])
         camera_ids = [str(c.get("id")) for c in cameras]
-    
+
     # 批量查询状态
     result = {}
     for cam_id in camera_ids:
@@ -307,16 +311,12 @@ def batch_camera_status(request_body: Dict[str, Any] = None) -> Dict[str, Any]:
             result[cam_id] = {
                 "running": status.get("running", False),
                 "pid": status.get("pid", 0),
-                "log": status.get("log", "")
+                "log": status.get("log", ""),
             }
         except Exception as e:
             logger.warning(f"Failed to get status for {cam_id}: {e}")
-            result[cam_id] = {
-                "running": False,
-                "pid": 0,
-                "log": ""
-            }
-    
+            result[cam_id] = {"running": False, "pid": 0, "log": ""}
+
     logger.debug(f"Batch status query for {len(camera_ids)} cameras")
     return result
 
@@ -334,17 +334,17 @@ def activate_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
     path = _cameras_path()
     data = _read_yaml(path)
     cameras: List[Dict[str, Any]] = data.get("cameras", [])
-    
+
     cam = next((c for c in cameras if str(c.get("id")) == str(camera_id)), None)
     if not cam:
         raise HTTPException(status_code=404, detail="Camera not found")
-    
+
     # 更新激活状态
     cam["active"] = True
-    
+
     # 写回配置
     _write_yaml(path, data)
-    
+
     logger.info(f"Activated camera {camera_id}")
     return {"ok": True, "camera_id": camera_id, "active": True}
 
@@ -362,42 +362,41 @@ def deactivate_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
     # 1. 先检查并停止运行中的进程
     pm = get_process_manager()
     status = pm.status(camera_id)
-    
+
     if status.get("running"):
         logger.info(f"Camera {camera_id} is running, stopping before deactivation")
         stop_res = pm.stop(camera_id)
         if not stop_res.get("ok"):
             logger.warning(f"Failed to stop camera {camera_id}: {stop_res}")
-    
+
     # 2. 更新配置
     path = _cameras_path()
     data = _read_yaml(path)
     cameras: List[Dict[str, Any]] = data.get("cameras", [])
-    
+
     cam = next((c for c in cameras if str(c.get("id")) == str(camera_id)), None)
     if not cam:
         raise HTTPException(status_code=404, detail="Camera not found")
-    
+
     # 更新停用状态
     cam["active"] = False
     cam["auto_start"] = False  # 停用时同时关闭自动启动
-    
+
     # 写回配置
     _write_yaml(path, data)
-    
+
     logger.info(f"Deactivated camera {camera_id}")
     return {
         "ok": True,
         "camera_id": camera_id,
         "active": False,
-        "stopped": status.get("running", False)
+        "stopped": status.get("running", False),
     }
 
 
 @router.put("/cameras/{camera_id}/auto-start")
 def toggle_auto_start(
-    camera_id: str = Path(...),
-    auto_start: bool = False
+    camera_id: str = Path(...), auto_start: bool = False
 ) -> Dict[str, Any]:
     """切换摄像头的自动启动设置.
 
@@ -411,25 +410,22 @@ def toggle_auto_start(
     path = _cameras_path()
     data = _read_yaml(path)
     cameras: List[Dict[str, Any]] = data.get("cameras", [])
-    
+
     cam = next((c for c in cameras if str(c.get("id")) == str(camera_id)), None)
     if not cam:
         raise HTTPException(status_code=404, detail="Camera not found")
-    
+
     # 检查摄像头是否激活
     is_active = cam.get("active", cam.get("enabled", True))
     if not is_active:
-        raise HTTPException(
-            status_code=400,
-            detail="摄像头未激活，无法设置自动启动"
-        )
-    
+        raise HTTPException(status_code=400, detail="摄像头未激活，无法设置自动启动")
+
     # 更新自动启动状态
     cam["auto_start"] = bool(auto_start)
-    
+
     # 写回配置
     _write_yaml(path, data)
-    
+
     logger.info(f"Toggled auto_start for camera {camera_id}: {auto_start}")
     return {"ok": True, "camera_id": camera_id, "auto_start": bool(auto_start)}
 

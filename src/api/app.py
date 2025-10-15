@@ -22,6 +22,7 @@ try:
     from src.api.middleware.error_middleware import setup_error_middleware
     from src.api.middleware.security_middleware import setup_security_middleware
     from src.api.routers import (
+        alerts,
         cameras,
         comprehensive,
         download,
@@ -33,6 +34,7 @@ try:
         security,
         statistics,
         system,
+        video_stream,
         websocket,
     )
     from src.monitoring.advanced_monitoring import start_monitoring, stop_monitoring
@@ -44,6 +46,7 @@ except ImportError:
     from src.api.middleware.error_middleware import setup_error_middleware
     from src.api.middleware.security_middleware import setup_security_middleware
     from src.api.routers import (
+        alerts,
         cameras,
         comprehensive,
         download,
@@ -55,6 +58,7 @@ except ImportError:
         security,
         statistics,
         system,
+        video_stream,
         websocket,
     )
     from src.monitoring.advanced_monitoring import start_monitoring, stop_monitoring
@@ -70,19 +74,36 @@ async def lifespan(app: FastAPI):
     """应用程序生命周期管理."""
     # Startup
     logger.info("Starting up the application...")
-    
+
     # 初始化数据库服务
     try:
-        from src.services.database_service import get_db_service, close_db_service
-        db_service = await get_db_service()
+        from src.services.database_service import close_db_service, get_db_service
+
+        await get_db_service()
         logger.info("数据库服务已初始化")
     except Exception as e:
         logger.warning(f"数据库服务初始化失败 (非关键): {e}")
-    
-    # Initialize services
-    detection_service.initialize_detection_services()
-    app.state.optimized_pipeline = detection_service.optimized_pipeline
-    app.state.hairnet_pipeline = detection_service.hairnet_pipeline
+
+    # 初始化视频流管理器
+    try:
+        from src.services.video_stream_manager import init_stream_manager
+
+        await init_stream_manager()
+        logger.info("视频流管理器已初始化")
+    except Exception as e:
+        logger.warning(f"视频流管理器初始化失败 (非关键): {e}")
+
+    # Initialize services (non-fatal on failure)
+    try:
+        detection_service.initialize_detection_services()
+        app.state.optimized_pipeline = detection_service.optimized_pipeline
+        app.state.hairnet_pipeline = detection_service.hairnet_pipeline
+        logger.info("检测服务已初始化")
+    except Exception as e:
+        # 避免因模型缺失或环境问题导致 API 启动失败
+        app.state.optimized_pipeline = None
+        app.state.hairnet_pipeline = None
+        logger.warning(f"检测服务初始化失败 (非关键): {e}")
     # 统一区域文件来源：优先环境变量 HBD_REGIONS_FILE，其次默认 config/regions.json
     regions_file = os.environ.get(
         "HBD_REGIONS_FILE", os.path.join(project_root, "config", "regions.json")
@@ -107,10 +128,18 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down the application...")
-    
+
+    # 关闭视频流管理器
+    try:
+        from src.services.video_stream_manager import shutdown_stream_manager
+
+        await shutdown_stream_manager()
+        logger.info("视频流管理器已关闭")
+    except Exception as e:
+        logger.warning(f"视频流管理器关闭失败: {e}")
+
     # 关闭数据库服务
     try:
-        from src.services.database_service import close_db_service
         await close_db_service()
         logger.info("数据库服务已关闭")
     except Exception as e:
@@ -181,8 +210,10 @@ app.include_router(metrics.router, tags=["Metrics"])
 app.include_router(cameras.router, prefix="/api/v1", tags=["Cameras"])
 app.include_router(system.router, prefix="/api/v1", tags=["System"])
 app.include_router(error_monitoring.router, prefix="/api/v1", tags=["Error Monitoring"])
+app.include_router(alerts.router, prefix="/api/v1", tags=["Alerts"])
 app.include_router(security.router, prefix="/api/v1", tags=["Security Management"])
 app.include_router(records.router, tags=["Records"])
+app.include_router(video_stream.router, prefix="/api/v1", tags=["Video Stream"])
 
 
 @app.get("/", include_in_schema=False)

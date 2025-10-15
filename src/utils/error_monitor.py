@@ -390,6 +390,46 @@ class ErrorMonitor:
         with self.lock:
             self.active_alerts[alert_id] = alert
 
+        # 持久化到数据库（后台线程，避免阻塞）
+        try:
+            import threading
+
+            def _persist_alert():
+                try:
+                    import asyncio
+
+                    from src.services.database_service import get_db_service
+
+                    async def _save():
+                        db = await get_db_service()
+                        # 使用 rule.name 作为 alert_type，camera 为空时标记为 system
+                        details = {
+                            "rule_condition": rule.condition,
+                            "threshold": rule.threshold,
+                            "time_window": rule.time_window,
+                        }
+                        await db.save_alert_history(
+                            camera_id="system",
+                            alert_type=rule.name,
+                            message=alert.message,
+                            rule_id=None,
+                            details=details,
+                            notification_sent=False,
+                            notification_channels_used=[
+                                type(ch).__name__ for ch in self.alert_channels
+                            ]
+                            if self.alert_channels
+                            else [],
+                        )
+
+                    asyncio.run(_save())
+                except Exception as pe:
+                    logger.debug(f"持久化告警失败（忽略）: {pe}")
+
+            threading.Thread(target=_persist_alert, daemon=True).start()
+        except Exception:
+            pass
+
         logger.warning(f"告警触发: {alert_id}")
 
     def _send_alert(self, alert: Alert):

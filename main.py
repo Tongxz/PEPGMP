@@ -336,6 +336,17 @@ def _run_detection_loop(args, logger, pipeline, device):
         db_enabled = False
         logger.warning(f"数据库服务未启用: {e}")
 
+    # 导入视频流管理器
+    try:
+        from src.services.video_stream_manager import get_stream_manager
+
+        get_stream_manager()
+        stream_enabled = True
+        logger.info("视频流推送已启用")
+    except ImportError as e:
+        stream_enabled = False
+        logger.warning(f"视频流推送未启用: {e}")
+
     # 全局标志用于优雅退出
     shutdown_requested = {"flag": False}
 
@@ -385,7 +396,47 @@ def _run_detection_loop(args, logger, pipeline, device):
     db_service = None
     camera_id = getattr(args, "camera_id", "unknown")
     save_interval = int(os.getenv("DETECTION_SAVE_INTERVAL", "10"))  # 每10帧保存一次
-    
+
+    # 视频流推送配置
+    STREAM_INTERVAL = int(
+        os.getenv("VIDEO_STREAM_INTERVAL", "3")
+    )  # 每3帧推送一次视频流（约10 FPS）
+    VIDEO_QUALITY = int(os.getenv("VIDEO_STREAM_QUALITY", "70"))  # JPEG质量
+    VIDEO_RESIZE_WIDTH = int(os.getenv("VIDEO_STREAM_WIDTH", "1280"))
+    VIDEO_RESIZE_HEIGHT = int(os.getenv("VIDEO_STREAM_HEIGHT", "720"))
+
+    # Redis 视频流发布（跨进程桥接）
+    redis_client = None
+    try:
+        import redis as _redis_sync  # type: ignore
+
+        use_redis = str(os.getenv("VIDEO_STREAM_USE_REDIS", "1")).lower() not in (
+            "0",
+            "false",
+        )
+        if use_redis:
+            # 构建连接串
+            redis_url = os.getenv("REDIS_URL")
+            if not redis_url:
+                host = os.getenv("REDIS_HOST", "localhost")
+                port = os.getenv("REDIS_PORT", "6379")
+                db = os.getenv("REDIS_DB", "0")
+                password = os.getenv("REDIS_PASSWORD")
+                if password:
+                    redis_url = f"redis://:{password}@{host}:{port}/{db}"
+                else:
+                    redis_url = f"redis://{host}:{port}/{db}"
+            redis_client = _redis_sync.Redis.from_url(redis_url)
+            # 试探连接
+            try:
+                redis_client.ping()
+                logger.info(f"视频流Redis发布已启用: {redis_url}")
+            except Exception as _e:
+                logger.warning(f"Redis不可用，禁用视频流发布: {_e}")
+                redis_client = None
+    except Exception as _e:
+        logger.debug(f"未安装redis或初始化失败，禁用Redis发布: {_e}")
+
     # 小时统计
     hour_stats = defaultdict(int)
     current_hour = datetime.now().replace(minute=0, second=0, microsecond=0)
@@ -447,7 +498,7 @@ def _run_detection_loop(args, logger, pipeline, device):
                 hour_stats["persons"] += person_count
                 hour_stats["handwash_events"] += handwash_count
                 hour_stats["sanitize_events"] += sanitize_count
-                
+
                 # 计算违规数量
                 hairnet_violations = sum(
                     1 for h in result.hairnet_results if not h.get("has_hairnet", True)
@@ -479,7 +530,9 @@ def _run_detection_loop(args, logger, pipeline, device):
                                         camera_id=camera_id,
                                         violation_type="no_hairnet",
                                         track_id=hairnet_result.get("track_id"),
-                                        confidence=hairnet_result.get("confidence", 0.0),
+                                        confidence=hairnet_result.get(
+                                            "confidence", 0.0
+                                        ),
                                         bbox=hairnet_result.get("bbox"),
                                     )
                                 )
@@ -533,6 +586,52 @@ def _run_detection_loop(args, logger, pipeline, device):
                         f"处理FPS: {avg_fps:.2f}"
                     )
                     last_log_time = current_time
+
+                # 视频流推送（每N帧，且仅在有客户端时）
+                if stream_enabled and frame_count % STREAM_INTERVAL == 0:
+                    try:
+                        # 始终编码当前帧（每N帧），通过Redis发布（跨进程）
+                        display_frame = (
+                            result.annotated_image
+                            if result.annotated_image is not None
+                            else frame
+                        )
+                        resized = cv2.resize(
+                            display_frame, (VIDEO_RESIZE_WIDTH, VIDEO_RESIZE_HEIGHT)
+                        )
+                        ok, jpeg = cv2.imencode(
+                            ".jpg", resized, [cv2.IMWRITE_JPEG_QUALITY, VIDEO_QUALITY]
+                        )
+                        if ok:
+                            data = jpeg.tobytes()
+                            sent = False
+                            if redis_client is not None:
+                                try:
+                                    redis_client.publish(f"video:{camera_id}", data)
+                                    sent = True
+                                except Exception as _pe:
+                                    logger.debug(f"Redis发布失败（非关键）: {_pe}")
+                            if not sent:
+                                # 退化到HTTP推送（本机回环），避免阻塞主循环
+                                try:
+                                    import threading
+
+                                    import requests
+
+                                    token = os.getenv("VIDEO_PUSH_TOKEN", "")
+                                    headers = {"X-Video-Token": token} if token else {}
+                                    url = f"http://127.0.0.1:8000/api/v1/video-stream/frame/{camera_id}"
+                                    # 使用线程做非阻塞发送
+                                    threading.Thread(
+                                        target=lambda: requests.post(
+                                            url, data=data, headers=headers, timeout=0.5
+                                        ),
+                                        daemon=True,
+                                    ).start()
+                                except Exception:
+                                    pass
+                    except Exception as e:
+                        logger.debug(f"视频流推送失败（非关键）: {e}")
 
                 # 可选：保存结果到输出目录
                 if args.output and result.annotated_image is not None:
@@ -595,7 +694,9 @@ def _run_detection_loop(args, logger, pipeline, device):
             try:
                 asyncio.run(
                     db_service.update_hourly_statistics(
-                        camera_id=camera_id, hour_start=current_hour, stats=dict(hour_stats)
+                        camera_id=camera_id,
+                        hour_start=current_hour,
+                        stats=dict(hour_stats),
                     )
                 )
                 logger.info("已保存最终小时统计")

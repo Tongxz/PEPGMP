@@ -264,6 +264,14 @@
         v-model="statsModalVisible"
         :camera-id="currentStatsCamera"
       />
+
+      <!-- 视频流弹窗 -->
+      <VideoStreamModal
+        v-if="videoStreamVisible && currentStreamCamera"
+        :camera-id="currentStreamCamera.id"
+        :camera-name="currentStreamCamera.name"
+        @close="closeVideoStream"
+      />
     </div>
   </div>
 </template>
@@ -289,6 +297,7 @@ import {
 import { useCameraStore } from '@/stores/camera'
 import { PageHeader, DataCard } from '@/components/common'
 import CameraStatsModal from '@/components/CameraStatsModal.vue'
+import VideoStreamModal from '@/components/VideoStreamModal.vue'
 
 // 使用 Pinia store
 const cameraStore = useCameraStore()
@@ -308,6 +317,10 @@ const modalVisible = ref(false)
 const mode = ref<'create' | 'edit'>('create')
 const modalTitle = computed(() => (mode.value === 'create' ? '新增摄像头' : '编辑摄像头'))
 const submitLabel = computed(() => (mode.value === 'create' ? '创建' : '更新'))
+
+// 视频流弹窗状态
+const videoStreamVisible = ref(false)
+const currentStreamCamera = ref<{id: string, name: string} | null>(null)
 
 // 表单数据
 const formData = reactive({
@@ -442,7 +455,7 @@ const columns: DataTableColumns = [
           ]
         })
       }
-      
+
       // ✅ 显示实时运行状态
       const status = row.runtime_status
       if (status?.running) {
@@ -466,7 +479,7 @@ const columns: DataTableColumns = [
     render: (row: any) => {
       const isActive = row.active ?? row.enabled ?? true
       const buttons: any[] = []
-      
+
       // 详情按钮（始终显示）
       buttons.push(
         h(NButton, {
@@ -475,7 +488,7 @@ const columns: DataTableColumns = [
           onClick: () => openStatsModal(row.id)
         }, { default: () => '详情' })
       )
-      
+
       if (!isActive) {
         // 停用状态：激活、编辑、删除
         buttons.push(
@@ -529,8 +542,20 @@ const columns: DataTableColumns = [
             onClick: () => openEditModal(row)
           }, { default: () => '编辑' })
         )
+
+        // 查看视频按钮（只在运行时显示）
+        const isRunning = row.runtime_status?.running ?? false
+        if (isRunning) {
+          buttons.push(
+            h(NButton, {
+              size: 'small',
+              type: 'info',
+              onClick: () => openVideoStream(row)
+            }, { default: () => '📹 查看视频' })
+          )
+        }
       }
-      
+
       return h(NSpace, { size: 'small' }, {
         default: () => buttons
       })
@@ -697,6 +722,21 @@ function openEditModal(camera: any) {
 function openStatsModal(cameraId: string) {
   currentStatsCamera.value = cameraId
   statsModalVisible.value = true
+}
+
+// 打开视频流弹窗
+function openVideoStream(camera: any) {
+  currentStreamCamera.value = {
+    id: camera.id,
+    name: camera.name || camera.id
+  }
+  videoStreamVisible.value = true
+}
+
+// 关闭视频流弹窗
+function closeVideoStream() {
+  videoStreamVisible.value = false
+  currentStreamCamera.value = null
 }
 
 function onCloseModal() {

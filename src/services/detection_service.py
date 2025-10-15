@@ -13,7 +13,12 @@ from src.core.optimized_detection_pipeline import (
 )
 from src.core.tracker import MultiObjectTracker
 from src.detection.pose_detector import PoseDetectorFactory
-from src.detection.yolo_hairnet_detector import YOLOHairnetDetector
+
+# 惰性导入发网检测器，避免在环境未安装 ultralytics 或模型缺失时阻断 API 启动
+try:  # noqa: E722 - 广泛捕获以避免启动中断
+    from src.detection.yolo_hairnet_detector import YOLOHairnetDetector  # type: ignore
+except Exception:  # pragma: no cover
+    YOLOHairnetDetector = None  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -136,13 +141,20 @@ def initialize_detection_services():
         )
         logger.info(f"API服务 - 姿态检测器后端: {pose_backend}, 设备: {device}")
 
+        hairnet_detector = None
+        if YOLOHairnetDetector is not None:
+            try:
+                hairnet_detector = YOLOHairnetDetector()
+            except Exception as he:
+                logger.warning(f"发网检测器初始化失败，继续启动（非关键）: {he}")
+
         optimized_pipeline = OptimizedDetectionPipeline(
             human_detector=detector,
-            hairnet_detector=YOLOHairnetDetector(),
+            hairnet_detector=hairnet_detector,
             behavior_recognizer=behavior_recognizer,
             pose_detector=pose_detector,
         )
-        hairnet_pipeline = YOLOHairnetDetector()
+        hairnet_pipeline = hairnet_detector
         logger.info("Detection services initialized.")
     except Exception as e:
         logger.exception(f"Failed to initialize detection services: {e}")

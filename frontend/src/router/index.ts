@@ -36,6 +36,11 @@ const routes: RouteRecordRaw[] = [
         name: 'system-info',
         component: () => import('../views/SystemInfo.vue'),
       },
+      {
+        path: 'alerts',
+        name: 'alerts',
+        component: () => import('../views/Alerts.vue'),
+      },
     ]
   },
 ]

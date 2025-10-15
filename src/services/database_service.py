@@ -3,7 +3,7 @@
 import json
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import asyncpg
@@ -35,7 +35,7 @@ class DatabaseService:
             return
 
         try:
-            logger.info(f"Connecting to database...")
+            logger.info("Connecting to database...")
             self.pool = await asyncpg.create_pool(
                 self.database_url,
                 min_size=5,
@@ -84,33 +84,48 @@ class DatabaseService:
 
         try:
             # 提取数据
-            person_count = len(result.person_detections) if hasattr(result, 'person_detections') else 0
+            person_count = (
+                len(result.person_detections)
+                if hasattr(result, "person_detections")
+                else 0
+            )
             hairnet_violations = sum(
-                1 for h in (result.hairnet_results if hasattr(result, 'hairnet_results') else [])
+                1
+                for h in (
+                    result.hairnet_results if hasattr(result, "hairnet_results") else []
+                )
                 if not h.get("has_hairnet", True)
             )
-            handwash_count = len(result.handwash_results) if hasattr(result, 'handwash_results') else 0
-            sanitize_count = len(result.sanitize_results) if hasattr(result, 'sanitize_results') else 0
+            handwash_count = (
+                len(result.handwash_results)
+                if hasattr(result, "handwash_results")
+                else 0
+            )
+            sanitize_count = (
+                len(result.sanitize_results)
+                if hasattr(result, "sanitize_results")
+                else 0
+            )
 
             # 计算总处理时间
             processing_time = (
                 sum(result.processing_times.values())
-                if hasattr(result, 'processing_times')
+                if hasattr(result, "processing_times")
                 else 0.0
             )
 
             # 准备JSON数据
             person_detections_json = json.dumps(
-                result.person_detections if hasattr(result, 'person_detections') else []
+                result.person_detections if hasattr(result, "person_detections") else []
             )
             hairnet_results_json = json.dumps(
-                result.hairnet_results if hasattr(result, 'hairnet_results') else []
+                result.hairnet_results if hasattr(result, "hairnet_results") else []
             )
             handwash_results_json = json.dumps(
-                result.handwash_results if hasattr(result, 'handwash_results') else []
+                result.handwash_results if hasattr(result, "handwash_results") else []
             )
             sanitize_results_json = json.dumps(
-                result.sanitize_results if hasattr(result, 'sanitize_results') else []
+                result.sanitize_results if hasattr(result, "sanitize_results") else []
             )
 
             async with self.pool.acquire() as conn:
@@ -251,10 +266,229 @@ class DatabaseService:
                     stats.get("processing_time", 0.0),
                 )
 
-            logger.debug(f"Updated hourly statistics: camera={camera_id}, hour={hour_start}")
+            logger.debug(
+                f"Updated hourly statistics: camera={camera_id}, hour={hour_start}"
+            )
 
         except Exception as e:
             logger.error(f"Failed to update hourly statistics: {e}")
+            raise
+
+    # ===================== Alerts (Rules & History) =====================
+
+    async def save_alert_history(
+        self,
+        camera_id: str,
+        alert_type: str,
+        message: str,
+        rule_id: Optional[int] = None,
+        details: Optional[Dict[str, Any]] = None,
+        notification_sent: bool = False,
+        notification_channels_used: Optional[List[str]] = None,
+    ) -> int:
+        """保存告警历史记录到 alert_history 表.
+
+        Args:
+            camera_id: 摄像头ID（系统级告警可用 'system'）
+            alert_type: 告警类型（例如规则名或业务类型）
+            message: 告警消息
+            rule_id: 关联规则ID（可选）
+            details: 额外信息（JSON）
+            notification_sent: 是否已发送通知
+            notification_channels_used: 实际使用的通知通道列表
+
+        Returns:
+            新增记录ID
+        """
+        if not self._initialized:
+            raise RuntimeError("DatabaseService not initialized")
+
+        try:
+            details_json = json.dumps(details or {})
+            channels_json = (
+                json.dumps(notification_channels_used)
+                if notification_channels_used is not None
+                else None
+            )
+
+            async with self.pool.acquire() as conn:
+                new_id = await conn.fetchval(
+                    """
+                    INSERT INTO alert_history (
+                        rule_id, camera_id, alert_type, message, details,
+                        notification_sent, notification_channels_used, timestamp
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+                    RETURNING id
+                    """,
+                    rule_id,
+                    camera_id,
+                    alert_type,
+                    message,
+                    details_json,
+                    notification_sent,
+                    channels_json,
+                )
+            logger.info(
+                f"Saved alert history: type={alert_type}, camera={camera_id}, id={new_id}"
+            )
+            return new_id
+        except Exception as e:
+            logger.error(f"Failed to save alert history: {e}")
+            raise
+
+    async def get_alert_history(
+        self,
+        limit: int = 100,
+        camera_id: Optional[str] = None,
+        alert_type: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """查询告警历史记录."""
+        if not self._initialized:
+            raise RuntimeError("DatabaseService not initialized")
+
+        try:
+            async with self.pool.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT id, rule_id, camera_id, alert_type, message, details,
+                           notification_sent, notification_channels_used, timestamp
+                    FROM alert_history
+                    WHERE ($1::VARCHAR IS NULL OR camera_id = $1)
+                      AND ($2::VARCHAR IS NULL OR alert_type = $2)
+                    ORDER BY timestamp DESC
+                    LIMIT $3
+                    """,
+                    camera_id,
+                    alert_type,
+                    limit,
+                )
+                out: List[Dict[str, Any]] = []
+                for r in rows:
+                    item = dict(r)
+                    # 反序列化 JSON 字段
+                    try:
+                        item["details"] = json.loads(item.get("details") or "{}")
+                    except Exception:
+                        pass
+                    try:
+                        item["notification_channels_used"] = json.loads(
+                            item.get("notification_channels_used") or "null"
+                        )
+                    except Exception:
+                        pass
+                    out.append(item)
+                return out
+        except Exception as e:
+            logger.error(f"Failed to get alert history: {e}")
+            raise
+
+    async def list_alert_rules(
+        self,
+        camera_id: Optional[str] = None,
+        enabled: Optional[bool] = None,
+    ) -> List[Dict[str, Any]]:
+        """列出告警规则."""
+        if not self._initialized:
+            raise RuntimeError("DatabaseService not initialized")
+        try:
+            async with self.pool.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT id, name, camera_id, rule_type, conditions,
+                           notification_channels, recipients, enabled, priority,
+                           created_at, updated_at
+                    FROM alert_rules
+                    WHERE ($1::VARCHAR IS NULL OR camera_id = $1)
+                      AND ($2::BOOLEAN IS NULL OR enabled = $2)
+                    ORDER BY updated_at DESC
+                    """,
+                    camera_id,
+                    enabled,
+                )
+                out: List[Dict[str, Any]] = []
+                for r in rows:
+                    item = dict(r)
+                    for key in ("conditions", "notification_channels", "recipients"):
+                        try:
+                            item[key] = json.loads(item.get(key) or "null")
+                        except Exception:
+                            pass
+                    out.append(item)
+                return out
+        except Exception as e:
+            logger.error(f"Failed to list alert rules: {e}")
+            raise
+
+    async def create_alert_rule(self, rule: Dict[str, Any]) -> int:
+        """创建告警规则."""
+        if not self._initialized:
+            raise RuntimeError("DatabaseService not initialized")
+        try:
+            async with self.pool.acquire() as conn:
+                new_id = await conn.fetchval(
+                    """
+                    INSERT INTO alert_rules (
+                        name, camera_id, rule_type, conditions,
+                        notification_channels, recipients, enabled, priority,
+                        created_at, updated_at
+                    ) VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, true), COALESCE($8, 'medium'), NOW(), NOW())
+                    RETURNING id
+                    """,
+                    rule.get("name"),
+                    rule.get("camera_id"),
+                    rule.get("rule_type"),
+                    json.dumps(rule.get("conditions") or {}),
+                    json.dumps(rule.get("notification_channels") or []),
+                    json.dumps(rule.get("recipients") or []),
+                    rule.get("enabled"),
+                    rule.get("priority"),
+                )
+            return new_id
+        except Exception as e:
+            logger.error(f"Failed to create alert rule: {e}")
+            raise
+
+    async def update_alert_rule(self, rule_id: int, updates: Dict[str, Any]) -> bool:
+        """更新告警规则（部分字段）."""
+        if not self._initialized:
+            raise RuntimeError("DatabaseService not initialized")
+        try:
+            # 动态更新，限定允许的字段
+            allowed = {
+                "name",
+                "camera_id",
+                "rule_type",
+                "conditions",
+                "notification_channels",
+                "recipients",
+                "enabled",
+                "priority",
+            }
+            fields = []
+            values: List[Any] = []  # type: ignore
+            idx = 1
+            for k, v in updates.items():
+                if k not in allowed:
+                    continue
+                if k in {"conditions", "notification_channels", "recipients"}:
+                    v = json.dumps(v)
+                fields.append(f"{k} = ${idx}")
+                values.append(v)
+                idx += 1
+            if not fields:
+                return True
+            values.append(rule_id)
+            async with self.pool.acquire() as conn:
+                await conn.execute(
+                    f"""
+                    UPDATE alert_rules SET {', '.join(fields)}, updated_at = NOW()
+                    WHERE id = ${idx}
+                    """,
+                    *values,
+                )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to update alert rule: {e}")
             raise
 
     async def get_recent_violations(
@@ -337,10 +571,16 @@ class DatabaseService:
                         "total_hairnet_violations": int(
                             result["total_hairnet_violations"] or 0
                         ),
-                        "total_handwash_events": int(result["total_handwash_events"] or 0),
-                        "total_sanitize_events": int(result["total_sanitize_events"] or 0),
+                        "total_handwash_events": int(
+                            result["total_handwash_events"] or 0
+                        ),
+                        "total_sanitize_events": int(
+                            result["total_sanitize_events"] or 0
+                        ),
                         "avg_fps": float(result["avg_fps"] or 0.0),
-                        "avg_processing_time": float(result["avg_processing_time"] or 0.0),
+                        "avg_processing_time": float(
+                            result["avg_processing_time"] or 0.0
+                        ),
                     }
                 else:
                     return {
@@ -409,4 +649,3 @@ async def close_db_service():
     if _db_service is not None:
         await _db_service.close()
         _db_service = None
-
