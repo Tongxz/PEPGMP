@@ -410,8 +410,8 @@ async function loadViolations() {
 function resetFilters() {
   selectedCamera.value = 'cam0'
   dateRange.value = null
-  violationStatus.value = null
-  violationType.value = null
+  violationStatus.value = undefined
+  violationType.value = undefined
   loadRecords()
   loadViolations()
 }
