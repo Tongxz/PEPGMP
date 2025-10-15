@@ -158,22 +158,22 @@ const selectedCamera = ref('cam0')
 const dateRange = ref<[number, number] | null>(null)
 
 // 违规筛选
-const violationStatus = ref<string | null>(null)
-const violationType = ref<string | null>(null)
+const violationStatus = ref<string | undefined>(undefined)
+const violationType = ref<string | undefined>(undefined)
 
 const statusOptions = [
-  { label: '全部状态', value: null, type: 'option' },
-  { label: '待处理', value: 'pending', type: 'option' },
-  { label: '已确认', value: 'confirmed', type: 'option' },
-  { label: '误报', value: 'false_positive', type: 'option' },
-  { label: '已解决', value: 'resolved', type: 'option' },
+  { label: '全部状态', value: undefined },
+  { label: '待处理', value: 'pending' },
+  { label: '已确认', value: 'confirmed' },
+  { label: '误报', value: 'false_positive' },
+  { label: '已解决', value: 'resolved' },
 ]
 
 const typeOptions = [
-  { label: '全部类型', value: null, type: 'option' },
-  { label: '未戴发网', value: 'no_hairnet', type: 'option' },
-  { label: '未洗手', value: 'no_handwash', type: 'option' },
-  { label: '未消毒', value: 'no_sanitize', type: 'option' },
+  { label: '全部类型', value: undefined },
+  { label: '未戴发网', value: 'no_hairnet' },
+  { label: '未洗手', value: 'no_handwash' },
+  { label: '未消毒', value: 'no_sanitize' },
 ]
 
 // 数据
