@@ -120,3 +120,41 @@ docker-compose*
 # Specific to this project
 .benchmarks/
 training/
+
+# Docker exports and large data directories
+docker_exports/
+datasets/
+
+# Development environment files (keep in dev, exclude from Docker)
+venv/
+frontend/node_modules/
+frontend/dist/
+output/
+logs/
+htmlcov/
+
+# Cache and temporary files
+*.cache
+*.tmp
+*.temp
+.cache/
+.tmp/
+.temp/
+
+# System files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Large binary files that should be downloaded/mounted in production
+# Note: Model files (*.pt, *.json) are required for production and should NOT be excluded
+# *.weights
+# *.pt  # 注释掉，生产环境需要
+# *.onnx
+# *.bin
+# *.h5
+# *.hdf5
+# *.pkl
+# *.model
