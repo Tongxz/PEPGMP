@@ -1,10 +1,68 @@
 version: "3.8"
 
+# 开发环境配置
+# 包含：API、Frontend、PostgreSQL、Redis
+
 networks:
-  pyt-network:
+  pyt-dev-network:
     driver: bridge
 
+volumes:
+  postgres_dev_data:
+    driver: local
+  redis_dev_data:
+    driver: local
+
 services:
+  # PostgreSQL 数据库 (开发环境)
+  database:
+    image: postgres:16-alpine
+    container_name: pyt-postgres-dev
+    environment:
+      POSTGRES_DB: pyt_development
+      POSTGRES_USER: pyt_dev
+      POSTGRES_PASSWORD: pyt_dev_password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - pyt-dev-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pyt_dev -d pyt_development"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # Redis 缓存 (开发环境)
+  redis:
+    image: redis:7-alpine
+    container_name: pyt-redis-dev
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass pyt_dev_redis
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_dev_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - pyt-dev-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  # 后端 API (开发环境)
   api:
     build:
       context: .
@@ -17,21 +75,30 @@ services:
       - ./config:/app/config:ro
       - ./logs:/app/logs
       - ./output:/app/output
-    command: python main.py --mode api --host 0.0.0.0 --port 8000 --debug
-    env_file:
-      - .env
+      - ./data:/app/data
+      - ./models:/app/models
+    command: python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
     environment:
       - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://pyt_dev:pyt_dev_password@database:5432/pyt_development
+      - REDIS_URL=redis://:pyt_dev_redis@redis:6379/0
       - LOG_LEVEL=DEBUG
-    restart: always
+      - AUTO_CONVERT_TENSORRT=false
+    networks:
+      - pyt-dev-network
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-    networks:
-      - pyt-network
+    restart: unless-stopped
 
+  # 前端 (开发环境)
   frontend:
     image: node:20
     container_name: pyt-frontend-dev
@@ -41,20 +108,13 @@ services:
     command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
     ports:
       - "5173:5173"
-    env_file:
-      - .env
     environment:
       - VITE_API_BASE=/api/v1
       - VITE_PROXY_TARGET=http://api:8000
       - BASE_URL=/
       - NODE_ENV=development
-    restart: always
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5173"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
     networks:
-      - pyt-network
+      - pyt-dev-network
     depends_on:
       - api
+    restart: unless-stopped

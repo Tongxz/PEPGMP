@@ -12,6 +12,8 @@ volumes:
     driver: local
   redis_data:
     driver: local
+  models_data:
+    driver: local
 
 services:
   # PostgreSQL 数据库
@@ -78,6 +80,8 @@ services:
       - SECRET_KEY=${SECRET_KEY:-change_me_in_production}
       - JWT_SECRET=${JWT_SECRET:-change_me_in_production}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - AUTO_CONVERT_TENSORRT=true
+      - TENSORRT_PRECISION=fp16
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:
@@ -85,6 +89,7 @@ services:
       - ./logs:/app/logs
       - ./output:/app/output
       - ./data:/app/data
+      - models_data:/app/models
     networks:
       - pyt-prod-network
     depends_on:

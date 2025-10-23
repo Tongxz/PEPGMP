@@ -1,0 +1,105 @@
+# 开发环境 Dockerfile
+# Development Environment Dockerfile
+
+# 使用稳定版本，避免 trixie 上部分包名不可用
+FROM python:3.10-slim-bookworm
+
+# 设置工作目录
+WORKDIR /app
+
+# 设置环境变量
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV DEBIAN_FRONTEND=noninteractive
+ENV ENVIRONMENT=development
+
+# 安装系统依赖和开发工具
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # OpenCV 依赖（bookworm 上使用 libgl1）
+    libgl1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    libgstreamer1.0-0 \
+    libgstreamer-plugins-base1.0-0 \
+    libgtk-3-0 \
+    libavcodec-dev \
+    libavformat-dev \
+    libswscale-dev \
+    libv4l-dev \
+    libxvidcore-dev \
+    libx264-dev \
+    libjpeg-dev \
+    libpng-dev \
+    libtiff-dev \
+    libatlas-base-dev \
+    gfortran \
+    # 开发工具
+    wget \
+    curl \
+    git \
+    vim \
+    nano \
+    htop \
+    tree \
+    jq \
+    unzip \
+    build-essential \
+    # 调试工具
+    gdb \
+    strace \
+    tcpdump \
+    netcat-openbsd \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制项目文件（必须在可编辑安装之前）
+COPY . .
+
+# 安装Python依赖（可编辑安装，匹配 pyproject 的 dev 额外依赖）
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -e ".[dev]" && \
+    pip install --no-cache-dir \
+        # 可选补充工具（若 dev 额外依赖已包含可自动跳过）
+        ipython \
+        jupyter \
+        jupyterlab \
+        black \
+        flake8 \
+        mypy \
+        isort \
+        bandit \
+        pytest \
+        pytest-cov \
+        pytest-mock \
+        pytest-asyncio \
+        pdb++ \
+        ipdb \
+        memory-profiler \
+        line-profiler \
+        sphinx \
+        sphinx-rtd-theme || true
+
+# 创建必要的目录
+RUN mkdir -p /app/data /app/logs /app/models /app/config /app/notebooks
+
+# 设置权限
+RUN chmod +x main.py
+
+# 安装pre-commit hooks
+RUN pip install pre-commit && \
+    git config --global --add safe.directory /app
+
+# 暴露端口
+EXPOSE 8000 8080 8888 5000
+
+# Jupyter配置
+RUN jupyter lab --generate-config && \
+    echo "c.ServerApp.ip = '0.0.0.0'" >> ~/.jupyter/jupyter_lab_config.py && \
+    echo "c.ServerApp.port = 8888" >> ~/.jupyter/jupyter_lab_config.py && \
+    echo "c.ServerApp.open_browser = False" >> ~/.jupyter/jupyter_lab_config.py && \
+    echo "c.ServerApp.allow_root = True" >> ~/.jupyter/jupyter_lab_config.py
+
+# 默认启动命令（开发模式）
+CMD ["python", "main.py", "--mode", "api", "--debug"]

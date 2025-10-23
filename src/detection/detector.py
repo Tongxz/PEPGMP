@@ -1,5 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Dict, List, Optional
 
 import cv2
@@ -89,13 +90,19 @@ class HumanDetector(BaseDetector):
     基于YOLOv8的人体检测模块，支持实时检测和批量处理
     """
 
-    def __init__(self, model_path: Optional[str] = None, device: str = "auto"):
+    def __init__(
+        self,
+        model_path: Optional[str] = None,
+        device: str = "auto",
+        auto_convert_tensorrt: bool = True,
+    ):
         """
         初始化人体检测器
 
         Args:
             model_path: YOLO模型路径，如果为None则使用统一配置
             device: 计算设备 ('cpu', 'cuda', 'auto')
+            auto_convert_tensorrt: 是否自动转换为TensorRT（如果可用）
         """
         # 获取统一参数配置
         self.params = get_unified_params().human_detection
@@ -103,6 +110,10 @@ class HumanDetector(BaseDetector):
         # 使用统一配置或传入参数
         model_path = model_path if model_path is not None else self.params.model_path
         device = device if device != "auto" else self.params.device
+
+        # 自动检测并转换TensorRT引擎
+        if auto_convert_tensorrt:
+            model_path = self._auto_convert_to_tensorrt(model_path, device)
 
         super().__init__(model_path, device)
 
@@ -121,6 +132,98 @@ class HumanDetector(BaseDetector):
             f"conf={self.confidence_threshold}, iou={self.iou_threshold}, "
             f"min_area={self.min_box_area}"
         )
+
+    def _auto_convert_to_tensorrt(self, model_path: str, device: str) -> str:
+        """
+        自动检测并转换为TensorRT引擎
+
+        Args:
+            model_path: 原始模型路径
+            device: 计算设备
+
+        Returns:
+            优化后的模型路径（TensorRT引擎或原始模型）
+        """
+        try:
+            # 只在CUDA设备上使用TensorRT
+            if device != "cuda":
+                logger.info(f"设备为 {device}，跳过TensorRT转换")
+                return model_path
+
+            # 检查TensorRT是否可用
+            try:
+                import tensorrt as trt
+
+                logger.info(f"TensorRT可用，版本: {trt.__version__}")
+            except ImportError:
+                logger.info("TensorRT未安装，使用PyTorch模型")
+                return model_path
+
+            # 检查CUDA是否可用
+            if not torch.cuda.is_available():
+                logger.info("CUDA不可用，使用PyTorch模型")
+                return model_path
+
+            # 检查模型文件
+            pt_file = Path(model_path)
+            if not pt_file.exists():
+                logger.warning(f"模型文件不存在: {model_path}")
+                return model_path
+
+            # 生成TensorRT引擎路径
+            engine_file = pt_file.with_suffix(".engine")
+
+            # 检查是否需要转换
+            needs_conversion = False
+
+            if not engine_file.exists():
+                logger.info(f"📋 TensorRT引擎不存在，开始转换: {pt_file.name}")
+                needs_conversion = True
+            elif pt_file.stat().st_mtime > engine_file.stat().st_mtime:
+                logger.info(f"📋 PyTorch模型已更新，重新转换: {pt_file.name}")
+                needs_conversion = True
+            else:
+                logger.info(f"✅ TensorRT引擎已存在: {engine_file.name}")
+                return str(engine_file)
+
+            # 转换模型
+            if needs_conversion:
+                logger.info(f"🔄 开始转换为TensorRT: {pt_file.name}")
+
+                from ultralytics import YOLO
+
+                # 加载模型
+                model = YOLO(str(pt_file))
+
+                # 导出为TensorRT FP16
+                model.export(
+                    format="engine",
+                    device=0,
+                    imgsz=640,
+                    half=True,  # FP16精度
+                    workspace=4,  # 4GB工作空间
+                    simplify=True,
+                    opset=12,
+                    dynamic=False,
+                    verbose=False,
+                )
+
+                # 检查输出文件
+                if engine_file.exists():
+                    size_mb = engine_file.stat().st_size / (1024 * 1024)
+                    logger.info(f"✅ TensorRT转换成功: {engine_file.name}")
+                    logger.info(f"   文件大小: {size_mb:.2f} MB")
+                    return str(engine_file)
+                else:
+                    logger.error("❌ TensorRT转换失败: 输出文件不存在")
+                    return model_path
+
+            return str(engine_file)
+
+        except Exception as e:
+            logger.error(f"TensorRT自动转换失败: {e}")
+            logger.info("回退到PyTorch模型")
+            return model_path
 
     def _load_model(self, model_path: str):
         """加载YOLO模型"""

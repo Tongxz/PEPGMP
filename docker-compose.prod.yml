@@ -1,45 +1,125 @@
 version: "3.8"
 
+# 生产环境配置（GPU + TensorRT）
+# 包含：API、Frontend、PostgreSQL、Redis
+
+networks:
+  pyt-prod-network:
+    driver: bridge
+
+volumes:
+  postgres_prod_data:
+    driver: local
+  redis_prod_data:
+    driver: local
+  models_prod_data:
+    driver: local
+
 services:
+  # PostgreSQL 数据库 (生产环境)
+  database:
+    image: 192.168.30.83:5433/postgres:16-alpine
+    container_name: pyt-postgres-prod
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pyt_production}
+      POSTGRES_USER: ${POSTGRES_USER:-pyt_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_in_production}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - pyt-prod-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pyt_user} -d ${POSTGRES_DB:-pyt_production}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # Redis 缓存 (生产环境)
+  redis:
+    image: 192.168.30.83:5433/redis:7-alpine
+    container_name: pyt-redis-prod
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD:-change_me_in_production}
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_prod_data:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    networks:
+      - pyt-prod-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  # 后端 API (生产环境 - GPU + TensorRT)
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: pyt-api
+    image: 192.168.30.83:5433/pyt-api:prod
+    container_name: pyt-api-prod
     deploy:
       resources:
         reservations:
           devices:
             - capabilities: ["gpu"]
-    gpus: all
     environment:
       - ENVIRONMENT=production
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-pyt_user}:${POSTGRES_PASSWORD:-change_me_in_production}@database:5432/${POSTGRES_DB:-pyt_production}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-change_me_in_production}@redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-change_me_in_production}
+      - JWT_SECRET=${JWT_SECRET:-change_me_in_production}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - AUTO_CONVERT_TENSORRT=true
+      - TENSORRT_PRECISION=fp16
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:8000"
     volumes:
       - ./config:/app/config:ro
       - ./logs:/app/logs
       - ./output:/app/output
+      - ./data:/app/data
+      - models_prod_data:/app/models
+    networks:
+      - pyt-prod-network
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 40s
+    restart: unless-stopped
 
+  # 前端 (生产环境)
   frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
-      args:
-        VITE_API_BASE: ${VITE_API_BASE:-/api/v1}
-        BASE_URL: ${BASE_URL:-/}
-    container_name: pyt-frontend
+    image: 192.168.30.83:5433/pyt-frontend:prod
+    container_name: pyt-frontend-prod
     ports:
-      - "8080:80"
+      - "${FRONTEND_PORT:-8080}:80"
+    networks:
+      - pyt-prod-network
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost/"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
+    restart: unless-stopped
