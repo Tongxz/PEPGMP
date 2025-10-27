@@ -13,7 +13,8 @@ import yaml
 from fastapi import APIRouter, HTTPException, Path
 from fastapi.responses import Response
 
-from src.services.process_manager import get_process_manager
+from src.api.redis_listener import CAMERA_STATS_CACHE
+from src.services.scheduler import get_scheduler
 
 router = APIRouter()
 # 为本模块创建 logger，避免未定义引用导致 500
@@ -191,16 +192,9 @@ def preview_camera(camera_id: str = Path(...)) -> Response:  # noqa: C901
 
 @router.post("/cameras/{camera_id}/start")
 def start_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
-    """启动指定摄像头的检测进程.
-
-    Args:
-        camera_id: 目标摄像头的ID.
-
-    Returns:
-        一个包含操作结果和进程信息的字典.
-    """
-    pm = get_process_manager()
-    res = pm.start(camera_id)
+    """启动指定摄像头的检测进程."""
+    scheduler = get_scheduler()
+    res = scheduler.start_detection(camera_id)
     if not res.get("ok"):
         logger.error(f"Failed to start camera {camera_id}: {res}")
         raise HTTPException(
@@ -214,16 +208,9 @@ def start_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
 
 @router.post("/cameras/{camera_id}/stop")
 def stop_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
-    """停止指定摄像头的检测进程.
-
-    Args:
-        camera_id: 目标摄像头的ID.
-
-    Returns:
-        一个包含操作结果的字典.
-    """
-    pm = get_process_manager()
-    res = pm.stop(camera_id)
+    """停止指定摄像头的检测进程."""
+    scheduler = get_scheduler()
+    res = scheduler.stop_detection(camera_id)
     if not res.get("ok"):
         logger.error(f"Failed to stop camera {camera_id}: {res}")
         raise HTTPException(
@@ -235,16 +222,9 @@ def stop_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
 
 @router.post("/cameras/{camera_id}/restart")
 def restart_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
-    """重启指定摄像头的检测进程.
-
-    Args:
-        camera_id: 目标摄像头的ID.
-
-    Returns:
-        一个包含操作结果和新进程信息的字典.
-    """
-    pm = get_process_manager()
-    res = pm.restart(camera_id)
+    """重启指定摄像头的检测进程."""
+    scheduler = get_scheduler()
+    res = scheduler.restart_detection(camera_id)
     if not res.get("ok"):
         logger.error(f"Failed to restart camera {camera_id}: {res}")
         raise HTTPException(
@@ -258,16 +238,9 @@ def restart_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
 
 @router.get("/cameras/{camera_id}/status")
 def status_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
-    """获取指定摄像头检测进程的状态.
-
-    Args:
-        camera_id: 目标摄像头的ID.
-
-    Returns:
-        一个包含进程运行状态和PID的字典.
-    """
-    pm = get_process_manager()
-    res = pm.status(camera_id)
+    """获取指定摄像头检测进程的状态."""
+    scheduler = get_scheduler()
+    res = scheduler.get_status(camera_id)
     logger.info(
         f"Status camera {camera_id}: running={res.get('running')} pid={res.get('pid')}"
     )
@@ -276,48 +249,17 @@ def status_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
 
 @router.post("/cameras/batch-status")
 def batch_camera_status(request_body: Dict[str, Any] = None) -> Dict[str, Any]:
-    """批量查询摄像头运行状态.
+    """批量查询摄像头运行状态."""
+    scheduler = get_scheduler()
 
-    Args:
-        request_body: 请求体，包含 camera_ids 列表，为空则查询所有.
-
-    Returns:
-        摄像头ID到状态的映射字典.
-        {
-            "cam0": {"running": true, "pid": 3931, "log": "/path"},
-            "vid1": {"running": false, "pid": 0, "log": "/path"}
-        }
-    """
-
-    pm = get_process_manager()
-
-    # 获取摄像头ID列表
-    camera_ids = []
+    camera_ids_to_query = []
     if request_body and "camera_ids" in request_body:
-        camera_ids = request_body["camera_ids"]
+        camera_ids_to_query = request_body["camera_ids"]
 
-    # 如果未指定ID，则查询所有摄像头
-    if not camera_ids:
-        path = _cameras_path()
-        data = _read_yaml(path)
-        cameras = data.get("cameras", [])
-        camera_ids = [str(c.get("id")) for c in cameras]
+    # The scheduler's get_batch_status can handle the None case to query all
+    result = scheduler.get_batch_status(camera_ids_to_query or None)
 
-    # 批量查询状态
-    result = {}
-    for cam_id in camera_ids:
-        try:
-            status = pm.status(cam_id)
-            result[cam_id] = {
-                "running": status.get("running", False),
-                "pid": status.get("pid", 0),
-                "log": status.get("log", ""),
-            }
-        except Exception as e:
-            logger.warning(f"Failed to get status for {cam_id}: {e}")
-            result[cam_id] = {"running": False, "pid": 0, "log": ""}
-
-    logger.debug(f"Batch status query for {len(camera_ids)} cameras")
+    logger.debug(f"Batch status query for {len(result)} cameras")
     return result
 
 
@@ -351,21 +293,14 @@ def activate_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
 
 @router.post("/cameras/{camera_id}/deactivate")
 def deactivate_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
-    """停用摄像头（禁止启动检测，如正在运行则先停止）.
-
-    Args:
-        camera_id: 目标摄像头的ID.
-
-    Returns:
-        操作结果字典.
-    """
+    """停用摄像头（禁止启动检测，如正在运行则先停止）."""
     # 1. 先检查并停止运行中的进程
-    pm = get_process_manager()
-    status = pm.status(camera_id)
+    scheduler = get_scheduler()
+    status = scheduler.status(camera_id)
 
     if status.get("running"):
         logger.info(f"Camera {camera_id} is running, stopping before deactivation")
-        stop_res = pm.stop(camera_id)
+        stop_res = scheduler.stop_detection(camera_id)
         if not stop_res.get("ok"):
             logger.warning(f"Failed to stop camera {camera_id}: {stop_res}")
 
@@ -434,24 +369,24 @@ def toggle_auto_start(
 def get_camera_stats(camera_id: str = Path(...)) -> Dict[str, Any]:
     """获取指定摄像头的详细检测统计信息.
 
+    数据源已切换为由Redis Pub/Sub实时更新的内存缓存.
+
     Args:
         camera_id: 目标摄像头的ID.
 
     Returns:
         包含检测统计数据的字典.
     """
-    import re
-    from pathlib import Path as FilePath
+    scheduler = get_scheduler()
+    status = scheduler.status(camera_id)
 
-    pm = get_process_manager()
-    status = pm.status(camera_id)
-
-    stats = {
+    # 1. 从ProcessManager获取基础运行状态
+    stats_response = {
         "camera_id": camera_id,
         "running": status.get("running", False),
         "pid": status.get("pid", 0),
         "log_file": status.get("log", ""),
-        "stats": {
+        "stats": {  # 提供默认值，以防缓存中无数据
             "total_frames": 0,
             "processed_frames": 0,
             "detected_persons": 0,
@@ -463,64 +398,36 @@ def get_camera_stats(camera_id: str = Path(...)) -> Dict[str, Any]:
         },
     }
 
-    # 如果进程正在运行，尝试从日志文件中提取统计信息
-    if status.get("running") and status.get("log"):
-        log_path = FilePath(status["log"])
-        if log_path.exists():
-            try:
-                # 读取最后100行日志
-                with open(log_path, "r", encoding="utf-8") as f:
-                    lines = f.readlines()
-                    recent_lines = lines[-100:] if len(lines) > 100 else lines
+    # 2. 从内存缓存中获取实时的详细统计数据
+    latest_stats_msg = CAMERA_STATS_CACHE.get(camera_id)
 
-                    for line in reversed(recent_lines):
-                        # 提取检测结果: "检测: 人=2, 发网=1, 洗手=0"
-                        match = re.search(r"检测: 人=(\d+), 发网=(\d+), 洗手=(\d+)", line)
-                        if match:
-                            stats["stats"]["detected_persons"] = int(match.group(1))
-                            stats["stats"]["detected_hairnets"] = int(match.group(2))
-                            stats["stats"]["detected_handwash"] = int(match.group(3))
+    if latest_stats_msg and isinstance(latest_stats_msg, dict):
+        # 提取 "data" 字段中的核心统计信息
+        realtime_data = latest_stats_msg.get("data", {})
 
-                        # 提取FPS: "处理FPS: 2.01"
-                        match_fps = re.search(r"处理FPS: ([\d.]+)", line)
-                        if match_fps:
-                            stats["stats"]["avg_fps"] = float(match_fps.group(1))
+        # 提取时间戳
+        timestamp = latest_stats_msg.get("timestamp")
+        if timestamp:
+            stats_response["stats"]["last_detection_time"] = datetime.fromtimestamp(
+                timestamp
+            ).strftime("%Y-%m-%d %H:%M:%S")
 
-                        # 提取处理帧数: "处理帧数: 6"
-                        match_processed = re.search(r"处理帧数: (\d+)", line)
-                        if match_processed:
-                            stats["stats"]["processed_frames"] = int(
-                                match_processed.group(1)
-                            )
+        # 更新统计信息 (使用.get确保键不存在时不会出错)
+        stats_response["stats"].update(
+            {
+                "detected_persons": realtime_data.get("persons", 0),
+                "detected_hairnets": realtime_data.get("hairnets", 0),
+                "detected_handwash": realtime_data.get("handwash", 0),
+                "avg_fps": realtime_data.get("fps", 0.0),
+                # 注意：其他字段如 total_frames, processed_frames, avg_detection_time
+                # 需要检测进程在发布的消息中一并提供，此处仅为示例
+                "processed_frames": realtime_data.get("processed_frames", 0),
+                "total_frames": realtime_data.get("total_frames", 0),
+                "avg_detection_time": realtime_data.get("avg_detection_time", 0.0),
+            }
+        )
 
-                        # 提取总帧数: "总帧数: 805"
-                        match_total = re.search(r"总帧数: (\d+)", line)
-                        if match_total:
-                            stats["stats"]["total_frames"] = int(match_total.group(1))
-
-                        # 提取检测时间: "耗时: 0.270s"
-                        match_time = re.search(r"耗时: ([\d.]+)s", line)
-                        if match_time:
-                            stats["stats"]["avg_detection_time"] = float(
-                                match_time.group(1)
-                            )
-
-                        # 提取最后检测时间（日志时间戳）
-                        match_timestamp = re.search(
-                            r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", line
-                        )
-                        if (
-                            match_timestamp
-                            and not stats["stats"]["last_detection_time"]
-                        ):
-                            stats["stats"][
-                                "last_detection_time"
-                            ] = match_timestamp.group(1)
-
-            except Exception as e:
-                logger.warning(f"Failed to parse log file for {camera_id}: {e}")
-
-    return stats
+    return stats_response
 
 
 @router.get("/cameras/{camera_id}/logs")
@@ -536,8 +443,8 @@ def get_camera_logs(camera_id: str = Path(...), lines: int = 100) -> Dict[str, A
     """
     from pathlib import Path as FilePath
 
-    pm = get_process_manager()
-    status = pm.status(camera_id)
+    scheduler = get_scheduler()
+    status = scheduler.status(camera_id)
 
     if not status.get("log"):
         raise HTTPException(status_code=404, detail="Log file not configured")

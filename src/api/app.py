@@ -21,6 +21,7 @@ project_root = os.path.dirname(
 try:
     from src.api.middleware.error_middleware import setup_error_middleware
     from src.api.middleware.security_middleware import setup_security_middleware
+    from src.api.redis_listener import shutdown_redis_listener, start_redis_listener
     from src.api.routers import (
         alerts,
         cameras,
@@ -45,6 +46,7 @@ except ImportError:
     sys.path.append(project_root)
     from src.api.middleware.error_middleware import setup_error_middleware
     from src.api.middleware.security_middleware import setup_security_middleware
+    from src.api.redis_listener import shutdown_redis_listener, start_redis_listener
     from src.api.routers import (
         alerts,
         cameras,
@@ -124,10 +126,24 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"高级监控启动失败: {e}")
 
+    # 启动Redis监听器
+    try:
+        await start_redis_listener()
+        logger.info("Redis监听器已启动")
+    except Exception as e:
+        logger.error(f"Redis监听器启动失败: {e}")
+
     yield
 
     # Shutdown
     logger.info("Shutting down the application...")
+
+    # 关闭Redis监听器
+    try:
+        await shutdown_redis_listener()
+        logger.info("Redis监听器已关闭")
+    except Exception as e:
+        logger.warning(f"Redis监听器关闭失败: {e}")
 
     # 关闭视频流管理器
     try:

@@ -13,6 +13,7 @@ import numpy as np
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from websockets.exceptions import ConnectionClosedOK
 
+from src.api.redis_listener import CAMERA_STATS_CACHE
 from src.services.websocket_service import (
     ConnectionManager,
     WebSocketSession,
@@ -21,6 +22,86 @@ from src.services.websocket_service import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+# 状态推送连接管理器
+status_connections: set[WebSocket] = set()
+
+
+@router.websocket("/ws/status")
+async def websocket_status_endpoint(websocket: WebSocket):
+    """WebSocket状态推送端点."""
+    await websocket.accept()
+    status_connections.add(websocket)
+    logger.info(f"状态推送客户端已连接，当前连接数: {len(status_connections)}")
+
+    try:
+        # 发送初始状态
+        await send_all_camera_status(websocket)
+
+        # 保持连接并处理心跳
+        while True:
+            data = await websocket.receive_text()
+            try:
+                message = json.loads(data)
+                if message.get("type") == "ping":
+                    await websocket.send_text(json.dumps({"type": "pong"}))
+            except json.JSONDecodeError:
+                pass
+    except WebSocketDisconnect:
+        logger.info("状态推送客户端已断开连接")
+    finally:
+        status_connections.discard(websocket)
+        logger.info(f"状态推送客户端已移除，当前连接数: {len(status_connections)}")
+
+
+async def send_all_camera_status(websocket: WebSocket):
+    """发送所有摄像头的状态信息."""
+    try:
+        # 获取所有摄像头的状态
+        all_status = {}
+        for camera_id, stats_data in CAMERA_STATS_CACHE.items():
+            if isinstance(stats_data, dict) and stats_data.get("type") == "stats":
+                all_status[camera_id] = {
+                    "camera_id": camera_id,
+                    "timestamp": stats_data.get("timestamp"),
+                    "data": stats_data.get("data", {}),
+                }
+
+        # 发送状态更新
+        message = {
+            "type": "status_update",
+            "data": all_status,
+            "timestamp": asyncio.get_event_loop().time(),
+        }
+        await websocket.send_text(json.dumps(message))
+    except Exception as e:
+        logger.error(f"发送状态信息失败: {e}")
+
+
+async def broadcast_status_update(camera_id: str, stats_data: dict):
+    """向所有连接的客户端广播状态更新."""
+    if not status_connections:
+        return
+
+    message = {
+        "type": "status_update",
+        "camera_id": camera_id,
+        "data": stats_data,
+        "timestamp": asyncio.get_event_loop().time(),
+    }
+
+    message_text = json.dumps(message)
+    disconnected = set()
+
+    for websocket in status_connections:
+        try:
+            await websocket.send_text(message_text)
+        except Exception:
+            disconnected.add(websocket)
+
+    # 清理断开的连接
+    for websocket in disconnected:
+        status_connections.discard(websocket)
 
 
 @router.websocket("/ws")

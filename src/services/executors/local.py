@@ -1,3 +1,6 @@
+"""
+Local Process Executor: Manages detection processes on the local machine.
+"""
 from __future__ import annotations
 
 import os
@@ -5,13 +8,18 @@ import signal
 import subprocess
 import sys
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import yaml
 
+from src.services.executors.base import AbstractProcessExecutor
 
+
+# Helper functions kept internal to this module
 def _project_root() -> str:
-    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    )
 
 
 def _cameras_yaml_path() -> str:
@@ -30,12 +38,19 @@ def _pids_dir() -> str:
 
 def _read_yaml(path: str) -> Dict[str, Any]:
     if not os.path.exists(path):
-        return {"cameras": []}
-    with open(path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
-    if not isinstance(data.get("cameras"), list):
-        data["cameras"] = []
-    return data
+        return {"error": f"File does not exist at path: {path}"}
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+
+        if not isinstance(data.get("cameras"), list):
+            data["cameras"] = []
+
+        return data
+
+    except Exception as e:
+        return {"error": f"Failed to read or parse YAML file at {path}. Exception: {e}"}
 
 
 def _pid_file(camera_id: str) -> str:
@@ -51,26 +66,29 @@ def _is_process_alive(pid: int) -> bool:
     if pid <= 0:
         return False
     try:
-        # 优先使用 psutil（若可用）
         try:
             import psutil  # type: ignore
 
             return psutil.pid_exists(pid) and (psutil.Process(pid).status() != psutil.STATUS_ZOMBIE)  # type: ignore
         except Exception:
-            # 通用探测
             os.kill(pid, 0)
             return True
     except Exception:
         return False
 
 
-class ProcessManager:
+class LocalProcessExecutor(AbstractProcessExecutor):
+    """Manages detection processes as local subprocesses."""
+
     def __init__(self) -> None:
         self.project_root = _project_root()
         self.cameras_path = _cameras_yaml_path()
+        self._last_env: Dict[str, str] = {}
 
-    def list_cameras(self) -> List[Dict[str, Any]]:
+    def list_cameras(self) -> List[Dict[str, Any]] | Dict[str, Any]:
         data = _read_yaml(self.cameras_path)
+        if "error" in data:
+            return data  # Propagate the error dictionary
         return list(data.get("cameras", []))
 
     def _build_command(self, cam: Dict[str, Any]) -> List[str]:
@@ -82,8 +100,6 @@ class ProcessManager:
         profile = str(cam.get("profile", "accurate"))
         device = str(cam.get("device", "auto"))
         imgsz = str(cam.get("imgsz", "auto"))
-        str(cam.get("frame_skip", "auto"))
-        bool(cam.get("auto_tune", True))
 
         cmd: List[str] = [
             python_exe,
@@ -99,42 +115,42 @@ class ProcessManager:
             "--camera-id",
             camera_id,
         ]
-        # 可选参数
         if device and device != "auto":
             cmd += ["--device", device]
         if imgsz and imgsz != "auto":
             cmd += ["--imgsz", str(imgsz)]
-        # 日志限流默认 120 帧
         cmd += ["--log-interval", "120"]
-        # 区域 OSD 可由需要开启
-        # cmd += ["--osd-regions"]
 
-        # Windows 设备/自动调优：保留由 main.py 内部自动判定（后续接入 hardware_probe）
         env = os.environ.copy()
-        # camera 自定义 env 覆盖
         cam_env: Dict[str, Any] = cam.get("env", {}) or {}
         for k, v in cam_env.items():
             env[str(k)] = str(v)
-
-        # 将需要的环境变量传递给检测子进程（如 REDIS_URL/VIDEO_STREAM_*）
-        # 注意：start() 会在 Popen 中使用该 env
-        self._last_env = env  # type: ignore[attr-defined]
+        self._last_env = env
 
         return cmd
 
     def start(self, camera_id: str) -> Dict[str, Any]:
-        cams = self.list_cameras()
+        cams_or_error = self.list_cameras()
+        if isinstance(cams_or_error, dict) and "error" in cams_or_error:
+            # Propagate the detailed error from the file reading operation
+            return {
+                "ok": False,
+                "error": f"Configuration file error: {cams_or_error['error']}",
+            }
+
+        cams = cams_or_error  # Now we know it's a list
         cam = next((c for c in cams if str(c.get("id")) == str(camera_id)), None)
         if not cam:
-            return {"ok": False, "error": "Camera not found"}
+            return {
+                "ok": False,
+                "error": f"Camera with id '{camera_id}' not found in the configuration.",
+            }
 
-        # 检查摄像头是否激活（支持新旧字段）
         is_active = cam.get("active", cam.get("enabled", True))
         if not is_active:
             return {"ok": False, "error": "摄像头未激活，请先激活后再启动"}
 
         pid_path = _pid_file(camera_id)
-        # 若已在运行则返回状态
         if os.path.exists(pid_path):
             try:
                 with open(pid_path, "r", encoding="utf-8") as f:
@@ -155,11 +171,9 @@ class ProcessManager:
         stderr = stdout
 
         creationflags = 0
-        # Windows: 创建新进程组，便于停止
         if os.name == "nt":
-            creationflags = subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
+            creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
 
-        # 继承并传入环境变量（含 REDIS_URL 等）
         proc = subprocess.Popen(
             cmd,
             cwd=self.project_root,
@@ -168,7 +182,7 @@ class ProcessManager:
             stdin=subprocess.DEVNULL,
             creationflags=creationflags,
             close_fds=(os.name != "nt"),
-            env=getattr(self, "_last_env", os.environ.copy()),
+            env=self._last_env,
         )
         with open(pid_path, "w", encoding="utf-8") as pf:
             pf.write(str(proc.pid))
@@ -189,33 +203,26 @@ class ProcessManager:
                 pid = int(f.read().strip() or "0")
         except Exception:
             pid = 0
-        try:
-            if pid > 0 and _is_process_alive(pid):
+
+        if pid > 0 and _is_process_alive(pid):
+            try:
                 if os.name == "nt":
-                    # Windows: 发送 CTRL_BREAK_EVENT 到进程组
-                    try:
-                        os.kill(pid, signal.SIGTERM)
-                    except Exception:
-                        pass
+                    os.kill(pid, signal.SIGTERM)
                 else:
                     os.kill(pid, signal.SIGTERM)
-                # 等待退出
+
                 t0 = time.time()
                 while time.time() - t0 < 5.0 and _is_process_alive(pid):
                     time.sleep(0.2)
+
                 if _is_process_alive(pid):
-                    if os.name == "nt":
-                        try:
-                            os.kill(pid, signal.SIGKILL)
-                        except Exception:
-                            pass
-                    else:
-                        os.kill(pid, signal.SIGKILL)
-        except Exception:
-            pass
+                    os.kill(pid, signal.SIGKILL)
+            except Exception:
+                pass  # Process might have died already
+
         try:
             os.remove(pid_path)
-        except Exception:
+        except OSError:
             pass
         return {"ok": True, "running": False}
 
@@ -257,14 +264,3 @@ class ProcessManager:
             if res.get("ok"):
                 stopped.append(cid)
         return {"ok": True, "stopped": stopped}
-
-
-# 单例
-_manager: Optional[ProcessManager] = None
-
-
-def get_process_manager() -> ProcessManager:
-    global _manager
-    if _manager is None:
-        _manager = ProcessManager()
-    return _manager
