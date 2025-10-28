@@ -54,7 +54,7 @@ ENV PATH=/root/.local/bin:$PATH
 COPY . /app/
 
 # 创建必要的目录
-RUN mkdir -p /app/logs /app/output /app/data/models /app/models
+RUN mkdir -p /app/logs /app/output /app/data/models /app/models /app/mlruns /app/dvc_cache
 
 # 设置权限（如果目录存在）
 RUN if [ -d "/app/scripts/optimization" ]; then \

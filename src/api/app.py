@@ -30,6 +30,7 @@ try:
         error_monitoring,
         events,
         metrics,
+        mlops,
         records,
         region_management,
         security,
@@ -55,6 +56,7 @@ except ImportError:
         error_monitoring,
         events,
         metrics,
+        mlops,
         records,
         region_management,
         security,
@@ -230,6 +232,7 @@ app.include_router(alerts.router, prefix="/api/v1", tags=["Alerts"])
 app.include_router(security.router, prefix="/api/v1", tags=["Security Management"])
 app.include_router(records.router, tags=["Records"])
 app.include_router(video_stream.router, prefix="/api/v1", tags=["Video Stream"])
+app.include_router(mlops.router, tags=["MLOps"])
 
 
 @app.get("/", include_in_schema=False)

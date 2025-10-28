@@ -1,0 +1,58 @@
+version: "3.8"
+
+# 生产环境MLOps配置
+# 包含：MLflow服务器、DVC配置
+
+networks:
+  pyt-prod-network:
+    external: true
+
+volumes:
+  mlflow_prod_data:
+    driver: local
+  dvc_prod_cache:
+    driver: local
+
+services:
+  # MLflow 服务器 (生产环境)
+  mlflow:
+    image: 192.168.30.83:5433/mlflow:latest
+    container_name: pyt-mlflow-prod
+    environment:
+      - MLFLOW_BACKEND_STORE_URI=postgresql://${POSTGRES_USER:-pyt_user}:${POSTGRES_PASSWORD:-change_me_in_production}@database:5432/${POSTGRES_DB:-pyt_production}
+      - MLFLOW_DEFAULT_ARTIFACT_ROOT=file:///mlflow/artifacts
+      - MLFLOW_SERVER_DEFAULT_ARTIFACT_ROOT=file:///mlflow/artifacts
+      - MLFLOW_SERVER_FILE_STORE=/mlflow/file_store
+    ports:
+      - "${MLFLOW_PORT:-5000}:5000"
+    volumes:
+      - mlflow_prod_data:/mlflow
+      - ./mlruns:/mlflow/mlruns:ro  # 只读挂载现有实验数据
+    networks:
+      - pyt-prod-network
+    depends_on:
+      - database
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  # DVC 数据版本控制 (辅助服务)
+  dvc:
+    image: 192.168.30.83:5433/dvc:latest
+    container_name: pyt-dvc-prod
+    environment:
+      - DVC_CACHE_DIR=/dvc/cache
+      - DVC_REMOTE_URL=${DVC_REMOTE_URL:-/dvc/remote}
+    volumes:
+      - dvc_prod_cache:/dvc/cache
+      - ./data:/dvc/data:ro
+      - ./models:/dvc/models:ro
+    networks:
+      - pyt-prod-network
+    restart: unless-stopped
+    profiles:
+      - mlops  # 可选服务，通过profile控制

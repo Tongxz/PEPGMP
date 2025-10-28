@@ -14,6 +14,8 @@ volumes:
     driver: local
   models_prod_data:
     driver: local
+  mlruns_prod_data:
+    driver: local
 
 services:
   # PostgreSQL 数据库 (生产环境)
@@ -82,6 +84,10 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - AUTO_CONVERT_TENSORRT=true
       - TENSORRT_PRECISION=fp16
+      # MLOps配置
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_EXPERIMENT_NAME=production_detection
+      - DVC_CACHE_DIR=/app/dvc_cache
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:
@@ -90,6 +96,7 @@ services:
       - ./output:/app/output
       - ./data:/app/data
       - models_prod_data:/app/models
+      - mlruns_prod_data:/app/mlruns
     networks:
       - pyt-prod-network
     depends_on:

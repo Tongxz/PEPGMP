@@ -20,10 +20,13 @@
 
     <!-- 主要内容区 -->
     <div class="mlops-content">
-      <n-grid :cols="2" :x-gap="16" :y-gap="16">
-        <!-- 实验跟踪 -->
-        <n-gi>
-          <DataCard title="MLflow实验跟踪" class="experiment-card">
+      <!-- 功能模块标签页 -->
+      <n-tabs type="line" animated>
+        <n-tab-pane name="experiments" tab="实验跟踪">
+          <n-grid :cols="2" :x-gap="16" :y-gap="16">
+            <!-- 实验跟踪 -->
+            <n-gi>
+              <DataCard title="MLflow实验跟踪" class="experiment-card">
             <n-empty v-if="experiments.length === 0" description="暂无实验数据">
               <template #extra>
                 <n-button size="small" @click="refreshData">刷新</n-button>
