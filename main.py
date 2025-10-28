@@ -345,7 +345,7 @@ def _run_detection_loop(args, logger, pipeline, device):
             redis_client_stats = redis.Redis.from_url(redis_url)
 
         redis_client_stats.ping()  # Test connection
-        logger.info(f"[STATS] Redis publisher for stats connected on channel hbd:stats")
+        logger.info("[STATS] Redis publisher for stats connected on channel hbd:stats")
     except Exception as e:
         logger.warning(
             f"[STATS] Could not connect to Redis for stats publishing: {e}. Stats will not be sent."
