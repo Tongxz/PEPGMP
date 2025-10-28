@@ -154,10 +154,21 @@ class OptimizedDetectionPipeline:
         self.hairnet_detector = hairnet_detector
         self.behavior_recognizer = behavior_recognizer
 
+        # 如果没有提供人体检测器，尝试初始化一个默认的
+        if self.human_detector is None:
+            try:
+                from src.detection.detector import HumanDetector
+
+                self.human_detector = HumanDetector()
+                logger.info("默认人体检测器初始化成功")
+            except Exception as e:
+                logger.warning(f"默认人体检测器初始化失败: {e}")
+                self.human_detector = None
+
         # 初始化姿态检测器
         if pose_detector is not None:
             self.pose_detector = pose_detector
-            logger.info(f"姿态检测器 (外部提供) 初始化成功")
+            logger.info("姿态检测器 (外部提供) 初始化成功")
         else:
             try:
                 params = get_unified_params()

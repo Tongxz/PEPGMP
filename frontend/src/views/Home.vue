@@ -25,6 +25,9 @@
 
     <!-- 主要内容区 -->
     <div class="home-content">
+      <!-- 智能检测面板 -->
+      <IntelligentDetectionPanel />
+
       <!-- 状态卡片区 -->
       <div class="status-cards">
         <DataCard
@@ -176,6 +179,7 @@ import {
   SettingsOutline
 } from '@vicons/ionicons5'
 import { PageHeader, DataCard, StatusIndicator } from '@/components/common'
+import IntelligentDetectionPanel from '@/components/IntelligentDetectionPanelSimple.vue'
 import { useSystemStore } from '@/stores'
 
 const systemStore = useSystemStore()

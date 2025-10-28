@@ -10,15 +10,27 @@ export const useCameraStore = defineStore('camera', () => {
   const error = ref<string>('')
   const selectedCamera = ref<Camera | null>(null)
 
+  // WebSocket状态（由外部组件管理）
+  const wsConnected = ref(false)
+  const wsStatusData = ref<Record<string, any>>({})
+
   // 计算属性 - 带运行状态的摄像头列表
   const camerasWithStatus = computed(() => {
-    return cameras.value.map(cam => ({
-      ...cam,
-      runtime_status: runtimeStatus.value[cam.id] || {
-        running: false,
-        pid: 0
+    return cameras.value.map(cam => {
+      // 优先使用WebSocket实时数据，回退到轮询数据
+      const wsData = wsStatusData.value[cam.id]
+      const pollData = runtimeStatus.value[cam.id]
+
+      return {
+        ...cam,
+        runtime_status: wsData || pollData || {
+          running: false,
+          pid: 0
+        },
+        // 添加WebSocket连接状态
+        ws_connected: wsConnected.value
       }
-    }))
+    })
   })
 
   const enabledCameras = computed(() => cameras.value.filter(cam => cam.enabled))
@@ -95,6 +107,15 @@ export const useCameraStore = defineStore('camera', () => {
 
   function clearError() {
     error.value = ''
+  }
+
+  // WebSocket状态管理方法
+  function updateWebSocketStatus(connected: boolean) {
+    wsConnected.value = connected
+  }
+
+  function updateWebSocketData(data: Record<string, any>) {
+    wsStatusData.value = { ...wsStatusData.value, ...data }
   }
 
   // 刷新运行状态
@@ -240,6 +261,9 @@ export const useCameraStore = defineStore('camera', () => {
     selectCamera,
     getCameraById,
     clearError,
+    // WebSocket状态管理
+    updateWebSocketStatus,
+    updateWebSocketData,
     reset
   }
 })

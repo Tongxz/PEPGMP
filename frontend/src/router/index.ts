@@ -41,6 +41,11 @@ const routes: RouteRecordRaw[] = [
         name: 'alerts',
         component: () => import('../views/Alerts.vue'),
       },
+      {
+        path: 'mlops',
+        name: 'mlops',
+        component: () => import('../views/MLOpsManagement.vue'),
+      },
     ]
   },
 ]

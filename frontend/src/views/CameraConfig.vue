@@ -701,9 +701,12 @@ async function refreshStatus() {
 
 function startStatusInterval() {
   if (statusInterval) window.clearInterval(statusInterval)
-  statusInterval = window.setInterval(async () => {
-    await cameraStore.refreshRuntimeStatus()  // ← 只刷新运行状态，更快
-  }, 5000)  // ← 5秒刷新，更及时
+  // 如果WebSocket未连接，则使用轮询作为备用
+  if (!cameraStore.wsConnected) {
+    statusInterval = window.setInterval(async () => {
+      await cameraStore.refreshRuntimeStatus()  // ← 只刷新运行状态，更快
+    }, 5000)  // ← 5秒刷新，更及时
+  }
 }
 
 // 弹窗控制

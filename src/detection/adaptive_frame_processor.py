@@ -89,6 +89,10 @@ class AdaptiveFrameProcessor:
         self.frame_count = 0
         self.consecutive_skips = 0
 
+        # 处理统计
+        self.processed_frames = 0
+        self.skipped_frames = 0
+
         # 光流检测器
         self.optical_flow = cv2.calcOpticalFlowPyrLK
 

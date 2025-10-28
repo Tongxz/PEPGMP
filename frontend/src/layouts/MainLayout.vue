@@ -191,7 +191,8 @@ import {
   ContrastOutline,
   ExpandOutline,
   ContractOutline,
-  DocumentTextOutline
+  DocumentTextOutline,
+  CodeWorkingOutline
 } from '@vicons/ionicons5'
 import { StatusIndicator } from '@/components/common'
 import { useTheme } from '@/composables/useTheme'
@@ -265,6 +266,11 @@ const menuOptions = computed<MenuOption[]>(() => {
       label: '告警中心',
       key: 'alerts',
       icon: () => h(NIcon, null, { default: () => h(NotificationsOutline) })
+    },
+    {
+      label: 'MLOps管理',
+      key: 'mlops',
+      icon: () => h(NIcon, null, { default: () => h(CodeWorkingOutline) })
     }
   ]
   return options
@@ -279,7 +285,8 @@ const breadcrumbs = computed(() => {
     '/statistics': '统计分析',
     '/detection-records': '历史记录',
     '/system-info': '系统信息',
-    '/alerts': '告警中心'
+    '/alerts': '告警中心',
+    '/mlops': 'MLOps管理'
   }
 
   const currentPath = route.path

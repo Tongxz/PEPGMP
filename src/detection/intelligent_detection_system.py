@@ -15,10 +15,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from .adaptive_frame_processor import (
-    AdaptiveFrameProcessor,
-    ProcessingDecision,
-)
+from .adaptive_frame_processor import AdaptiveFrameProcessor, ProcessingDecision
 from .dynamic_skip_manager import DynamicSkipManager
 from .performance_monitor import MetricType, PerformanceAlert, PerformanceMonitor
 
@@ -190,6 +187,10 @@ class IntelligentDetectionSystem:
         processing_info.update(self._get_performance_info())
 
         return detection_result, processing_info
+
+    def get_stats(self) -> Dict[str, Any]:
+        """获取统计信息"""
+        return self.stats
 
     def _classify_scene_from_decision(self, decision: ProcessingDecision) -> str:
         """从处理决策中推断场景类型"""

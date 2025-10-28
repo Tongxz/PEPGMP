@@ -1,0 +1,14 @@
+artifact_uri: file:///Users/zhou/Code/Pyt/mlruns/0/6f538706622d4bab999aef77e07aa55d/artifacts
+end_time: 1761618029533
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 6f538706622d4bab999aef77e07aa55d
+run_name: intelligent_detection_test
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1761618029524
+status: 3
+tags: []
+user_id: zhou
