@@ -349,6 +349,18 @@ async def scale_deployment(deployment_id: str, replicas: int):
         raise HTTPException(status_code=500, detail="扩缩容失败")
 
 
+@router.put("/deployments/{deployment_id}")
+async def update_deployment(deployment_id: str, deployment: Dict[str, Any]):
+    """更新部署"""
+    try:
+        # 这里应该调用Kubernetes或Docker API更新实际部署
+        logger.info(f"更新部署 {deployment_id}: {deployment}")
+        return {"message": "部署更新成功", "deployment_id": deployment_id}
+    except Exception as e:
+        logger.error(f"更新部署失败: {e}")
+        raise HTTPException(status_code=500, detail="更新部署失败")
+
+
 @router.delete("/deployments/{deployment_id}")
 async def delete_deployment(deployment_id: str):
     """删除部署"""
@@ -436,6 +448,18 @@ async def create_workflow(workflow: Dict[str, Any]):
     except Exception as e:
         logger.error(f"创建工作流失败: {e}")
         raise HTTPException(status_code=500, detail="创建工作流失败")
+
+
+@router.put("/workflows/{workflow_id}")
+async def update_workflow(workflow_id: str, workflow: Dict[str, Any]):
+    """更新工作流"""
+    try:
+        # 这里应该更新工作流引擎中的工作流
+        logger.info(f"更新工作流 {workflow_id}: {workflow}")
+        return {"message": "工作流更新成功", "workflow_id": workflow_id}
+    except Exception as e:
+        logger.error(f"更新工作流失败: {e}")
+        raise HTTPException(status_code=500, detail="更新工作流失败")
 
 
 @router.post("/workflows/{workflow_id}/run")

@@ -301,12 +301,108 @@
         </n-space>
       </template>
     </n-modal>
+
+    <!-- 编辑工作流对话框 -->
+    <n-modal v-model:show="showEditDialog" preset="dialog" title="编辑工作流" style="width: 800px;">
+      <n-form :model="editForm" label-placement="left" label-width="100px">
+        <n-form-item label="工作流名称">
+          <n-input v-model:value="editForm.name" placeholder="输入工作流名称" />
+        </n-form-item>
+        <n-form-item label="工作流类型">
+          <n-select v-model:value="editForm.type" placeholder="选择工作流类型" :options="workflowTypeOptions" />
+        </n-form-item>
+        <n-form-item label="触发器">
+          <n-select v-model:value="editForm.trigger" placeholder="选择触发器类型" :options="triggerOptions" />
+        </n-form-item>
+        <n-form-item v-if="editForm.trigger === 'schedule'" label="调度配置">
+          <n-input v-model:value="editForm.schedule" placeholder="cron表达式，如：0 0 * * *" />
+        </n-form-item>
+        <n-form-item label="描述">
+          <n-input v-model:value="editForm.description" type="textarea" placeholder="输入工作流描述" />
+        </n-form-item>
+
+        <!-- 工作流步骤配置 -->
+        <n-divider>工作流步骤</n-divider>
+        <div v-for="(step, index) in editForm.steps" :key="index" class="workflow-step-config">
+          <n-card size="small">
+            <template #header>
+              <n-space justify="space-between">
+                <span>步骤 {{ index + 1 }}</span>
+                <n-button size="tiny" type="error" @click="removeEditStep(index)">删除</n-button>
+              </n-space>
+            </template>
+            <n-grid :cols="2" :x-gap="12">
+              <n-gi>
+                <n-form-item label="步骤名称">
+                  <n-input v-model:value="step.name" placeholder="输入步骤名称" />
+                </n-form-item>
+              </n-gi>
+              <n-gi>
+                <n-form-item label="步骤类型">
+                  <n-select v-model:value="step.type" placeholder="选择步骤类型" :options="stepTypeOptions" />
+                </n-form-item>
+              </n-gi>
+            </n-grid>
+            <n-form-item label="描述">
+              <n-input v-model:value="step.description" placeholder="输入步骤描述" />
+            </n-form-item>
+            <n-form-item label="配置">
+              <n-input v-model:value="step.config" type="textarea" placeholder="JSON配置" />
+            </n-form-item>
+            <n-form-item v-if="step.type === 'model_training'" label="训练参数">
+              <n-grid :cols="2" :x-gap="12">
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>学习率</n-input-group-label>
+                    <n-input v-model:value="step.training_params?.learning_rate" placeholder="0.001" />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>批次大小</n-input-group-label>
+                    <n-input v-model:value="step.training_params?.batch_size" placeholder="32" />
+                  </n-input-group>
+                </n-gi>
+              </n-grid>
+            </n-form-item>
+            <n-form-item v-if="step.type === 'model_deployment'" label="部署配置">
+              <n-grid :cols="2" :x-gap="12">
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>实例数</n-input-group-label>
+                    <n-input-number v-model:value="step.deployment_params?.replicas" :min="1" :max="10" />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>环境</n-input-group-label>
+                    <n-select v-model:value="step.deployment_params?.environment" :options="environmentOptions" />
+                  </n-input-group>
+                </n-gi>
+              </n-grid>
+            </n-form-item>
+          </n-card>
+        </div>
+        <n-button @click="addEditStep" type="dashed" style="width: 100%; margin-top: 12px;">
+          <template #icon>
+            <n-icon><AddOutline /></n-icon>
+          </template>
+          添加步骤
+        </n-button>
+      </n-form>
+      <template #action>
+        <n-space>
+          <n-button @click="showEditDialog = false">取消</n-button>
+          <n-button type="primary" @click="submitEdit" :loading="editing">保存</n-button>
+        </n-space>
+      </template>
+    </n-modal>
   </n-card>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { NCard, NButton, NSpace, NIcon, NEmpty, NList, NListItem, NTag, NDescriptions, NDescriptionsItem, NDivider, NText, NSteps, NStep, NModal, NForm, NFormItem, NSelect, NInput, NInputNumber, useMessage } from 'naive-ui'
+import { NCard, NButton, NSpace, NIcon, NEmpty, NList, NListItem, NTag, NDescriptions, NDescriptionsItem, NDivider, NText, NSteps, NStep, NModal, NForm, NFormItem, NSelect, NInput, NInputNumber, NInputGroup, NInputGroupLabel, useMessage } from 'naive-ui'
 import { RefreshOutline, AddOutline } from '@vicons/ionicons5'
 
 interface WorkflowStep {
@@ -314,6 +410,14 @@ interface WorkflowStep {
   type: string
   description: string
   config: string
+  training_params?: {
+    learning_rate?: string
+    batch_size?: string
+  }
+  deployment_params?: {
+    replicas?: number
+    environment?: string
+  }
 }
 
 interface WorkflowRun {
@@ -347,8 +451,10 @@ const workflows = ref<Workflow[]>([])
 const loading = ref(false)
 const showCreateDialog = ref(false)
 const showDetailDialog = ref(false)
+const showEditDialog = ref(false)
 const selectedWorkflow = ref<Workflow | null>(null)
 const creating = ref(false)
+const editing = ref(false)
 
 const workflowForm = ref({
   name: '',
@@ -359,6 +465,15 @@ const workflowForm = ref({
   steps: [
     { name: '数据预处理', type: 'data_processing', description: '清洗和预处理数据', config: '{}' }
   ]
+})
+
+const editForm = ref({
+  name: '',
+  type: 'training',
+  trigger: 'manual',
+  schedule: '',
+  description: '',
+  steps: [] as WorkflowStep[]
 })
 
 const workflowTypeOptions = [
@@ -382,6 +497,12 @@ const stepTypeOptions = [
   { label: '模型部署', value: 'model_deployment' },
   { label: '数据验证', value: 'data_validation' },
   { label: '通知', value: 'notification' }
+]
+
+const environmentOptions = [
+  { label: '开发环境', value: 'development' },
+  { label: '测试环境', value: 'staging' },
+  { label: '生产环境', value: 'production' }
 ]
 
 // 获取工作流列表
@@ -600,9 +721,27 @@ function viewWorkflow(workflow: Workflow) {
 
 // 编辑工作流
 function editWorkflow(workflow: Workflow) {
-  console.log('编辑工作流:', workflow)
-  message.info(`编辑工作流: ${workflow.name}`)
-  // TODO: 实现工作流编辑对话框
+  selectedWorkflow.value = workflow
+  // 填充当前工作流的配置到编辑表单
+  editForm.value = {
+    name: workflow.name,
+    type: workflow.type,
+    trigger: workflow.trigger,
+    schedule: workflow.schedule || '',
+    description: workflow.description,
+    steps: workflow.steps.map(step => ({
+      ...step,
+      training_params: step.type === 'model_training' ? {
+        learning_rate: '0.001',
+        batch_size: '32'
+      } : undefined,
+      deployment_params: step.type === 'model_deployment' ? {
+        replicas: 1,
+        environment: 'staging'
+      } : undefined
+    }))
+  }
+  showEditDialog.value = true
 }
 
 // 运行工作流
@@ -740,6 +879,51 @@ function viewRunDetails(run: WorkflowRun) {
   console.log('查看运行详情:', run)
   message.info(`查看运行详情: ${run.id}`)
   // TODO: 实现运行详情查看
+}
+
+// 添加编辑步骤
+function addEditStep() {
+  editForm.value.steps.push({
+    name: '',
+    type: 'data_processing',
+    description: '',
+    config: '{}'
+  })
+}
+
+// 删除编辑步骤
+function removeEditStep(index: number) {
+  editForm.value.steps.splice(index, 1)
+}
+
+// 提交编辑
+async function submitEdit() {
+  if (!selectedWorkflow.value) return
+  
+  editing.value = true
+  try {
+    message.loading('正在保存工作流...')
+    
+    // 调用更新API
+    const response = await fetch(`/api/v1/mlops/workflows/${selectedWorkflow.value.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editForm.value)
+    })
+    
+    if (response.ok) {
+      message.success('工作流保存成功')
+      showEditDialog.value = false
+      refreshWorkflows()
+    } else {
+      throw new Error('保存失败')
+    }
+  } catch (error) {
+    console.error('保存工作流失败:', error)
+    message.error('保存失败')
+  } finally {
+    editing.value = false
+  }
 }
 
 onMounted(() => {

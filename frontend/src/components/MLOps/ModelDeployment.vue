@@ -273,12 +273,100 @@
         </n-space>
       </template>
     </n-modal>
+
+    <!-- 更新部署对话框 -->
+    <n-modal v-model:show="showUpdateDialog" preset="dialog" title="更新部署" style="width: 600px;">
+      <n-form :model="updateForm" label-placement="left" label-width="100px">
+        <n-form-item label="部署名称">
+          <n-input v-model:value="updateForm.name" placeholder="输入部署名称" />
+        </n-form-item>
+        <n-form-item label="模型版本">
+          <n-select v-model:value="updateForm.model_version" placeholder="选择新的模型版本" :options="modelVersionOptions" />
+        </n-form-item>
+        <n-form-item label="环境">
+          <n-select v-model:value="updateForm.environment" placeholder="选择部署环境" :options="environmentOptions" />
+        </n-form-item>
+        <n-form-item label="实例数">
+          <n-input-number v-model:value="updateForm.replicas" :min="1" :max="20" />
+        </n-form-item>
+        <n-form-item label="资源配置">
+          <n-grid :cols="2" :x-gap="12">
+            <n-gi>
+              <n-input-group>
+                <n-input-group-label>CPU</n-input-group-label>
+                <n-input v-model:value="updateForm.cpu_limit" placeholder="1" />
+                <n-input-group-label>核</n-input-group-label>
+              </n-input-group>
+            </n-gi>
+            <n-gi>
+              <n-input-group>
+                <n-input-group-label>内存</n-input-group-label>
+                <n-input v-model:value="updateForm.memory_limit" placeholder="2" />
+                <n-input-group-label>GB</n-input-group-label>
+              </n-input-group>
+            </n-gi>
+          </n-grid>
+        </n-form-item>
+        <n-form-item label="GPU配置">
+          <n-grid :cols="2" :x-gap="12">
+            <n-gi>
+              <n-input-group>
+                <n-input-group-label>GPU数量</n-input-group-label>
+                <n-input-number v-model:value="updateForm.gpu_count" :min="0" :max="8" />
+              </n-input-group>
+            </n-gi>
+            <n-gi>
+              <n-input-group>
+                <n-input-group-label>GPU内存</n-input-group-label>
+                <n-input v-model:value="updateForm.gpu_memory" placeholder="8" />
+                <n-input-group-label>GB</n-input-group-label>
+              </n-input-group>
+            </n-gi>
+          </n-grid>
+        </n-form-item>
+        <n-form-item label="自动扩缩容">
+          <n-switch v-model:value="updateForm.auto_scaling" />
+        </n-form-item>
+        <n-form-item v-if="updateForm.auto_scaling" label="扩缩容配置">
+          <n-grid :cols="2" :x-gap="12">
+            <n-gi>
+              <n-input-group>
+                <n-input-group-label>最小实例</n-input-group-label>
+                <n-input-number v-model:value="updateForm.min_replicas" :min="1" />
+              </n-input-group>
+            </n-gi>
+            <n-gi>
+              <n-input-group>
+                <n-input-group-label>最大实例</n-input-group-label>
+                <n-input-number v-model:value="updateForm.max_replicas" :min="1" :max="50" />
+              </n-input-group>
+            </n-gi>
+          </n-grid>
+        </n-form-item>
+        <n-form-item label="更新策略">
+          <n-radio-group v-model:value="updateForm.update_strategy">
+            <n-radio value="rolling">滚动更新</n-radio>
+            <n-radio value="recreate">重新创建</n-radio>
+            <n-radio value="blue_green">蓝绿部署</n-radio>
+          </n-radio-group>
+        </n-form-item>
+        <n-form-item label="更新说明">
+          <n-input v-model:value="updateForm.description" type="textarea" placeholder="输入更新说明" />
+        </n-form-item>
+      </n-form>
+      <template #action>
+        <n-space>
+          <n-button @click="showUpdateDialog = false">取消</n-button>
+          <n-button type="primary" @click="submitUpdate" :loading="updating">更新</n-button>
+        </n-space>
+      </template>
+    </n-modal>
   </n-card>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { NCard, NButton, NSpace, NIcon, NEmpty, NList, NListItem, NTag, NDescriptions, NDescriptionsItem, NDivider, NText, NGrid, NGi, NStatistic, NProgress, NModal, NForm, NFormItem, NSelect, NInput, NInputNumber, NInputGroup, NInputGroupLabel, NSwitch, NP, useMessage } from 'naive-ui'
+import { NCard, NButton, NSpace, NIcon, NEmpty, NList, NListItem, NTag, NDescriptions, NDescriptionsItem, NDivider, NText, NGrid, NGi, NStatistic, NProgress, NModal, NForm, NFormItem, NSelect, NInput, NInputNumber, NInputGroup, NInputGroupLabel, NSwitch, NRadioGroup, NRadio, NP, useMessage } from 'naive-ui'
 import { RefreshOutline, RocketOutline } from '@vicons/ionicons5'
 
 interface Deployment {
@@ -305,8 +393,10 @@ const deployments = ref<Deployment[]>([])
 const loading = ref(false)
 const showDeployDialog = ref(false)
 const showDetailDialog = ref(false)
+const showUpdateDialog = ref(false)
 const selectedDeployment = ref<Deployment | null>(null)
 const deploying = ref(false)
+const updating = ref(false)
 
 const deployForm = ref({
   model_id: '',
@@ -320,6 +410,22 @@ const deployForm = ref({
   max_replicas: 5
 })
 
+const updateForm = ref({
+  name: '',
+  model_version: '',
+  environment: 'staging',
+  replicas: 1,
+  cpu_limit: '1',
+  memory_limit: '2',
+  gpu_count: 0,
+  gpu_memory: '8',
+  auto_scaling: false,
+  min_replicas: 1,
+  max_replicas: 5,
+  update_strategy: 'rolling',
+  description: ''
+})
+
 const modelOptions = [
   { label: 'YOLOv8 人体检测模型 v1.0', value: 'yolo_human_v1' },
   { label: 'YOLOv8 安全帽检测模型 v2.1', value: 'yolo_hairnet_v2' },
@@ -331,6 +437,17 @@ const environmentOptions = [
   { label: '开发环境', value: 'development' },
   { label: '测试环境', value: 'staging' },
   { label: '生产环境', value: 'production' }
+]
+
+const modelVersionOptions = [
+  { label: 'YOLOv8 人体检测模型 v1.0', value: 'yolo_human_v1.0' },
+  { label: 'YOLOv8 人体检测模型 v1.1', value: 'yolo_human_v1.1' },
+  { label: 'YOLOv8 人体检测模型 v1.2', value: 'yolo_human_v1.2' },
+  { label: 'YOLOv8 安全帽检测模型 v2.1', value: 'yolo_hairnet_v2.1' },
+  { label: 'YOLOv8 安全帽检测模型 v2.2', value: 'yolo_hairnet_v2.2' },
+  { label: 'XGBoost 行为分类模型 v1.5', value: 'xgb_behavior_v1.5' },
+  { label: 'XGBoost 行为分类模型 v1.6', value: 'xgb_behavior_v1.6' },
+  { label: 'MediaPipe 姿态检测模型 v1.0', value: 'mediapipe_pose_v1.0' }
 ]
 
 // 获取部署列表
@@ -494,9 +611,24 @@ async function scaleDeployment(deployment: Deployment) {
 
 // 更新部署
 function updateDeployment(deployment: Deployment) {
-  console.log('更新部署:', deployment)
-  message.info(`更新部署: ${deployment.name}`)
-  // TODO: 实现部署更新对话框
+  selectedDeployment.value = deployment
+  // 填充当前部署的配置到更新表单
+  updateForm.value = {
+    name: deployment.name,
+    model_version: deployment.model_version,
+    environment: deployment.environment,
+    replicas: deployment.replicas,
+    cpu_limit: '1', // 从当前配置获取
+    memory_limit: '2', // 从当前配置获取
+    gpu_count: 0,
+    gpu_memory: '8',
+    auto_scaling: false,
+    min_replicas: 1,
+    max_replicas: 5,
+    update_strategy: 'rolling',
+    description: ''
+  }
+  showUpdateDialog.value = true
 }
 
 // 切换部署状态
@@ -585,6 +717,36 @@ function loadMonitoringData() {
 function loadLogs() {
   message.info('正在加载日志...')
   // TODO: 实现日志加载
+}
+
+// 提交更新
+async function submitUpdate() {
+  if (!selectedDeployment.value) return
+  
+  updating.value = true
+  try {
+    message.loading('正在更新部署...')
+    
+    // 调用更新API
+    const response = await fetch(`/api/v1/mlops/deployments/${selectedDeployment.value.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updateForm.value)
+    })
+    
+    if (response.ok) {
+      message.success('部署更新成功')
+      showUpdateDialog.value = false
+      refreshDeployments()
+    } else {
+      throw new Error('更新失败')
+    }
+  } catch (error) {
+    console.error('更新部署失败:', error)
+    message.error('更新失败')
+  } finally {
+    updating.value = false
+  }
 }
 
 onMounted(() => {
