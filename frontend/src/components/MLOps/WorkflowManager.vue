@@ -354,13 +354,13 @@
                 <n-gi>
                   <n-input-group>
                     <n-input-group-label>学习率</n-input-group-label>
-                    <n-input v-model:value="step.training_params?.learning_rate" placeholder="0.001" />
+                    <n-input :value="step.training_params?.learning_rate || ''" @update:value="(val) => updateTrainingParam(step, 'learning_rate', val)" placeholder="0.001" />
                   </n-input-group>
                 </n-gi>
                 <n-gi>
                   <n-input-group>
                     <n-input-group-label>批次大小</n-input-group-label>
-                    <n-input v-model:value="step.training_params?.batch_size" placeholder="32" />
+                    <n-input :value="step.training_params?.batch_size || ''" @update:value="(val) => updateTrainingParam(step, 'batch_size', val)" placeholder="32" />
                   </n-input-group>
                 </n-gi>
               </n-grid>
@@ -370,13 +370,13 @@
                 <n-gi>
                   <n-input-group>
                     <n-input-group-label>实例数</n-input-group-label>
-                    <n-input-number v-model:value="step.deployment_params?.replicas" :min="1" :max="10" />
+                    <n-input-number :value="step.deployment_params?.replicas || 1" @update:value="(val) => updateDeploymentParam(step, 'replicas', val)" :min="1" :max="10" />
                   </n-input-group>
                 </n-gi>
                 <n-gi>
                   <n-input-group>
                     <n-input-group-label>环境</n-input-group-label>
-                    <n-select v-model:value="step.deployment_params?.environment" :options="environmentOptions" />
+                    <n-select :value="step.deployment_params?.environment || 'production'" @update:value="(val) => updateDeploymentParam(step, 'environment', val)" :options="environmentOptions" />
                   </n-input-group>
                 </n-gi>
               </n-grid>
@@ -504,6 +504,22 @@ const environmentOptions = [
   { label: '测试环境', value: 'staging' },
   { label: '生产环境', value: 'production' }
 ]
+
+// 更新训练参数
+function updateTrainingParam(step: WorkflowStep, param: string, value: string) {
+  if (!step.training_params) {
+    step.training_params = {}
+  }
+  step.training_params[param as keyof typeof step.training_params] = value
+}
+
+// 更新部署参数
+function updateDeploymentParam(step: WorkflowStep, param: string, value: string | number) {
+  if (!step.deployment_params) {
+    step.deployment_params = {}
+  }
+  step.deployment_params[param as keyof typeof step.deployment_params] = value
+}
 
 // 获取工作流列表
 async function fetchWorkflows() {
