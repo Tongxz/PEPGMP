@@ -5,10 +5,13 @@ MLOps API路由
 
 import logging
 import os
+import zipfile
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -196,6 +199,80 @@ async def delete_dataset(dataset_id: str):
     except Exception as e:
         logger.error(f"数据集删除失败: {e}")
         raise HTTPException(status_code=500, detail="数据集删除失败")
+
+
+@router.get("/datasets/{dataset_id}/download")
+async def download_dataset(
+    dataset_id: str,
+    format: str = Query("zip", description="下载格式: zip, tar, individual")
+):
+    """下载数据集"""
+    try:
+        # 模拟数据集路径
+        dataset_path = f"data/datasets/dataset_{dataset_id}"
+        
+        if not os.path.exists(dataset_path):
+            raise HTTPException(status_code=404, detail="数据集不存在")
+        
+        if format == "zip":
+            # 创建ZIP文件
+            zip_path = f"data/temp/dataset_{dataset_id}.zip"
+            os.makedirs(os.path.dirname(zip_path), exist_ok=True)
+            
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for root, dirs, files in os.walk(dataset_path):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.relpath(file_path, dataset_path)
+                        zipf.write(file_path, arcname)
+            
+            return FileResponse(
+                path=zip_path,
+                filename=f"dataset_{dataset_id}.zip",
+                media_type="application/zip"
+            )
+        
+        elif format == "individual":
+            # 返回文件列表，让前端逐个下载
+            files = []
+            for root, dirs, filenames in os.walk(dataset_path):
+                for filename in filenames:
+                    file_path = os.path.join(root, filename)
+                    relative_path = os.path.relpath(file_path, dataset_path)
+                    files.append({
+                        "name": filename,
+                        "path": relative_path,
+                        "size": os.path.getsize(file_path),
+                        "download_url": f"/api/v1/mlops/datasets/{dataset_id}/files/{relative_path}"
+                    })
+            
+            return {"files": files}
+        
+        else:
+            raise HTTPException(status_code=400, detail="不支持的下载格式")
+            
+    except Exception as e:
+        logger.error(f"数据集下载失败: {e}")
+        raise HTTPException(status_code=500, detail="数据集下载失败")
+
+
+@router.get("/datasets/{dataset_id}/files/{file_path:path}")
+async def download_dataset_file(dataset_id: str, file_path: str):
+    """下载数据集中的单个文件"""
+    try:
+        full_path = os.path.join(f"data/datasets/dataset_{dataset_id}", file_path)
+        
+        if not os.path.exists(full_path):
+            raise HTTPException(status_code=404, detail="文件不存在")
+        
+        return FileResponse(
+            path=full_path,
+            filename=os.path.basename(file_path)
+        )
+        
+    except Exception as e:
+        logger.error(f"文件下载失败: {e}")
+        raise HTTPException(status_code=500, detail="文件下载失败")
 
 
 # 模型部署管理API

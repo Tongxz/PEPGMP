@@ -186,6 +186,121 @@
         </n-space>
       </template>
     </n-modal>
+
+    <!-- 工作流详情对话框 -->
+    <n-modal v-model:show="showDetailDialog" preset="dialog" title="工作流详情" style="width: 1000px;">
+      <div v-if="selectedWorkflow" class="workflow-detail-content">
+        <!-- 基本信息 -->
+        <n-card title="基本信息" size="small" style="margin-bottom: 16px;">
+          <n-descriptions :column="2" size="small">
+            <n-descriptions-item label="工作流名称">
+              {{ selectedWorkflow.name }}
+            </n-descriptions-item>
+            <n-descriptions-item label="类型">
+              <n-tag :type="getWorkflowTypeColor(selectedWorkflow.type)" size="small">
+                {{ getWorkflowTypeText(selectedWorkflow.type) }}
+              </n-tag>
+            </n-descriptions-item>
+            <n-descriptions-item label="状态">
+              <n-tag :type="getWorkflowStatusType(selectedWorkflow.status)" size="small">
+                {{ getWorkflowStatusText(selectedWorkflow.status) }}
+              </n-tag>
+            </n-descriptions-item>
+            <n-descriptions-item label="触发器">
+              {{ getTriggerText(selectedWorkflow.trigger) }}
+            </n-descriptions-item>
+            <n-descriptions-item v-if="selectedWorkflow.schedule" label="调度配置">
+              <n-code :code="selectedWorkflow.schedule" language="cron" />
+            </n-descriptions-item>
+            <n-descriptions-item label="运行次数">
+              {{ selectedWorkflow.run_count }}
+            </n-descriptions-item>
+            <n-descriptions-item label="成功率">
+              <n-tag :type="selectedWorkflow.success_rate > 90 ? 'success' : selectedWorkflow.success_rate > 70 ? 'warning' : 'error'" size="small">
+                {{ selectedWorkflow.success_rate }}%
+              </n-tag>
+            </n-descriptions-item>
+            <n-descriptions-item label="平均耗时">
+              {{ selectedWorkflow.avg_duration }}分钟
+            </n-descriptions-item>
+            <n-descriptions-item label="创建时间">
+              {{ formatTime(selectedWorkflow.created_at) }}
+            </n-descriptions-item>
+            <n-descriptions-item label="最后运行">
+              {{ selectedWorkflow.last_run ? formatTime(selectedWorkflow.last_run) : '从未运行' }}
+            </n-descriptions-item>
+            <n-descriptions-item label="下次运行">
+              {{ selectedWorkflow.next_run ? formatTime(selectedWorkflow.next_run) : '无计划' }}
+            </n-descriptions-item>
+          </n-descriptions>
+          <n-divider />
+          <n-text depth="3" style="font-size: 12px;">描述</n-text>
+          <n-p style="margin-top: 8px;">{{ selectedWorkflow.description || '暂无描述' }}</n-p>
+        </n-card>
+
+        <!-- 工作流步骤 -->
+        <n-card title="工作流步骤" size="small" style="margin-bottom: 16px;">
+          <n-steps :current="getCurrentStep(selectedWorkflow)" size="small">
+            <n-step
+              v-for="(step, index) in selectedWorkflow.steps"
+              :key="index"
+              :title="step.name"
+              :status="getStepStatus(selectedWorkflow, index)"
+            >
+              <template #description>
+                <n-text depth="3" style="font-size: 12px;">{{ step.description }}</n-text>
+                <n-tag :type="getStepTypeColor(step.type)" size="tiny" style="margin-left: 8px;">
+                  {{ getStepTypeText(step.type) }}
+                </n-tag>
+              </template>
+            </n-step>
+          </n-steps>
+        </n-card>
+
+        <!-- 运行历史 -->
+        <n-card title="运行历史" size="small" style="margin-bottom: 16px;">
+          <n-list v-if="selectedWorkflow.recent_runs.length > 0">
+            <n-list-item v-for="run in selectedWorkflow.recent_runs" :key="run.id">
+              <n-card size="small">
+                <n-space justify="space-between">
+                  <n-space>
+                    <n-text>{{ formatTime(run.started_at) }}</n-text>
+                    <n-tag :type="getRunStatusType(run.status)" size="small">
+                      {{ getRunStatusText(run.status) }}
+                    </n-tag>
+                    <n-text depth="3">耗时: {{ run.duration }}分钟</n-text>
+                  </n-space>
+                  <n-button size="tiny" @click="viewRunDetails(run)">详情</n-button>
+                </n-space>
+                <div v-if="run.error_message" style="margin-top: 8px;">
+                  <n-alert type="error" :title="run.error_message" :bordered="false" />
+                </div>
+              </n-card>
+            </n-list-item>
+          </n-list>
+          <n-empty v-else description="暂无运行记录" />
+        </n-card>
+
+        <!-- 配置信息 -->
+        <n-card title="配置信息" size="small">
+          <n-descriptions :column="1" size="small">
+            <n-descriptions-item label="工作流ID">
+              <n-code :code="selectedWorkflow.id" />
+            </n-descriptions-item>
+            <n-descriptions-item label="步骤配置">
+              <n-code :code="JSON.stringify(selectedWorkflow.steps, null, 2)" language="json" />
+            </n-descriptions-item>
+          </n-descriptions>
+        </n-card>
+      </div>
+      <template #action>
+        <n-space>
+          <n-button @click="showDetailDialog = false">关闭</n-button>
+          <n-button type="primary" @click="runWorkflow(selectedWorkflow)">运行</n-button>
+          <n-button type="warning" @click="editWorkflow(selectedWorkflow)">编辑</n-button>
+        </n-space>
+      </template>
+    </n-modal>
   </n-card>
 </template>
 
@@ -231,6 +346,8 @@ const message = useMessage()
 const workflows = ref<Workflow[]>([])
 const loading = ref(false)
 const showCreateDialog = ref(false)
+const showDetailDialog = ref(false)
+const selectedWorkflow = ref<Workflow | null>(null)
 const creating = ref(false)
 
 const workflowForm = ref({
@@ -477,9 +594,8 @@ function formatTime(timeString: string) {
 
 // 查看工作流
 function viewWorkflow(workflow: Workflow) {
-  console.log('查看工作流:', workflow)
-  message.info(`查看工作流: ${workflow.name}`)
-  // TODO: 实现工作流详情查看对话框
+  selectedWorkflow.value = workflow
+  showDetailDialog.value = true
 }
 
 // 编辑工作流
@@ -582,6 +698,50 @@ async function submitWorkflow() {
   }
 }
 
+// 获取工作流类型颜色
+function getWorkflowTypeColor(type: string) {
+  const typeMap = {
+    training: 'success',
+    evaluation: 'info',
+    deployment: 'warning',
+    data_processing: 'default'
+  }
+  return typeMap[type] || 'default'
+}
+
+// 获取步骤类型颜色
+function getStepTypeColor(type: string) {
+  const typeMap = {
+    data_processing: 'info',
+    model_training: 'success',
+    model_evaluation: 'warning',
+    model_deployment: 'error',
+    data_validation: 'default',
+    notification: 'info'
+  }
+  return typeMap[type] || 'default'
+}
+
+// 获取步骤类型文本
+function getStepTypeText(type: string) {
+  const typeMap = {
+    data_processing: '数据处理',
+    model_training: '模型训练',
+    model_evaluation: '模型评估',
+    model_deployment: '模型部署',
+    data_validation: '数据验证',
+    notification: '通知'
+  }
+  return typeMap[type] || type
+}
+
+// 查看运行详情
+function viewRunDetails(run: WorkflowRun) {
+  console.log('查看运行详情:', run)
+  message.info(`查看运行详情: ${run.id}`)
+  // TODO: 实现运行详情查看
+}
+
 onMounted(() => {
   fetchWorkflows()
 })
@@ -608,5 +768,10 @@ onMounted(() => {
 
 .workflow-step-config {
   margin-bottom: 12px;
+}
+
+.workflow-detail-content {
+  max-height: 70vh;
+  overflow-y: auto;
 }
 </style>

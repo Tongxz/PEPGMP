@@ -169,6 +169,110 @@
         </n-space>
       </template>
     </n-modal>
+
+    <!-- 部署详情对话框 -->
+    <n-modal v-model:show="showDetailDialog" preset="dialog" title="部署详情" style="width: 900px;">
+      <div v-if="selectedDeployment" class="deployment-detail-content">
+        <!-- 基本信息 -->
+        <n-card title="基本信息" size="small" style="margin-bottom: 16px;">
+          <n-descriptions :column="2" size="small">
+            <n-descriptions-item label="部署名称">
+              {{ selectedDeployment.name }}
+            </n-descriptions-item>
+            <n-descriptions-item label="模型版本">
+              {{ selectedDeployment.model_version }}
+            </n-descriptions-item>
+            <n-descriptions-item label="环境">
+              <n-tag :type="getEnvironmentType(selectedDeployment.environment)" size="small">
+                {{ getEnvironmentText(selectedDeployment.environment) }}
+              </n-tag>
+            </n-descriptions-item>
+            <n-descriptions-item label="状态">
+              <n-tag :type="getDeploymentStatusType(selectedDeployment.status)" size="small">
+                {{ getDeploymentStatusText(selectedDeployment.status) }}
+              </n-tag>
+            </n-descriptions-item>
+            <n-descriptions-item label="实例数">
+              {{ selectedDeployment.replicas }}
+            </n-descriptions-item>
+            <n-descriptions-item label="部署时间">
+              {{ formatTime(selectedDeployment.deployed_at) }}
+            </n-descriptions-item>
+            <n-descriptions-item label="更新时间">
+              {{ formatTime(selectedDeployment.updated_at) }}
+            </n-descriptions-item>
+            <n-descriptions-item label="总请求数">
+              {{ selectedDeployment.total_requests.toLocaleString() }}
+            </n-descriptions-item>
+          </n-descriptions>
+        </n-card>
+
+        <!-- 资源使用情况 -->
+        <n-card title="资源使用情况" size="small" style="margin-bottom: 16px;">
+          <n-grid :cols="3" :x-gap="16" :y-gap="16">
+            <n-gi>
+              <n-statistic label="CPU使用率">
+                <n-progress type="line" :percentage="selectedDeployment.cpu_usage" :indicator-placement="'inside'" />
+              </n-statistic>
+            </n-gi>
+            <n-gi>
+              <n-statistic label="内存使用率">
+                <n-progress type="line" :percentage="selectedDeployment.memory_usage" :indicator-placement="'inside'" />
+              </n-statistic>
+            </n-gi>
+            <n-gi>
+              <n-statistic label="GPU使用率">
+                <n-progress v-if="selectedDeployment.gpu_usage !== undefined" type="line" :percentage="selectedDeployment.gpu_usage" :indicator-placement="'inside'" />
+                <span v-else>N/A</span>
+              </n-statistic>
+            </n-gi>
+          </n-grid>
+        </n-card>
+
+        <!-- 性能指标 -->
+        <n-card title="性能指标" size="small" style="margin-bottom: 16px;">
+          <n-grid :cols="4" :x-gap="16" :y-gap="16">
+            <n-gi>
+              <n-statistic label="请求数/分钟" :value="selectedDeployment.requests_per_minute" />
+            </n-gi>
+            <n-gi>
+              <n-statistic label="平均响应时间" :value="selectedDeployment.avg_response_time" suffix="ms" />
+            </n-gi>
+            <n-gi>
+              <n-statistic label="错误率" :value="selectedDeployment.error_rate" suffix="%" />
+            </n-gi>
+            <n-gi>
+              <n-statistic label="成功率" :value="selectedDeployment.success_rate" suffix="%" />
+            </n-gi>
+          </n-grid>
+        </n-card>
+
+        <!-- 监控图表 -->
+        <n-card title="监控图表" size="small" style="margin-bottom: 16px;">
+          <n-empty description="监控图表功能开发中">
+            <template #extra>
+              <n-button size="small" @click="loadMonitoringData">加载监控数据</n-button>
+            </template>
+          </n-empty>
+        </n-card>
+
+        <!-- 日志信息 -->
+        <n-card title="日志信息" size="small">
+          <n-empty description="日志功能开发中">
+            <template #extra>
+              <n-button size="small" @click="loadLogs">加载日志</n-button>
+            </template>
+          </n-empty>
+        </n-card>
+      </div>
+      <template #action>
+        <n-space>
+          <n-button @click="showDetailDialog = false">关闭</n-button>
+          <n-button type="primary" @click="scaleDeployment(selectedDeployment)">扩缩容</n-button>
+          <n-button type="warning" @click="updateDeployment(selectedDeployment)">更新</n-button>
+        </n-space>
+      </template>
+    </n-modal>
   </n-card>
 </template>
 
@@ -200,6 +304,8 @@ const message = useMessage()
 const deployments = ref<Deployment[]>([])
 const loading = ref(false)
 const showDeployDialog = ref(false)
+const showDetailDialog = ref(false)
+const selectedDeployment = ref<Deployment | null>(null)
 const deploying = ref(false)
 
 const deployForm = ref({
@@ -358,9 +464,8 @@ function formatTime(timeString: string) {
 
 // 查看部署详情
 function viewDeployment(deployment: Deployment) {
-  console.log('查看部署详情:', deployment)
-  message.info(`查看部署详情: ${deployment.name}`)
-  // TODO: 实现部署详情查看对话框
+  selectedDeployment.value = deployment
+  showDetailDialog.value = true
 }
 
 // 扩缩容
@@ -450,6 +555,38 @@ async function submitDeployment() {
   }
 }
 
+// 获取环境类型
+function getEnvironmentType(environment: string) {
+  const envMap = {
+    production: 'error',
+    staging: 'warning',
+    development: 'info'
+  }
+  return envMap[environment] || 'default'
+}
+
+// 获取环境文本
+function getEnvironmentText(environment: string) {
+  const envMap = {
+    production: '生产环境',
+    staging: '测试环境',
+    development: '开发环境'
+  }
+  return envMap[environment] || environment
+}
+
+// 加载监控数据
+function loadMonitoringData() {
+  message.info('正在加载监控数据...')
+  // TODO: 实现监控数据加载
+}
+
+// 加载日志
+function loadLogs() {
+  message.info('正在加载日志...')
+  // TODO: 实现日志加载
+}
+
 onMounted(() => {
   fetchDeployments()
 })
@@ -465,5 +602,10 @@ onMounted(() => {
   padding: 8px;
   background-color: var(--n-color-target);
   border-radius: 4px;
+}
+
+.deployment-detail-content {
+  max-height: 70vh;
+  overflow-y: auto;
 }
 </style>

@@ -120,6 +120,183 @@
         </n-upload-dragger>
       </n-upload>
     </n-modal>
+
+    <!-- 数据集详情对话框 -->
+    <n-modal v-model:show="showDetailDialog" preset="dialog" title="数据集详情" style="width: 800px;">
+      <div v-if="selectedDataset" class="dataset-detail-content">
+        <!-- 基本信息 -->
+        <n-card title="基本信息" size="small" style="margin-bottom: 16px;">
+          <n-descriptions :column="2" size="small">
+            <n-descriptions-item label="数据集名称">
+              {{ selectedDataset.name }}
+            </n-descriptions-item>
+            <n-descriptions-item label="版本">
+              v{{ selectedDataset.version }}
+            </n-descriptions-item>
+            <n-descriptions-item label="状态">
+              <n-tag :type="getDatasetStatusType(selectedDataset.status)" size="small">
+                {{ selectedDataset.status }}
+              </n-tag>
+            </n-descriptions-item>
+            <n-descriptions-item label="大小">
+              {{ formatFileSize(selectedDataset.size) }}
+            </n-descriptions-item>
+            <n-descriptions-item label="样本数">
+              {{ selectedDataset.sample_count?.toLocaleString() || 'N/A' }}
+            </n-descriptions-item>
+            <n-descriptions-item label="标签数">
+              {{ selectedDataset.label_count || 0 }}
+            </n-descriptions-item>
+            <n-descriptions-item label="创建时间">
+              {{ formatTime(selectedDataset.created_at) }}
+            </n-descriptions-item>
+            <n-descriptions-item label="更新时间">
+              {{ formatTime(selectedDataset.updated_at) }}
+            </n-descriptions-item>
+          </n-descriptions>
+          <n-divider />
+          <n-text depth="3" style="font-size: 12px;">描述</n-text>
+          <n-p style="margin-top: 8px;">{{ selectedDataset.description || '暂无描述' }}</n-p>
+          <n-divider v-if="selectedDataset.tags && selectedDataset.tags.length > 0" />
+          <div v-if="selectedDataset.tags && selectedDataset.tags.length > 0">
+            <n-text depth="3" style="font-size: 12px;">标签</n-text>
+            <n-space style="margin-top: 8px;">
+              <n-tag v-for="tag in selectedDataset.tags" :key="tag" type="info" size="small">
+                {{ tag }}
+              </n-tag>
+            </n-space>
+          </div>
+        </n-card>
+
+        <!-- 数据质量报告 -->
+        <n-card v-if="selectedDataset.quality_metrics" title="数据质量报告" size="small" style="margin-bottom: 16px;">
+          <n-grid :cols="3" :x-gap="16" :y-gap="16">
+            <n-gi>
+              <n-statistic label="完整性" :value="selectedDataset.quality_metrics.completeness" suffix="%" />
+            </n-gi>
+            <n-gi>
+              <n-statistic label="准确性" :value="selectedDataset.quality_metrics.accuracy" suffix="%" />
+            </n-gi>
+            <n-gi>
+              <n-statistic label="一致性" :value="selectedDataset.quality_metrics.consistency" suffix="%" />
+            </n-gi>
+          </n-grid>
+          <n-divider />
+          <n-text depth="3" style="font-size: 12px;">质量评分</n-text>
+          <div style="margin-top: 8px;">
+            <n-rate v-if="selectedDataset.quality_score" :value="selectedDataset.quality_score / 20" readonly size="large" />
+            <n-text v-else depth="3">未评估</n-text>
+          </div>
+        </n-card>
+
+        <!-- 样本预览 -->
+        <n-card title="样本预览" size="small" style="margin-bottom: 16px;">
+          <n-empty description="暂无样本预览">
+            <template #extra>
+              <n-button size="small" @click="loadSamplePreview">加载样本预览</n-button>
+            </template>
+          </n-empty>
+        </n-card>
+
+        <!-- 统计信息 -->
+        <n-card title="统计信息" size="small">
+          <n-grid :cols="2" :x-gap="16" :y-gap="16">
+            <n-gi>
+              <n-statistic label="总文件数" :value="getFileCount(selectedDataset)" />
+            </n-gi>
+            <n-gi>
+              <n-statistic label="平均文件大小" :value="formatFileSize(getAverageFileSize(selectedDataset))" />
+            </n-gi>
+            <n-gi>
+              <n-statistic label="数据完整性" :value="getDataIntegrity(selectedDataset)" suffix="%" />
+            </n-gi>
+            <n-gi>
+              <n-statistic label="标注覆盖率" :value="getAnnotationCoverage(selectedDataset)" suffix="%" />
+            </n-gi>
+          </n-grid>
+        </n-card>
+      </div>
+      <template #action>
+        <n-space>
+          <n-button @click="showDetailDialog = false">关闭</n-button>
+          <n-button type="primary" @click="downloadDataset(selectedDataset)">下载</n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
+    <!-- 数据集对比对话框 -->
+    <n-modal v-model:show="showCompareDialog" preset="dialog" title="数据集对比" style="width: 1000px;">
+      <div v-if="compareDatasets.length === 2" class="dataset-compare-content">
+        <n-grid :cols="2" :x-gap="16">
+          <n-gi>
+            <n-card :title="compareDatasets[0].name" size="small">
+              <n-descriptions :column="1" size="small">
+                <n-descriptions-item label="版本">v{{ compareDatasets[0].version }}</n-descriptions-item>
+                <n-descriptions-item label="大小">{{ formatFileSize(compareDatasets[0].size) }}</n-descriptions-item>
+                <n-descriptions-item label="样本数">{{ compareDatasets[0].sample_count?.toLocaleString() || 'N/A' }}</n-descriptions-item>
+                <n-descriptions-item label="标签数">{{ compareDatasets[0].label_count || 0 }}</n-descriptions-item>
+                <n-descriptions-item label="质量评分">
+                  <n-rate v-if="compareDatasets[0].quality_score" :value="compareDatasets[0].quality_score / 20" readonly size="small" />
+                  <span v-else>未评估</span>
+                </n-descriptions-item>
+              </n-descriptions>
+            </n-card>
+          </n-gi>
+          <n-gi>
+            <n-card :title="compareDatasets[1].name" size="small">
+              <n-descriptions :column="1" size="small">
+                <n-descriptions-item label="版本">v{{ compareDatasets[1].version }}</n-descriptions-item>
+                <n-descriptions-item label="大小">{{ formatFileSize(compareDatasets[1].size) }}</n-descriptions-item>
+                <n-descriptions-item label="样本数">{{ compareDatasets[1].sample_count?.toLocaleString() || 'N/A' }}</n-descriptions-item>
+                <n-descriptions-item label="标签数">{{ compareDatasets[1].label_count || 0 }}</n-descriptions-item>
+                <n-descriptions-item label="质量评分">
+                  <n-rate v-if="compareDatasets[1].quality_score" :value="compareDatasets[1].quality_score / 20" readonly size="small" />
+                  <span v-else>未评估</span>
+                </n-descriptions-item>
+              </n-descriptions>
+            </n-card>
+          </n-gi>
+        </n-grid>
+        
+        <n-divider />
+        
+        <!-- 对比分析 -->
+        <n-card title="对比分析" size="small">
+          <n-grid :cols="3" :x-gap="16" :y-gap="16">
+            <n-gi>
+              <n-statistic 
+                label="大小差异" 
+                :value="getSizeDifference(compareDatasets[0], compareDatasets[1])" 
+                suffix="%"
+                :value-style="{ color: getSizeDifference(compareDatasets[0], compareDatasets[1]) > 0 ? '#18a058' : '#d03050' }"
+              />
+            </n-gi>
+            <n-gi>
+              <n-statistic 
+                label="样本数差异" 
+                :value="getSampleDifference(compareDatasets[0], compareDatasets[1])" 
+                suffix="%"
+                :value-style="{ color: getSampleDifference(compareDatasets[0], compareDatasets[1]) > 0 ? '#18a058' : '#d03050' }"
+              />
+            </n-gi>
+            <n-gi>
+              <n-statistic 
+                label="质量差异" 
+                :value="getQualityDifference(compareDatasets[0], compareDatasets[1])" 
+                suffix="%"
+                :value-style="{ color: getQualityDifference(compareDatasets[0], compareDatasets[1]) > 0 ? '#18a058' : '#d03050' }"
+              />
+            </n-gi>
+          </n-grid>
+        </n-card>
+      </div>
+      <template #action>
+        <n-space>
+          <n-button @click="showCompareDialog = false">关闭</n-button>
+          <n-button type="primary" @click="startNewCompare">开始新对比</n-button>
+        </n-space>
+      </template>
+    </n-modal>
   </n-card>
 </template>
 
@@ -152,6 +329,10 @@ const message = useMessage()
 const datasets = ref<Dataset[]>([])
 const loading = ref(false)
 const showUploadDialog = ref(false)
+const showDetailDialog = ref(false)
+const showCompareDialog = ref(false)
+const selectedDataset = ref<Dataset | null>(null)
+const compareDatasets = ref<Dataset[]>([])
 const uploadRef = ref()
 const fileList = ref([])
 
@@ -292,17 +473,27 @@ function formatTime(timeString: string) {
 
 // 查看数据集
 function viewDataset(dataset: Dataset) {
-  console.log('查看数据集:', dataset)
-  // 显示数据集详情对话框
-  message.info(`查看数据集: ${dataset.name}`)
-  // TODO: 实现数据集详情查看对话框
+  selectedDataset.value = dataset
+  showDetailDialog.value = true
 }
 
 // 对比数据集
 function compareDataset(dataset: Dataset) {
-  console.log('对比数据集:', dataset)
-  message.info(`对比数据集: ${dataset.name}`)
-  // TODO: 实现数据集对比功能
+  if (compareDatasets.value.length === 0) {
+    compareDatasets.value.push(dataset)
+    message.info(`已选择 ${dataset.name}，请选择第二个数据集进行对比`)
+  } else if (compareDatasets.value.length === 1) {
+    if (compareDatasets.value[0].id === dataset.id) {
+      message.warning('不能选择相同的数据集进行对比')
+      return
+    }
+    compareDatasets.value.push(dataset)
+    showCompareDialog.value = true
+  } else {
+    // 重新开始对比
+    compareDatasets.value = [dataset]
+    message.info(`已选择 ${dataset.name}，请选择第二个数据集进行对比`)
+  }
 }
 
 // 下载数据集
@@ -310,10 +501,28 @@ async function downloadDataset(dataset: Dataset) {
   console.log('下载数据集:', dataset)
   try {
     message.loading('正在准备下载...')
-    // 模拟下载过程
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    message.success(`数据集 ${dataset.name} 下载完成`)
+    
+    // 调用下载API
+    const response = await fetch(`/api/v1/mlops/datasets/${dataset.id}/download?format=zip`)
+    
+    if (response.ok) {
+      // 创建下载链接
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${dataset.name}_v${dataset.version}.zip`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      
+      message.success(`数据集 ${dataset.name} 下载完成`)
+    } else {
+      throw new Error('下载失败')
+    }
   } catch (error) {
+    console.error('下载失败:', error)
     message.error('下载失败')
   }
 }
@@ -359,6 +568,63 @@ function onUploadError(data: any) {
   console.error('上传失败:', data)
 }
 
+// 加载样本预览
+function loadSamplePreview() {
+  message.info('正在加载样本预览...')
+  // TODO: 实现样本预览加载
+}
+
+// 获取文件数量
+function getFileCount(dataset: Dataset) {
+  // 模拟计算，实际应该从API获取
+  return Math.floor(dataset.sample_count || 0 / 10) || 0
+}
+
+// 获取平均文件大小
+function getAverageFileSize(dataset: Dataset) {
+  const fileCount = getFileCount(dataset)
+  return fileCount > 0 ? dataset.size / fileCount : 0
+}
+
+// 获取数据完整性
+function getDataIntegrity(dataset: Dataset) {
+  return dataset.quality_metrics?.completeness || 0
+}
+
+// 获取标注覆盖率
+function getAnnotationCoverage(dataset: Dataset) {
+  return dataset.quality_metrics?.accuracy || 0
+}
+
+// 获取大小差异百分比
+function getSizeDifference(dataset1: Dataset, dataset2: Dataset) {
+  if (dataset2.size === 0) return 0
+  return Math.round(((dataset1.size - dataset2.size) / dataset2.size) * 100)
+}
+
+// 获取样本数差异百分比
+function getSampleDifference(dataset1: Dataset, dataset2: Dataset) {
+  const sample1 = dataset1.sample_count || 0
+  const sample2 = dataset2.sample_count || 0
+  if (sample2 === 0) return 0
+  return Math.round(((sample1 - sample2) / sample2) * 100)
+}
+
+// 获取质量差异百分比
+function getQualityDifference(dataset1: Dataset, dataset2: Dataset) {
+  const quality1 = dataset1.quality_score || 0
+  const quality2 = dataset2.quality_score || 0
+  if (quality2 === 0) return 0
+  return Math.round(((quality1 - quality2) / quality2) * 100)
+}
+
+// 开始新对比
+function startNewCompare() {
+  compareDatasets.value = []
+  showCompareDialog.value = false
+  message.info('已重置对比选择，请重新选择数据集')
+}
+
 onMounted(() => {
   fetchDatasets()
 })
@@ -374,5 +640,15 @@ onMounted(() => {
   padding: 8px;
   background-color: var(--n-color-target);
   border-radius: 4px;
+}
+
+.dataset-detail-content {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.dataset-compare-content {
+  max-height: 70vh;
+  overflow-y: auto;
 }
 </style>
