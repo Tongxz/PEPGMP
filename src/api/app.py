@@ -82,8 +82,10 @@ async def lifespan(app: FastAPI):
     # 初始化数据库服务
     try:
         from src.services.database_service import close_db_service, get_db_service
+        from src.database.connection import init_database
 
         await get_db_service()
+        await init_database()
         logger.info("数据库服务已初始化")
     except Exception as e:
         logger.warning(f"数据库服务初始化失败 (非关键): {e}")

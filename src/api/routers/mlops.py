@@ -10,9 +10,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.database.connection import get_async_session
+from src.database.dao import DatasetDAO, DeploymentDAO, WorkflowDAO, WorkflowRunDAO
+from src.deployment.docker_manager import DockerManager
+from src.workflow.workflow_engine import workflow_engine
 
 logger = logging.getLogger(__name__)
 
@@ -79,60 +85,12 @@ async def get_datasets(
     status: Optional[str] = Query(None, description="数据集状态筛选"),
     limit: int = Query(100, description="返回数量限制"),
     offset: int = Query(0, description="偏移量"),
+    session: AsyncSession = Depends(get_async_session),
 ):
     """获取数据集列表"""
     try:
-        # 这里应该从数据库或文件系统获取实际数据
-        # 目前返回模拟数据
-        datasets = [
-            {
-                "id": "1",
-                "name": "handwash_detection_v1",
-                "version": "1.0.0",
-                "status": "active",
-                "size": 1024 * 1024 * 500,  # 500MB
-                "sample_count": 1500,
-                "label_count": 3,
-                "quality_score": 85.0,
-                "quality_metrics": {
-                    "completeness": 92.0,
-                    "accuracy": 88.0,
-                    "consistency": 85.0,
-                },
-                "created_at": "2024-01-15T10:30:00Z",
-                "updated_at": "2024-01-15T10:30:00Z",
-                "description": "洗手行为检测数据集",
-                "tags": ["handwash", "detection", "behavior"],
-            },
-            {
-                "id": "2",
-                "name": "hairnet_detection_v2",
-                "version": "2.1.0",
-                "status": "active",
-                "size": 1024 * 1024 * 300,  # 300MB
-                "sample_count": 800,
-                "label_count": 2,
-                "quality_score": 92.0,
-                "quality_metrics": {
-                    "completeness": 95.0,
-                    "accuracy": 90.0,
-                    "consistency": 92.0,
-                },
-                "created_at": "2024-01-10T14:20:00Z",
-                "updated_at": "2024-01-12T16:45:00Z",
-                "description": "安全帽检测数据集",
-                "tags": ["hairnet", "detection", "safety"],
-            },
-        ]
-
-        # 应用状态筛选
-        if status:
-            datasets = [d for d in datasets if d["status"] == status]
-
-        # 应用分页
-        datasets = datasets[offset : offset + limit]
-
-        return datasets
+        datasets = await DatasetDAO.get_all(session, status=status, limit=limit, offset=offset)
+        return [dataset.to_dict() for dataset in datasets]
     except Exception as e:
         logger.error(f"获取数据集列表失败: {e}")
         raise HTTPException(status_code=500, detail="获取数据集列表失败")
@@ -144,6 +102,7 @@ async def upload_dataset(
     dataset_name: str = Form(...),
     dataset_type: str = Form("detection"),
     description: str = Form(""),
+    session: AsyncSession = Depends(get_async_session),
 ):
     """上传数据集"""
     try:
@@ -162,13 +121,27 @@ async def upload_dataset(
                 total_size += len(content)
                 uploaded_files.append(file.filename)
 
-        # 这里应该保存数据集元数据到数据库
-        logger.info(
-            f"数据集上传成功: {dataset_name}, 文件数: {len(uploaded_files)}, 总大小: {total_size}"
-        )
+        # 生成数据集ID
+        dataset_id = f"dataset_{int(datetime.utcnow().timestamp())}"
+        
+        # 保存数据集元数据到数据库
+        dataset_data = {
+            "id": dataset_id,
+            "name": dataset_name,
+            "version": "1.0.0",
+            "status": "active",
+            "size": total_size,
+            "description": description,
+            "file_path": dataset_dir,
+            "tags": [dataset_type]
+        }
+        
+        dataset = await DatasetDAO.create(session, dataset_data)
+        logger.info(f"数据集上传成功: {dataset_name}, 文件数: {len(uploaded_files)}, 总大小: {total_size}")
 
         return {
             "message": "数据集上传成功",
+            "dataset_id": dataset.id,
             "dataset_name": dataset_name,
             "uploaded_files": uploaded_files,
             "total_size": total_size,
@@ -179,11 +152,15 @@ async def upload_dataset(
 
 
 @router.get("/datasets/{dataset_id}")
-async def get_dataset(dataset_id: str):
+async def get_dataset(dataset_id: str, session: AsyncSession = Depends(get_async_session)):
     """获取数据集详情"""
     try:
-        # 这里应该从数据库获取实际数据
-        return {"id": dataset_id, "name": "示例数据集", "status": "active"}
+        dataset = await DatasetDAO.get_by_id(session, dataset_id)
+        if not dataset:
+            raise HTTPException(status_code=404, detail="数据集不存在")
+        return dataset.to_dict()
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取数据集详情失败: {e}")
         raise HTTPException(status_code=500, detail="获取数据集详情失败")
@@ -277,97 +254,161 @@ async def download_dataset_file(dataset_id: str, file_path: str):
 
 # 模型部署管理API
 @router.get("/deployments", response_model=List[DeploymentInfo])
-async def get_deployments():
+async def get_deployments(session: AsyncSession = Depends(get_async_session)):
     """获取部署列表"""
     try:
-        # 这里应该从Kubernetes或Docker获取实际部署状态
-        deployments = [
-            {
-                "id": "1",
-                "name": "human-detection-prod",
-                "model_version": "yolo_human_v1.0",
-                "environment": "production",
-                "status": "running",
-                "replicas": 3,
-                "cpu_usage": 65.0,
-                "memory_usage": 78.0,
-                "gpu_usage": 45.0,
-                "requests_per_minute": 1200,
-                "avg_response_time": 45.0,
-                "error_rate": 0.5,
-                "total_requests": 172800,
-                "success_rate": 99.5,
-                "deployed_at": "2024-01-15T10:30:00Z",
-                "updated_at": "2024-01-20T14:20:00Z",
-            },
-            {
-                "id": "2",
-                "name": "hairnet-detection-staging",
-                "model_version": "yolo_hairnet_v2.1",
-                "environment": "staging",
-                "status": "running",
-                "replicas": 1,
-                "cpu_usage": 45.0,
-                "memory_usage": 60.0,
-                "gpu_usage": 30.0,
-                "requests_per_minute": 300,
-                "avg_response_time": 35.0,
-                "error_rate": 1.2,
-                "total_requests": 43200,
-                "success_rate": 98.8,
-                "deployed_at": "2024-01-18T09:15:00Z",
-                "updated_at": "2024-01-19T16:30:00Z",
-            },
-        ]
-        return deployments
+        deployments = await DeploymentDAO.get_all(session)
+        return [deployment.to_dict() for deployment in deployments]
     except Exception as e:
         logger.error(f"获取部署列表失败: {e}")
         raise HTTPException(status_code=500, detail="获取部署列表失败")
 
 
 @router.post("/deployments")
-async def create_deployment(deployment: Dict[str, Any]):
+async def create_deployment(deployment: Dict[str, Any], session: AsyncSession = Depends(get_async_session)):
     """创建部署"""
     try:
-        # 这里应该调用Kubernetes或Docker API创建实际部署
-        logger.info(f"创建部署: {deployment}")
-        return {"message": "部署创建成功", "deployment_id": "new_deployment_id"}
+        # 生成部署ID
+        deployment_id = f"deployment_{int(datetime.utcnow().timestamp())}"
+        deployment["id"] = deployment_id
+        
+        # 设置默认值
+        deployment.setdefault("image", "pyt-api:latest")
+        deployment.setdefault("environment", "production")
+        deployment.setdefault("replicas", 1)
+        deployment.setdefault("status", "deploying")
+        
+        # 保存到数据库
+        deployment_obj = await DeploymentDAO.create(session, deployment)
+        logger.info(f"数据库记录创建成功: {deployment_obj.id}")
+        
+        # 创建真实的Docker部署
+        docker_manager = DockerManager()
+        docker_result = await docker_manager.create_deployment(deployment)
+        
+        if docker_result["success"]:
+            # 更新数据库状态
+            await DeploymentDAO.update(session, deployment_id, {
+                "status": "running",
+                "deployment_config": docker_result
+            })
+            
+            logger.info(f"✅ 部署创建成功: {deployment_obj.name}")
+            return {
+                "message": "部署创建成功", 
+                "deployment_id": deployment_obj.id,
+                "status": "running",
+                "containers": docker_result.get("containers", [])
+            }
+        else:
+            # 更新数据库状态为失败
+            await DeploymentDAO.update(session, deployment_id, {
+                "status": "error",
+                "deployment_config": {"error": docker_result.get("error", "未知错误")}
+            })
+            
+            logger.error(f"❌ Docker部署创建失败: {docker_result.get('error')}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"部署创建失败: {docker_result.get('error', '未知错误')}"
+            )
+            
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"创建部署失败: {e}")
         raise HTTPException(status_code=500, detail="创建部署失败")
 
 
 @router.put("/deployments/{deployment_id}/scale")
-async def scale_deployment(deployment_id: str, replicas: int):
+async def scale_deployment(deployment_id: str, replicas: int, session: AsyncSession = Depends(get_async_session)):
     """扩缩容部署"""
     try:
-        # 这里应该调用Kubernetes API进行扩缩容
-        logger.info(f"扩缩容部署 {deployment_id} 到 {replicas} 个实例")
-        return {"message": "扩缩容成功"}
+        # 检查部署是否存在
+        deployment = await DeploymentDAO.get_by_id(session, deployment_id)
+        if not deployment:
+            raise HTTPException(status_code=404, detail="部署不存在")
+        
+        # 执行Docker扩缩容
+        docker_manager = DockerManager()
+        scale_result = await docker_manager.scale_deployment(deployment_id, replicas)
+        
+        if scale_result["success"]:
+            # 更新数据库
+            await DeploymentDAO.update(session, deployment_id, {
+                "replicas": replicas,
+                "updated_at": datetime.utcnow()
+            })
+            
+            logger.info(f"✅ 扩缩容成功: {deployment_id} -> {replicas} 副本")
+            return {
+                "message": "扩缩容成功",
+                "deployment_id": deployment_id,
+                "replicas": replicas
+            }
+        else:
+            logger.error(f"❌ 扩缩容失败: {scale_result.get('error')}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"扩缩容失败: {scale_result.get('error', '未知错误')}"
+            )
+            
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"扩缩容失败: {e}")
         raise HTTPException(status_code=500, detail="扩缩容失败")
 
 
 @router.put("/deployments/{deployment_id}")
-async def update_deployment(deployment_id: str, deployment: Dict[str, Any]):
+async def update_deployment(deployment_id: str, deployment: Dict[str, Any], session: AsyncSession = Depends(get_async_session)):
     """更新部署"""
     try:
-        # 这里应该调用Kubernetes或Docker API更新实际部署
+        # 更新数据库中的部署信息
+        updated_deployment = await DeploymentDAO.update(session, deployment_id, deployment)
+        if not updated_deployment:
+            raise HTTPException(status_code=404, detail="部署不存在")
+        
         logger.info(f"更新部署 {deployment_id}: {deployment}")
         return {"message": "部署更新成功", "deployment_id": deployment_id}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"更新部署失败: {e}")
         raise HTTPException(status_code=500, detail="更新部署失败")
 
 
 @router.delete("/deployments/{deployment_id}")
-async def delete_deployment(deployment_id: str):
+async def delete_deployment(deployment_id: str, session: AsyncSession = Depends(get_async_session)):
     """删除部署"""
     try:
-        # 这里应该调用Kubernetes或Docker API删除实际部署
-        logger.info(f"删除部署: {deployment_id}")
-        return {"message": "部署删除成功"}
+        # 检查部署是否存在
+        deployment = await DeploymentDAO.get_by_id(session, deployment_id)
+        if not deployment:
+            raise HTTPException(status_code=404, detail="部署不存在")
+        
+        # 执行Docker删除
+        docker_manager = DockerManager()
+        delete_result = await docker_manager.delete_deployment(deployment_id)
+        
+        if delete_result["success"]:
+            # 从数据库删除记录
+            await DeploymentDAO.delete(session, deployment_id)
+            
+            logger.info(f"✅ 部署删除成功: {deployment_id}")
+            return {
+                "message": "部署删除成功",
+                "deployment_id": deployment_id
+            }
+        else:
+            logger.error(f"❌ 部署删除失败: {delete_result.get('error')}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"部署删除失败: {delete_result.get('error', '未知错误')}"
+            )
+            
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"删除部署失败: {e}")
         raise HTTPException(status_code=500, detail="删除部署失败")
@@ -375,100 +416,153 @@ async def delete_deployment(deployment_id: str):
 
 # 工作流管理API
 @router.get("/workflows", response_model=List[WorkflowInfo])
-async def get_workflows():
+async def get_workflows(session: AsyncSession = Depends(get_async_session)):
     """获取工作流列表"""
     try:
-        # 这里应该从工作流引擎获取实际数据
-        workflows = [
-            {
-                "id": "1",
-                "name": "智能检测模型训练流水线",
-                "type": "training",
-                "status": "active",
-                "trigger": "schedule",
-                "schedule": "0 2 * * *",
-                "description": "每日自动训练智能检测模型",
-                "steps": [
-                    {
-                        "name": "数据预处理",
-                        "type": "data_processing",
-                        "description": "清洗和预处理检测数据",
-                    },
-                    {
-                        "name": "模型训练",
-                        "type": "model_training",
-                        "description": "训练YOLOv8检测模型",
-                    },
-                    {
-                        "name": "模型评估",
-                        "type": "model_evaluation",
-                        "description": "评估模型性能",
-                    },
-                    {
-                        "name": "模型部署",
-                        "type": "model_deployment",
-                        "description": "部署到生产环境",
-                    },
-                ],
-                "last_run": "2024-01-20T02:00:00Z",
-                "next_run": "2024-01-21T02:00:00Z",
-                "run_count": 15,
-                "success_rate": 93.3,
-                "avg_duration": 45.0,
-                "created_at": "2024-01-01T10:00:00Z",
-                "recent_runs": [
-                    {
-                        "id": "1",
-                        "status": "success",
-                        "started_at": "2024-01-20T02:00:00Z",
-                        "duration": 42,
-                    },
-                    {
-                        "id": "2",
-                        "status": "success",
-                        "started_at": "2024-01-19T02:00:00Z",
-                        "duration": 38,
-                    },
-                ],
-            }
-        ]
-        return workflows
+        workflows = await WorkflowDAO.get_all(session)
+        result = []
+        for workflow in workflows:
+            # 获取最近运行记录
+            recent_runs = await WorkflowRunDAO.get_by_workflow_id(session, workflow.id, limit=5)
+            workflow_dict = workflow.to_dict()
+            workflow_dict["recent_runs"] = [run.to_dict() for run in recent_runs]
+            result.append(workflow_dict)
+        return result
     except Exception as e:
         logger.error(f"获取工作流列表失败: {e}")
         raise HTTPException(status_code=500, detail="获取工作流列表失败")
 
 
 @router.post("/workflows")
-async def create_workflow(workflow: Dict[str, Any]):
+async def create_workflow(workflow: Dict[str, Any], session: AsyncSession = Depends(get_async_session)):
     """创建工作流"""
     try:
-        # 这里应该保存到工作流引擎
-        logger.info(f"创建工作流: {workflow}")
-        return {"message": "工作流创建成功", "workflow_id": "new_workflow_id"}
+        # 生成工作流ID
+        workflow_id = f"workflow_{int(datetime.utcnow().timestamp())}"
+        workflow["id"] = workflow_id
+        
+        # 设置默认值
+        workflow.setdefault("status", "inactive")
+        workflow.setdefault("trigger", "manual")
+        workflow.setdefault("run_count", 0)
+        workflow.setdefault("success_rate", 0.0)
+        workflow.setdefault("avg_duration", 0.0)
+        
+        # 保存到数据库
+        workflow_obj = await WorkflowDAO.create(session, workflow)
+        logger.info(f"数据库记录创建成功: {workflow_obj.id}")
+        
+        # 创建工作流引擎实例
+        engine_result = await workflow_engine.create_workflow(workflow)
+        
+        if engine_result["success"]:
+            # 更新数据库状态
+            await WorkflowDAO.update(session, workflow_id, {
+                "status": "active",
+                "workflow_config": engine_result
+            })
+            
+            logger.info(f"✅ 工作流创建成功: {workflow_obj.name}")
+            return {
+                "message": "工作流创建成功", 
+                "workflow_id": workflow_obj.id,
+                "status": "active",
+                "engine_status": engine_result.get("status", "created")
+            }
+        else:
+            # 更新数据库状态为失败
+            await WorkflowDAO.update(session, workflow_id, {
+                "status": "error",
+                "workflow_config": {"error": engine_result.get("error", "未知错误")}
+            })
+            
+            logger.error(f"❌ 工作流引擎创建失败: {engine_result.get('error')}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"工作流创建失败: {engine_result.get('error', '未知错误')}"
+            )
+            
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"创建工作流失败: {e}")
         raise HTTPException(status_code=500, detail="创建工作流失败")
 
 
 @router.put("/workflows/{workflow_id}")
-async def update_workflow(workflow_id: str, workflow: Dict[str, Any]):
+async def update_workflow(workflow_id: str, workflow: Dict[str, Any], session: AsyncSession = Depends(get_async_session)):
     """更新工作流"""
     try:
-        # 这里应该更新工作流引擎中的工作流
+        # 更新数据库中的工作流信息
+        updated_workflow = await WorkflowDAO.update(session, workflow_id, workflow)
+        if not updated_workflow:
+            raise HTTPException(status_code=404, detail="工作流不存在")
+        
         logger.info(f"更新工作流 {workflow_id}: {workflow}")
         return {"message": "工作流更新成功", "workflow_id": workflow_id}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"更新工作流失败: {e}")
         raise HTTPException(status_code=500, detail="更新工作流失败")
 
 
 @router.post("/workflows/{workflow_id}/run")
-async def run_workflow(workflow_id: str):
+async def run_workflow(workflow_id: str, session: AsyncSession = Depends(get_async_session)):
     """运行工作流"""
     try:
-        # 这里应该触发工作流执行
-        logger.info(f"运行工作流: {workflow_id}")
-        return {"message": "工作流运行成功", "run_id": "new_run_id"}
+        # 检查工作流是否存在
+        workflow = await WorkflowDAO.get_by_id(session, workflow_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="工作流不存在")
+        
+        # 创建工作流运行记录
+        run_data = {
+            "id": f"run_{int(datetime.utcnow().timestamp())}",
+            "workflow_id": workflow_id,
+            "status": "running",
+            "started_at": datetime.utcnow(),
+            "run_config": workflow.to_dict()
+        }
+        
+        run_record = await WorkflowRunDAO.create(session, run_data)
+        logger.info(f"工作流运行记录创建成功: {run_record.id}")
+        
+        # 执行工作流
+        engine_result = await workflow_engine.run_workflow(workflow_id, workflow.to_dict())
+        
+        if engine_result["success"]:
+            # 更新运行记录状态
+            await WorkflowRunDAO.update(session, run_record.id, {
+                "status": "success",
+                "ended_at": datetime.utcnow()
+            })
+            
+            # 更新工作流统计
+            await WorkflowDAO.update(session, workflow_id, {
+                "run_count": workflow.run_count + 1,
+                "last_run": datetime.utcnow()
+            })
+            
+            logger.info(f"✅ 工作流运行成功: {workflow_id}")
+            return {
+                "message": "工作流运行成功",
+                "workflow_id": workflow_id,
+                "run_id": run_record.id,
+                "status": "success"
+            }
+        else:
+            # 更新运行记录状态为失败
+            await WorkflowRunDAO.finish_run(session, run_record.id, "failed", engine_result.get("error"))
+            
+            logger.error(f"❌ 工作流运行失败: {engine_result.get('error')}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"工作流运行失败: {engine_result.get('error', '未知错误')}"
+            )
+            
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"运行工作流失败: {e}")
         raise HTTPException(status_code=500, detail="运行工作流失败")
