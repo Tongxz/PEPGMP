@@ -28,10 +28,20 @@ async def redis_stats_listener():
     while True:
         try:
             # In a real app, use a connection pool from a shared client
-            redis_url = os.getenv(
-                "REDIS_URL", "redis://:pyt_dev_redis@localhost:6379/0"
-            )  # Default with password
-            r = await redis.from_url(redis_url, encoding="utf-8", decode_responses=True)
+            # 直接从环境变量中解析Redis连接参数
+            redis_host = os.getenv("REDIS_HOST", "localhost")
+            redis_port = int(os.getenv("REDIS_PORT", "6379"))
+            redis_db = int(os.getenv("REDIS_DB", "0"))
+            redis_password = os.getenv("REDIS_PASSWORD", None)
+
+            r = redis.Redis(
+                host=redis_host,
+                port=redis_port,
+                db=redis_db,
+                password=redis_password,
+                encoding="utf-8",
+                decode_responses=True
+            )
             async with r.pubsub() as pubsub:
                 await pubsub.subscribe("hbd:stats")
                 logger.info(

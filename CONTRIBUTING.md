@@ -1,457 +1,166 @@
-# 贡献指南
-# Contributing Guide
+# 如何为本项目做出贡献
 
-欢迎为人体行为检测系统项目做出贡献！本文档将指导您如何参与项目开发。
+非常感谢您有兴趣为“人体行为检测系统”项目贡献您的时间和才华！您的每一行代码、每一条建议都对我们至关重要。本指南将为您提供参与项目所需的所有信息。
 
-## 📋 目录
+---
 
-- [开发环境搭建](#开发环境搭建)
-- [Git 工作流](#git-工作流)
-- [代码规范](#代码规范)
-- [提交规范](#提交规范)
-- [测试规范](#测试规范)
-- [文档规范](#文档规范)
-- [发布流程](#发布流程)
+## 🚀 快速开始：您的第一次贡献
+
+我们为首次贡献者设计了一条平滑的路径：
+
+1.  **理解项目**: 首先，请阅读我们的 [**项目统一知识库 (INDEX.md)](./docs/INDEX.md)，对项目架构和目标有一个宏观的了解。
+2.  **搭建环境**: 遵循下文的 [**开发环境搭建**](#-开发环境搭建) 指南，在您的本地机器上将项目运行起来。
+3.  **认领任务**: 从 GitHub Issues 中寻找带有 `good first issue` 或 `help wanted` 标签的任务。这些是专门为新贡献者准备的。
+4.  **遵循流程**: 按照 [**Git 工作流**](#-git-工作流) 和 [**代码规范**](#-代码规范) 进行开发。
+5.  **提交PR**: 完成开发和测试后，提交您的 Pull Request，等待团队成员的审查。
+
+---
 
 ## 🛠️ 开发环境搭建
 
-### 方式一：Docker 环境（推荐）
+我们强烈推荐使用本地环境进行开发，以便更好地利用 `pre-commit` 等代码质量工具。
+
+**1. 准备工作**
+
+- 安装 [Git](https://git-scm.com/)
+- 安装 [Python 3.8](https://www.python.org/) 或更高版本
+- (可选) 安装 [Docker](https://www.docker.com/) 和 [Docker Compose](https://docs.docker.com/compose/) 以运行数据库等依赖服务。
+
+**2. 克隆与安装**
 
 ```bash
-# 克隆项目
-git clone <repository-url>
-cd human-behavior-detection
+# 克隆项目仓库
+git clone <your-project-repository-url>
+cd <project-directory>
 
-# 启动开发环境
-docker-compose --profile development up -d
+# 创建并激活Python虚拟环境
+python3 -m venv venv
+source venv/bin/activate  # 在 Linux/macOS 上
+# venv\Scripts\activate   # 在 Windows 上
 
-# 进入开发容器
-docker-compose exec dev-tools bash
-```
+# 安装项目依赖（包括开发依赖）
+# '-e' 表示以可编辑模式安装，您的代码更改会立即生效
+pip install -e .[dev]
 
-### 方式二：本地环境
-
-```bash
-# 创建虚拟环境
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# 或
-venv\Scripts\activate  # Windows
-
-# 安装依赖
-pip install -r requirements.txt
-pip install -e .
-
-# 安装开发工具
-pip install pre-commit
+# 安装 pre-commit 钩子 (‼️ 关键步骤)
+# 这将确保您的代码在提交前自动通过质量检查
 pre-commit install
 ```
 
-### 环境验证
+**3. 运行依赖服务 (可选)**
+
+如果您的开发需要连接数据库或Redis，可以单独启动它们：
 
 ```bash
-# 运行测试
+docker-compose -f docker-compose.dev-db.yml up -d
+```
+
+**4. 验证环境**
+
+运行测试是验证环境是否配置正确的最佳方式：
+
+```bash
 pytest
-
-# 检查代码质量
-flake8 src/
-black --check src/
-mypy src/
-
-# 启动应用
-python main.py --mode api
 ```
 
-## 🔄 Git 工作流
+如果所有测试都通过了，恭喜您，您的开发环境已准备就绪！
 
-我们采用 **Git Flow** 工作流模式：
+### 🍏 Mac (Apple Silicon) 用户特别说明
 
-### 分支策略
+对于使用 M1/M2/M3 系列芯片的 Mac 用户：
 
-- `main`: 生产环境分支，只接受来自 `release` 和 `hotfix` 的合并
-- `develop`: 开发主分支，集成所有功能分支
-- `feature/*`: 功能开发分支，从 `develop` 创建
-- `release/*`: 发布准备分支，从 `develop` 创建
-- `hotfix/*`: 紧急修复分支，从 `main` 创建
+- **GPU加速已自动启用**: 本项目已支持通过 **Metal Performance Shaders (MPS)** 进行GPU加速。您无需任何额外配置，代码中的 `device='auto'` 设置会自动检测并启用MPS，相比纯CPU预计可获得 **2-3倍** 的性能提升。
+- **TensorRT 不适用**: TensorRT 是 NVIDIA 的专属技术，无法在 Mac 上运行。MPS 是 Apple 平台上的主要加速方案。
+- **追求极致性能?**: 如果您希望在Mac上获得极致的推理性能（3-5倍提升），可以考虑将模型转换为 **CoreML** 格式。相关转换脚本和指南请参考 `scripts/optimization/` 目录。
 
-### 开发流程
+---
 
-1. **创建功能分支**
-   ```bash
-   git checkout develop
-   git pull origin develop
-   git checkout -b feature/your-feature-name
-   ```
+## 🌊 Git 工作流
 
-2. **开发和提交**
-   ```bash
-   # 进行开发工作
-   git add .
-   git commit -m "feat: add new feature"
-   ```
+我们采用经典的 **Git Flow** 模式来保证代码库的整洁和稳定。
 
-3. **推送和创建 PR**
-   ```bash
-   git push origin feature/your-feature-name
-   # 在 GitHub/GitLab 创建 Pull Request
-   ```
+- **`main`**: 生产分支。永远保持稳定和可部署。
+- **`develop`**: 开发主分支。所有已完成的功能最终会合并到这里。
+- **`feature/<feature-name>`**: 功能分支。从 `develop` 分支创建，用于开发新功能。
+- **`bugfix/<issue-number>`**: Bug修复分支。从 `develop` 分支创建。
+- **`hotfix/<issue-number>`**: 紧急修复分支。从 `main` 分支创建，修复后需同时合并回 `main` 和 `develop`。
 
-4. **代码审查和合并**
-   - 至少需要 1 人审查
-   - 所有 CI 检查必须通过
-   - 合并后删除功能分支
+**标准开发流程**:
 
-### 分支命名规范
+1.  **同步最新代码**: `git checkout develop && git pull`
+2.  **创建新分支**: `git checkout -b feature/my-awesome-feature`
+3.  **编码与开发**: 尽情施展您的才华！
+4.  **提交代码**: `git add . && git commit` (您的 commit message 会被 `pre-commit` 检查)
+5.  **推送到远程**: `git push origin feature/my-awesome-feature`
+6.  **创建 Pull Request**: 在 GitHub 上，创建一个从您的功能分支到 `develop` 分支的 Pull Request。
 
-- `feature/功能描述`: 新功能开发
-- `bugfix/问题描述`: Bug 修复
-- `hotfix/紧急修复描述`: 紧急修复
-- `refactor/重构描述`: 代码重构
-- `docs/文档描述`: 文档更新
+---
 
-## 📁 项目结构与文件组织
+## ✨ 代码与提交规范
 
-### 目录结构
+我们借助自动化工具来执行大部分规范，以减轻您的心智负担。
 
-项目采用以下目录结构组织代码和资源：
+### 代码风格与质量
 
-```
-├── src/               # 源代码目录
-│   ├── core/          # 核心功能模块
-│   ├── config/        # 配置管理
-│   ├── utils/         # 工具函数
-│   └── api/           # Web API接口
-├── tests/             # 测试代码
-│   ├── unit/          # 单元测试
-│   ├── integration/   # 集成测试
-│   └── fixtures/      # 测试数据
-├── data/              # 数据目录（存放数据库文件等）
-├── models/            # AI模型文件
-├── scripts/           # 脚本工具目录
-├── docs/              # 文档
-├── config/            # 配置文件
-└── logs/              # 日志文件
-```
+您无需手动调整代码格式。当您运行 `git commit` 时，`pre-commit` 会自动为您完成以下工作：
 
-### 文件组织规范
+- **`black`**: 自动格式化您的Python代码。
+- **`isort`**: 自动排序您的 `import` 语句。
+- **`flake8`**: 检查代码中的潜在错误和不规范写法。
+- **`mypy`**: 进行静态类型检查，确保类型安全。
 
-- **源代码文件**：所有源代码文件应放在 `src/` 目录下的相应模块中
-- **测试文件**：所有测试文件应放在 `tests/` 目录下，按测试类型分类
-- **脚本文件**：所有工具脚本应放在 `scripts/` 目录下，不应放在项目根目录
-- **数据文件**：所有数据文件（如数据库文件）应放在 `data/` 目录下
-- **配置文件**：所有配置文件应放在 `config/` 目录下
-- **日志文件**：所有日志文件应输出到 `logs/` 目录下
+如果 `pre-commit` 检查失败，它会提示错误并中止提交。您只需根据提示修正问题，然后再次 `git add .` 和 `git commit` 即可。
 
-### 文件命名规范
+### Commit Message 规范
 
-- **Python文件**：使用小写字母和下划线，如 `file_utils.py`
-- **测试文件**：以 `test_` 开头，如 `test_detector.py`
-- **配置文件**：使用小写字母和下划线，如 `default_config.yaml`
+我们遵循 **[Conventional Commits](https://www.conventionalcommits.org/)** 规范。这有助于我们自动化生成版本日志，并使提交历史清晰可读。
 
-### 项目清理
+**格式**: `<type>(<scope>): <subject>`
 
-定期使用 `scripts/cleanup_tests.py` 脚本清理项目根目录：
+- **`type`**: 必须是以下之一：
+    - `feat`: 引入新功能
+    - `fix`: 修复 Bug
+    - `docs`: 仅修改文档
+    - `style`: 修改代码格式（不影响逻辑）
+    - `refactor`: 代码重构
+    - `perf`: 性能优化
+    - `test`: 添加或修改测试
+    - `chore`: 其他杂项（如构建脚本修改）
+- **`scope`** (可选): 本次提交影响的范围（如 `api`, `detector`, `docs`）。
+- **`subject`**: 对本次提交的简短描述。
 
-```bash
-# 清理项目根目录
-python scripts/cleanup_tests.py
-```
-
-该脚本会：
-- 删除根目录下已整理到tests目录的测试文件
-- 删除不必要的测试图像文件
-- 将脚本文件从根目录移动到scripts目录
-- 将数据库文件从根目录移动到data目录
-
-## 📝 代码规范
-
-### Python 代码规范
-
-我们遵循 [PEP 8](https://pep8.org/) 和 [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html)：
-
-```python
-# 好的示例
-class PersonDetector:
-    """人体检测器类。
-
-    用于检测图像或视频中的人体目标。
-
-    Attributes:
-        model_path: 模型文件路径
-        confidence_threshold: 置信度阈值
-    """
-
-    def __init__(self, model_path: str, confidence_threshold: float = 0.5):
-        """初始化检测器。
-
-        Args:
-            model_path: 模型文件路径
-            confidence_threshold: 置信度阈值，默认0.5
-        """
-        self.model_path = model_path
-        self.confidence_threshold = confidence_threshold
-        self._model = None
-
-    def detect(self, image: np.ndarray) -> List[Detection]:
-        """检测图像中的人体。
-
-        Args:
-            image: 输入图像，BGR格式
-
-        Returns:
-            检测结果列表
-
-        Raises:
-            ValueError: 当图像格式不正确时
-        """
-        if image is None or len(image.shape) != 3:
-            raise ValueError("Invalid image format")
-
-        # 检测逻辑
-        return self._process_image(image)
-```
-
-### 代码质量要求
-
-- **类型注解**: 所有函数参数和返回值必须有类型注解
-- **文档字符串**: 所有公共类和函数必须有详细的文档字符串
-- **错误处理**: 适当的异常处理和错误信息
-- **单一职责**: 每个函数和类只负责一个功能
-- **命名规范**: 使用有意义的变量和函数名
-
-### 工具配置
-
-项目使用以下工具确保代码质量：
-
-- **Black**: 代码格式化（行长度88字符）
-- **isort**: 导入排序
-- **Flake8**: 代码检查
-- **MyPy**: 类型检查
-- **Bandit**: 安全检查
-- **Pre-commit**: 提交前检查
-
-## 💬 提交规范
-
-我们使用 [Conventional Commits](https://www.conventionalcommits.org/) 规范：
-
-### 提交消息格式
+**示例**:
 
 ```
-<type>[optional scope]: <description>
-
-[optional body]
-
-[optional footer(s)]
+feat(api): add endpoint for hairnet detection statistics
+fix(detector): prevent crash when video source is unavailable
+docs(readme): update installation instructions
 ```
 
-### 提交类型
+---
 
-- `feat`: 新功能
-- `fix`: Bug 修复
-- `docs`: 文档更新
-- `style`: 代码格式调整（不影响功能）
-- `refactor`: 代码重构
-- `perf`: 性能优化
-- `test`: 测试相关
-- `chore`: 构建过程或辅助工具的变动
-- `ci`: CI/CD 相关
+## 🧪 测试要求
 
-### 示例
+**质量是我们的生命线。** 任何非琐碎的贡献都应包含相应的测试。
 
-```bash
-# 新功能
-git commit -m "feat(detector): add YOLOv8 person detection"
+- **位置**: 所有测试代码都应放在 `tests/` 目录下。
+- **单元测试**: 针对单一函数或类的测试，应放在 `tests/unit/`。
+- **集成测试**: 涉及多个组件交互的测试，应放在 `tests/integration/`。
+- **运行测试**: 在提交PR前，请务必在本地完整运行一次测试：
+  ```bash
+  # 运行所有测试
+  pytest
 
-# Bug 修复
-git commit -m "fix(tracker): resolve ID switching issue"
+  # 运行测试并生成覆盖率报告
+  pytest --cov=src
+  ```
+- **PR检查**: 您的Pull Request会自动触发CI流水线，运行所有测试。只有当所有检查都通过时，PR才可能被合并。
 
-# 文档更新
-git commit -m "docs: update API documentation"
+---
 
-# 重大变更
-git commit -m "feat!: change detection API interface
+## 💬 Pull Request (PR) 流程
 
-BREAKING CHANGE: detection method now returns structured results"
-```
-
-## 🧪 测试规范
-
-### 测试结构
-
-```
-tests/
-├── unit/           # 单元测试
-│   ├── test_detector.py
-│   ├── test_tracker.py
-│   └── test_utils.py
-├── integration/    # 集成测试
-│   ├── test_api.py
-│   └── test_pipeline.py
-├── fixtures/       # 测试数据
-│   ├── images/
-│   └── videos/
-└── conftest.py     # pytest 配置
-```
-
-### 测试要求
-
-- **覆盖率**: 单元测试覆盖率不低于 80%
-- **命名**: 测试函数名要清晰描述测试内容
-- **独立性**: 测试之间不能有依赖关系
-- **数据**: 使用 fixtures 管理测试数据
-
-### 测试示例
-
-```python
-import pytest
-from src.core.detector import PersonDetector
-
-class TestPersonDetector:
-    """人体检测器测试类。"""
-
-    @pytest.fixture
-    def detector(self):
-        """创建检测器实例。"""
-        return PersonDetector("models/models/yolo/yolov8n.pt")
-
-    @pytest.fixture
-    def sample_image(self):
-        """加载测试图像。"""
-        return cv2.imread("tests/fixtures/images/person.jpg")
-
-    def test_detect_single_person(self, detector, sample_image):
-        """测试单人检测。"""
-        results = detector.detect(sample_image)
-
-        assert len(results) == 1
-        assert results[0].confidence > 0.5
-        assert results[0].class_name == "person"
-
-    def test_detect_empty_image(self, detector):
-        """测试空图像处理。"""
-        empty_image = np.zeros((100, 100, 3), dtype=np.uint8)
-        results = detector.detect(empty_image)
-
-        assert len(results) == 0
-
-    def test_invalid_image_raises_error(self, detector):
-        """测试无效图像抛出异常。"""
-        with pytest.raises(ValueError):
-            detector.detect(None)
-```
-
-### 运行测试
-
-```bash
-# 运行所有测试
-pytest
-
-# 运行特定测试
-pytest tests/unit/test_detector.py
-
-# 生成覆盖率报告
-pytest --cov=src --cov-report=html
-
-# 运行性能测试
-pytest -m slow
-```
-
-## 📚 文档规范
-
-### 文档类型
-
-- **README**: 项目概述和快速开始
-- **API 文档**: 自动生成的 API 参考
-- **用户指南**: 详细的使用说明
-- **开发文档**: 架构设计和开发指南
-
-### 文档要求
-
-- 使用 Markdown 格式
-- 包含代码示例
-- 保持更新和准确性
-- 支持中英文双语
-
-### 生成文档
-
-```bash
-# 生成 API 文档
-sphinx-build -b html docs/ docs/_build/
-
-# 启动文档服务器
-sphinx-autobuild docs/ docs/_build/
-```
-
-## 🚀 发布流程
-
-### 版本号规范
-
-我们使用 [Semantic Versioning](https://semver.org/)：
-
-- `MAJOR.MINOR.PATCH`
-- `1.0.0`: 主要版本（不兼容的 API 变更）
-- `1.1.0`: 次要版本（向后兼容的功能性新增）
-- `1.1.1`: 修订版本（向后兼容的问题修正）
-
-### 发布步骤
-
-1. **创建发布分支**
-   ```bash
-   git checkout develop
-   git checkout -b release/1.1.0
-   ```
-
-2. **更新版本信息**
-   - 更新 `setup.py` 中的版本号
-   - 更新 `CHANGELOG.md`
-   - 更新文档
-
-3. **测试和修复**
-   ```bash
-   pytest
-   docker-compose up --build
-   ```
-
-4. **合并到主分支**
-   ```bash
-   git checkout main
-   git merge release/1.1.0
-   git tag v1.1.0
-   git push origin main --tags
-   ```
-
-5. **合并回开发分支**
-   ```bash
-   git checkout develop
-   git merge main
-   git push origin develop
-   ```
-
-## 🤝 代码审查
-
-### 审查清单
-
-- [ ] 代码符合项目规范
-- [ ] 有适当的测试覆盖
-- [ ] 文档已更新
-- [ ] 没有安全问题
-- [ ] 性能影响可接受
-- [ ] 向后兼容性
-
-### 审查原则
-
-- **建设性**: 提供具体的改进建议
-- **及时性**: 在24小时内完成审查
-- **学习性**: 分享知识和最佳实践
-- **尊重性**: 保持专业和友善的态度
-
-## 📞 获取帮助
-
-如果您在贡献过程中遇到问题，可以通过以下方式获取帮助：
-
-- 创建 Issue 描述问题
-- 在 Discussion 中提问
-- 联系项目维护者
-- 查看项目文档和 Wiki
-
-感谢您的贡献！🎉
+1.  **确保PR足够小**: 一个PR最好只做一件事，这样更易于审查。
+2.  **填写PR模板**: 创建PR时，请详细填写模板中的信息，说明您“做了什么”、“为什么这么做”以及“如何测试”。
+3.  **等待审查**: 团队成员会尽快审查您的代码。请耐心等待，并积极回应审查评论。
+4.  **合并**: 一旦您的PR被批准且所有CI检查通过，它将被合并到 `develop` 分支。恭喜您，您已经成功为项目做出了贡献！
