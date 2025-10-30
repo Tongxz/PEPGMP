@@ -153,18 +153,22 @@ class TestAPIEndpoints:
         mock_region_service = Mock()
         app.dependency_overrides[get_region_service] = lambda: mock_region_service
 
-        response = self.client.get("/api/v1/statistics")
+        response = self.client.get("/api/v1/statistics/summary")
         assert response.status_code == 200
-        assert "message" in response.json()
+        data = response.json()
+        assert "total_events" in data
+        assert "counts_by_type" in data
 
     def test_violations_endpoint(self):
         """测试违规记录端点."""
         mock_region_service = Mock()
         app.dependency_overrides[get_region_service] = lambda: mock_region_service
 
-        response = self.client.get("/api/v1/violations")
+        response = self.client.get("/api/v1/records/violations")
         assert response.status_code == 200
-        assert "message" in response.json()
+        data = response.json()
+        assert "violations" in data
+        assert "total" in data
 
 
 class TestAPIErrorHandling:
