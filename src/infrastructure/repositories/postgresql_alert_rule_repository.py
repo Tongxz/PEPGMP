@@ -145,7 +145,11 @@ class PostgreSQLAlertRuleRepository(IAlertRuleRepository):
 
                 for field, value in updates.items():
                     if field in allowed_fields:
-                        if field in ["conditions", "notification_channels", "recipients"]:
+                        if field in [
+                            "conditions",
+                            "notification_channels",
+                            "recipients",
+                        ]:
                             value = json.dumps(value) if value else None
                         update_fields.append(f"{field} = ${param_idx}")
                         params.append(value)
@@ -244,4 +248,3 @@ class PostgreSQLAlertRuleRepository(IAlertRuleRepository):
             updated_at=row.get("updated_at"),
             created_by=row.get("created_by"),
         )
-

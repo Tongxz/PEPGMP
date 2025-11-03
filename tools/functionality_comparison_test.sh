@@ -29,11 +29,11 @@ compare_endpoints() {
     local endpoint=$2
     local data=$3
     local description=$4
-    
+
     echo -e "${BLUE}----------------------------------------${NC}"
     echo -e "${BLUE}测试: $description${NC}"
     echo -e "${BLUE}----------------------------------------${NC}"
-    
+
     # 测试新实现（force_domain=true）
     echo ""
     echo -n "  新实现 (force_domain=true) ... "
@@ -65,14 +65,14 @@ compare_endpoints() {
         new_code=$(echo "$new_response" | tail -n1)
         new_response=$(echo "$new_response" | sed '$d')
     fi
-    
+
     if [ "$new_code" = "200" ] || [ "$new_code" = "201" ]; then
         echo -e "${GREEN}✓ OK${NC} (HTTP $new_code)"
     else
         echo -e "${YELLOW}⚠ HTTP $new_code${NC}"
         echo "    响应: $(echo "$new_response" | head -c 100)"
     fi
-    
+
     # 测试旧实现（force_domain=false）
     echo ""
     echo -n "  旧实现 (force_domain=false) ... "
@@ -104,14 +104,14 @@ compare_endpoints() {
         old_code=$(echo "$old_response" | tail -n1)
         old_response=$(echo "$old_response" | sed '$d')
     fi
-    
+
     if [ "$old_code" = "200" ] || [ "$old_code" = "201" ]; then
         echo -e "${GREEN}✓ OK${NC} (HTTP $old_code)"
     else
         echo -e "${YELLOW}⚠ HTTP $old_code${NC}"
         echo "    响应: $(echo "$old_response" | head -c 100)"
     fi
-    
+
     # 对比结果
     echo ""
     echo -n "  对比结果 ... "
@@ -122,20 +122,20 @@ compare_endpoints() {
         echo -e "${RED}✗ 状态码不一致 (新: $new_code, 旧: $old_code)${NC}"
         ((FAILED++))
     fi
-    
+
     # 如果都是成功，简单对比响应结构（只对比关键字段）
     if [ "$new_code" = "200" ] && [ "$old_code" = "200" ]; then
         # 简单检查：如果响应都包含 "ok" 或 "count" 或 "items"，认为结构可能一致
         new_has_key=$(echo "$new_response" | grep -o '"ok"\|"count"\|"items"\|"status"' | head -1 || echo "")
         old_has_key=$(echo "$old_response" | grep -o '"ok"\|"count"\|"items"\|"status"' | head -1 || echo "")
-        
+
         if [ -n "$new_has_key" ] && [ -n "$old_has_key" ]; then
             echo -e "  ${GREEN}✓ 响应结构基本一致${NC}"
         else
             echo -e "  ${YELLOW}⚠ 响应结构可能不同（需人工检查）${NC}"
         fi
     fi
-    
+
     echo ""
 }
 
@@ -163,12 +163,12 @@ rule_id=$(echo "$create_response" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f
 if [ -n "$rule_id" ] && [ "$rule_id" != "" ]; then
     echo "  创建的规则ID: $rule_id"
     echo ""
-    
+
     # 对比创建告警规则
     compare_endpoints "POST" "/api/v1/alerts/rules" \
         '{"name":"对比测试规则_'"$(date +%s)"'","rule_type":"violation","conditions":{"threshold":5}}' \
         "创建告警规则"
-    
+
     # 对比更新告警规则
     if [ -n "$rule_id" ]; then
         compare_endpoints "PUT" "/api/v1/alerts/rules/$rule_id" \
@@ -197,15 +197,15 @@ if [ -z "$camera_id" ]; then
 else
     echo "  使用摄像头ID: $camera_id"
     echo ""
-    
+
     # 对比获取摄像头状态（只读，安全）
     compare_endpoints "GET" "/api/v1/cameras/$camera_id/status" "" "获取摄像头状态"
-    
+
     # 对比批量状态查询
     compare_endpoints "POST" "/api/v1/cameras/batch-status" \
         "{\"camera_ids\":[\"$camera_id\"]}" \
         "批量查询摄像头状态"
-    
+
     echo ""
     echo -e "${YELLOW}⚠ 以下操作会实际控制摄像头，已跳过：${NC}"
     echo -e "${YELLOW}   - 启动/停止/重启摄像头${NC}"
@@ -275,4 +275,3 @@ else
     echo -e "${RED}✗ 部分对比测试失败${NC}"
     exit 1
 fi
-

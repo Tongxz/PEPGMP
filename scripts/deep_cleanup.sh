@@ -75,7 +75,7 @@ deleted_dirs=0
 if [ "$STAGE" = "all" ] || [ "$STAGE" = "1" ]; then
     echo -e "${GREEN}[阶段1]${NC} 执行安全删除..."
     echo ""
-    
+
     # 删除archive目录
     if [ -d "archive" ]; then
         echo "  删除 archive/ (所有已归档代码)"
@@ -83,7 +83,7 @@ if [ "$STAGE" = "all" ] || [ "$STAGE" = "1" ]; then
         rm -rf archive/
         ((deleted_dirs++))
     fi
-    
+
     # 删除过时的examples
     echo "  清理 examples/ 目录..."
     for file in examples/demo_camera_direct.py \
@@ -96,14 +96,14 @@ if [ "$STAGE" = "all" ] || [ "$STAGE" = "1" ]; then
             ((deleted_files++))
         fi
     done
-    
+
     # 删除Dockerfile.prod.old
     if [ -f "Dockerfile.prod.old" ]; then
         echo "  删除 Dockerfile.prod.old"
         rm -f Dockerfile.prod.old
         ((deleted_files++))
     fi
-    
+
     # 清理__pycache__
     echo "  清理 __pycache__/ 目录..."
     pycache_count=$(find . -type d -name "__pycache__" 2>/dev/null | wc -l)
@@ -112,7 +112,7 @@ if [ "$STAGE" = "all" ] || [ "$STAGE" = "1" ]; then
         echo "    删除 $pycache_count 个 __pycache__ 目录"
         deleted_dirs=$((deleted_dirs + pycache_count))
     fi
-    
+
     echo -e "${GREEN}✓${NC} 阶段1完成 (删除 $deleted_files 个文件, $deleted_dirs 个目录)"
     echo ""
 fi
@@ -121,13 +121,13 @@ fi
 if [ "$STAGE" = "all" ] || [ "$STAGE" = "2" ]; then
     echo -e "${GREEN}[阶段2]${NC} 检查并清理..."
     echo ""
-    
+
     # 检查detection_service_di.py的使用
     if [ -f "src/services/detection_service_di.py" ]; then
         echo "  检查 detection_service_di.py 使用情况..."
         ref_count=$(grep -r "detection_service_di" --include="*.py" src/ tests/ main.py 2>/dev/null | grep -v "detection_service_di.py:" | wc -l || echo 0)
         echo "    找到 $ref_count 处引用"
-        
+
         if [ $ref_count -eq 0 ]; then
             echo "    未找到实际使用，删除文件"
             rm -f src/services/detection_service_di.py
@@ -138,7 +138,7 @@ if [ "$STAGE" = "all" ] || [ "$STAGE" = "2" ]; then
             echo "    grep -rn 'detection_service_di' --include='*.py' src/ tests/ main.py"
         fi
     fi
-    
+
     # 检查测试工具
     echo "  检查测试工具文件..."
     if [ -f "tools/test_mlops_integration.py" ]; then
@@ -146,7 +146,7 @@ if [ "$STAGE" = "all" ] || [ "$STAGE" = "2" ]; then
         # 如果没有被CI使用，可以移动到archive
         echo -e "    ${YELLOW}保留，建议手动评估${NC}"
     fi
-    
+
     # 对比requirements文件
     if [ -f "requirements.prod.txt" ] && [ -f "requirements.txt" ]; then
         echo "  对比 requirements文件..."
@@ -159,7 +159,7 @@ if [ "$STAGE" = "all" ] || [ "$STAGE" = "2" ]; then
             echo "    运行 'diff requirements.txt requirements.prod.txt' 查看差异"
         fi
     fi
-    
+
     echo -e "${GREEN}✓${NC} 阶段2完成"
     echo ""
 fi
@@ -168,7 +168,7 @@ fi
 if [ "$STAGE" = "all" ] || [ "$STAGE" = "3" ]; then
     echo -e "${GREEN}[阶段3]${NC} 整理优化..."
     echo ""
-    
+
     # 清理.pyc文件
     echo "  清理 .pyc 和 .pyo 文件..."
     pyc_count=$(find . -type f \( -name "*.pyc" -o -name "*.pyo" \) 2>/dev/null | wc -l)
@@ -177,14 +177,14 @@ if [ "$STAGE" = "all" ] || [ "$STAGE" = "3" ]; then
         echo "    删除 $pyc_count 个 Python 缓存文件"
         deleted_files=$((deleted_files + pyc_count))
     fi
-    
+
     # 检查模型备份
     if ls models/*.backup 2>/dev/null; then
         echo "  发现模型备份文件:"
         ls -lh models/*.backup
         echo -e "  ${YELLOW}建议手动验证后删除${NC}"
     fi
-    
+
     echo -e "${GREEN}✓${NC} 阶段3完成"
     echo ""
 fi
@@ -193,16 +193,16 @@ fi
 if [ "$STAGE" = "check" ]; then
     echo -e "${BLUE}[检查模式]${NC} 分析项目..."
     echo ""
-    
+
     echo "📊 可清理项目:"
     echo ""
-    
+
     # Archive目录
     if [ -d "archive" ]; then
         size=$(du -sh archive/ 2>/dev/null | cut -f1)
         echo "  ✓ archive/ ($size)"
     fi
-    
+
     # Examples
     count=0
     for file in examples/demo_camera_direct.py \
@@ -212,18 +212,18 @@ if [ "$STAGE" = "check" ]; then
         [ -f "$file" ] && ((count++))
     done
     [ $count -gt 0 ] && echo "  ✓ examples/ 中的 $count 个过时文件"
-    
+
     # Backup文件
     [ -f "Dockerfile.prod.old" ] && echo "  ✓ Dockerfile.prod.old"
-    
+
     # __pycache__
     pycache_count=$(find . -type d -name "__pycache__" 2>/dev/null | wc -l)
     [ $pycache_count -gt 0 ] && echo "  ✓ $pycache_count 个 __pycache__ 目录"
-    
+
     # .pyc文件
     pyc_count=$(find . -type f \( -name "*.pyc" -o -name "*.pyo" \) 2>/dev/null | wc -l)
     [ $pyc_count -gt 0 ] && echo "  ✓ $pyc_count 个 .pyc/.pyo 文件"
-    
+
     echo ""
     echo "运行清理:"
     echo "  ./scripts/deep_cleanup.sh 1    # 仅阶段1"
@@ -252,4 +252,3 @@ echo "  1. 验证应用启动: ./scripts/start_dev.sh"
 echo "  2. 运行测试: pytest tests/ -v"
 echo "  3. 提交更改: git add . && git commit -m 'chore: 深度清理重构遗留代码'"
 echo ""
-

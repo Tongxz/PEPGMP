@@ -1,6 +1,5 @@
 """AlertRuleService单元测试."""
 
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -67,7 +66,6 @@ class TestAlertRuleService:
 
     async def test_list_alert_rules_success(self, alert_rule_service):
         """测试成功列出告警规则."""
-        from datetime import datetime
 
         rule1 = AlertRule(
             id=1,
@@ -174,11 +172,15 @@ class TestAlertRuleService:
 
         updates = {"name": "更新后的规则", "enabled": False}
 
-        success = await alert_rule_service.alert_rule_repository.update(rule_id, updates)
+        success = await alert_rule_service.alert_rule_repository.update(
+            rule_id, updates
+        )
 
         assert success is True
 
-        updated_rule = await alert_rule_service.alert_rule_repository.find_by_id(rule_id)
+        updated_rule = await alert_rule_service.alert_rule_repository.find_by_id(
+            rule_id
+        )
         assert updated_rule.name == "更新后的规则"
         assert updated_rule.enabled is False
 
@@ -205,7 +207,9 @@ class TestAlertRuleService:
 
         assert success is True
 
-        deleted_rule = await alert_rule_service.alert_rule_repository.find_by_id(rule_id)
+        deleted_rule = await alert_rule_service.alert_rule_repository.find_by_id(
+            rule_id
+        )
         assert deleted_rule is None
 
     async def test_delete_alert_rule_not_found(self, alert_rule_service):
@@ -218,10 +222,10 @@ class TestAlertRuleService:
         """测试列出告警规则时的异常处理."""
         # 模拟仓储异常
         original_find_all = alert_rule_service.alert_rule_repository.find_all
-        
+
         async def mock_find_all_error(*args, **kwargs):
             raise RuntimeError("查询失败")
-        
+
         alert_rule_service.alert_rule_repository.find_all = mock_find_all_error
 
         try:
@@ -229,4 +233,3 @@ class TestAlertRuleService:
                 await alert_rule_service.list_alert_rules()
         finally:
             alert_rule_service.alert_rule_repository.find_all = original_find_all
-

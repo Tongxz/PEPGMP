@@ -7,22 +7,21 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-
+from src.domain.entities.camera import Camera, CameraStatus, CameraType
 from src.domain.entities.detected_object import DetectedObject
 from src.domain.entities.detection_record import DetectionRecord
-from src.domain.entities.camera import Camera, CameraStatus, CameraType
 from src.domain.events.detection_events import (
     DetectionCreatedEvent,
     ViolationDetectedEvent,
 )
 from src.domain.repositories.camera_repository import ICameraRepository
 from src.domain.repositories.detection_repository import IDetectionRepository
-from src.infrastructure.repositories.repository_factory import RepositoryFactory
 from src.domain.services.detection_service import DetectionService
 from src.domain.services.violation_service import ViolationService
 from src.domain.value_objects.bounding_box import BoundingBox
 from src.domain.value_objects.confidence import Confidence
 from src.domain.value_objects.timestamp import Timestamp
+from src.infrastructure.repositories.repository_factory import RepositoryFactory
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +167,7 @@ class DetectionServiceDomain:
                 # 获取最近1小时的记录
                 end_time = datetime.now()
                 from datetime import timedelta
+
                 start_time = end_time - timedelta(hours=1)
                 records = await self.detection_repository.find_by_time_range(
                     start_time, end_time, None, limit=1000
@@ -251,6 +251,7 @@ class DetectionServiceDomain:
             # 2. 获取最近的检测记录
             end_time = datetime.now()
             from datetime import timedelta
+
             start_time = end_time - timedelta(hours=24)  # 最近24小时
             records = await self.detection_repository.find_by_time_range(
                 start_time, end_time, camera_id, limit=1000
@@ -271,14 +272,18 @@ class DetectionServiceDomain:
 
             # 4. 分析摄像头性能
             if records:
-                processing_times = [r.processing_time for r in records if r.processing_time > 0]
+                processing_times = [
+                    r.processing_time for r in records if r.processing_time > 0
+                ]
                 if processing_times:
                     avg_processing_time = sum(processing_times) / len(processing_times)
                     camera_stats["performance"] = {
                         "avg_processing_time": avg_processing_time,
                         "max_processing_time": max(processing_times),
                         "min_processing_time": min(processing_times),
-                        "fps_estimate": 1.0 / avg_processing_time if avg_processing_time > 0 else 0,
+                        "fps_estimate": 1.0 / avg_processing_time
+                        if avg_processing_time > 0
+                        else 0,
                     }
                 else:
                     camera_stats["performance"] = {
@@ -382,7 +387,9 @@ class DetectionServiceDomain:
         """
         try:
             repo = self.detection_repository
-            if hasattr(repo, "get_violations") and callable(getattr(repo, "get_violations")):
+            if hasattr(repo, "get_violations") and callable(
+                getattr(repo, "get_violations")
+            ):
                 return await getattr(repo, "get_violations")(
                     camera_id=camera_id,
                     status=status,
@@ -421,18 +428,22 @@ class DetectionServiceDomain:
             # 转换为字典格式（兼容旧API响应结构）
             formatted_records = []
             for record in records:
-                formatted_records.append({
-                    "id": record.id,
-                    "camera_id": record.camera_id,
-                    "timestamp": record.timestamp.iso_string,
-                    "frame_number": record.frame_id or 0,
-                    "person_count": record.person_count,
-                    "hairnet_violations": record.metadata.get("hairnet_violations", 0),
-                    "handwash_events": record.metadata.get("handwash_events", 0),
-                    "sanitize_events": record.metadata.get("sanitize_events", 0),
-                    "fps": record.metadata.get("fps", 0.0),
-                    "processing_time": record.processing_time,
-                })
+                formatted_records.append(
+                    {
+                        "id": record.id,
+                        "camera_id": record.camera_id,
+                        "timestamp": record.timestamp.iso_string,
+                        "frame_number": record.frame_id or 0,
+                        "person_count": record.person_count,
+                        "hairnet_violations": record.metadata.get(
+                            "hairnet_violations", 0
+                        ),
+                        "handwash_events": record.metadata.get("handwash_events", 0),
+                        "sanitize_events": record.metadata.get("sanitize_events", 0),
+                        "fps": record.metadata.get("fps", 0.0),
+                        "processing_time": record.processing_time,
+                    }
+                )
 
             # 获取总数（用于分页）
             total = await self.detection_repository.count_by_camera_id(camera_id)
@@ -462,16 +473,22 @@ class DetectionServiceDomain:
         try:
             repo = self.detection_repository
             # 检查仓储是否支持违规查询
-            if hasattr(repo, "get_violation_by_id") and callable(getattr(repo, "get_violation_by_id")):
+            if hasattr(repo, "get_violation_by_id") and callable(
+                getattr(repo, "get_violation_by_id")
+            ):
                 return await getattr(repo, "get_violation_by_id")(violation_id)
             # 如果不支持，尝试通过get_violations查询
-            if hasattr(repo, "get_violations") and callable(getattr(repo, "get_violations")):
+            if hasattr(repo, "get_violations") and callable(
+                getattr(repo, "get_violations")
+            ):
                 # 查询所有违规记录，然后过滤
                 violations_data = await getattr(repo, "get_violations")(
                     limit=1000, offset=0
                 )
                 violations = violations_data.get("violations", [])
-                violation = next((v for v in violations if v.get("id") == violation_id), None)
+                violation = next(
+                    (v for v in violations if v.get("id") == violation_id), None
+                )
                 return violation
             raise NotImplementedError("当前仓储未实现违规查询")
         except Exception as e:
@@ -492,8 +509,8 @@ class DetectionServiceDomain:
             List[Dict[str, Any]]: 每日统计信息列表
         """
         try:
-            from datetime import timedelta
             from collections import defaultdict
+            from datetime import timedelta
 
             # 计算时间范围
             end_time = datetime.now()
@@ -506,6 +523,7 @@ class DetectionServiceDomain:
 
             # 按天分组统计
             from collections import defaultdict
+
             per_day: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
             total_day: Dict[str, int] = defaultdict(int)
 
@@ -527,11 +545,13 @@ class DetectionServiceDomain:
             out: List[Dict[str, Any]] = []
             for i in range(days - 1, -1, -1):
                 date_str = (today - timedelta(days=i)).isoformat()
-                out.append({
-                    "date": date_str,
-                    "total_events": total_day.get(date_str, 0),
-                    "counts_by_type": dict(per_day.get(date_str, {})),
-                })
+                out.append(
+                    {
+                        "date": date_str,
+                        "total_events": total_day.get(date_str, 0),
+                        "counts_by_type": dict(per_day.get(date_str, {})),
+                    }
+                )
 
             return out
 
@@ -587,16 +607,18 @@ class DetectionServiceDomain:
                     if event_type and obj.class_name != event_type:
                         continue
 
-                    events.append({
-                        "id": f"{record.id}_{obj.track_id or ''}",
-                        "timestamp": record.timestamp.iso_string,
-                        "type": obj.class_name,
-                        "camera_id": record.camera_id,
-                        "confidence": obj.confidence.value,
-                        "track_id": obj.track_id,
-                        "region": record.region_id,
-                        "metadata": obj.metadata,
-                    })
+                    events.append(
+                        {
+                            "id": f"{record.id}_{obj.track_id or ''}",
+                            "timestamp": record.timestamp.iso_string,
+                            "type": obj.class_name,
+                            "camera_id": record.camera_id,
+                            "confidence": obj.confidence.value,
+                            "track_id": obj.track_id,
+                            "region": record.region_id,
+                            "metadata": obj.metadata,
+                        }
+                    )
 
                     if len(events) >= limit:
                         break
@@ -641,18 +663,22 @@ class DetectionServiceDomain:
 
             # 转换为事件列表（按时间倒序）
             events = []
-            for record in sorted(records, key=lambda r: r.timestamp.value, reverse=True):
+            for record in sorted(
+                records, key=lambda r: r.timestamp.value, reverse=True
+            ):
                 for obj in record.objects:
-                    events.append({
-                        "id": f"{record.id}_{obj.track_id or ''}",
-                        "timestamp": record.timestamp.iso_string,
-                        "type": obj.class_name,
-                        "camera_id": record.camera_id,
-                        "confidence": obj.confidence.value,
-                        "track_id": obj.track_id,
-                        "region": record.region_id,
-                        "metadata": obj.metadata,
-                    })
+                    events.append(
+                        {
+                            "id": f"{record.id}_{obj.track_id or ''}",
+                            "timestamp": record.timestamp.iso_string,
+                            "type": obj.class_name,
+                            "camera_id": record.camera_id,
+                            "confidence": obj.confidence.value,
+                            "track_id": obj.track_id,
+                            "region": record.region_id,
+                            "metadata": obj.metadata,
+                        }
+                    )
 
                     if len(events) >= limit:
                         break
@@ -699,7 +725,9 @@ class DetectionServiceDomain:
 
             # 转换为事件列表（按时间倒序，兼容旧格式）
             events = []
-            for record in sorted(records, key=lambda r: r.timestamp.value, reverse=True):
+            for record in sorted(
+                records, key=lambda r: r.timestamp.value, reverse=True
+            ):
                 # 摄像头过滤
                 if camera_id and record.camera_id != camera_id:
                     continue
@@ -710,21 +738,27 @@ class DetectionServiceDomain:
                         continue
 
                     # 转换为旧API格式（兼容events_record.jsonl格式）
-                    events.append({
-                        "ts": record.timestamp.value.timestamp(),
-                        "type": obj.class_name,
-                        "camera_id": record.camera_id,
-                        "track_id": obj.track_id,
-                        "evidence": {
-                            "confidence": obj.confidence.value,
-                            "region": record.region_id,
-                            "bbox": [
-                                obj.bbox.x1, obj.bbox.y1,
-                                obj.bbox.x2, obj.bbox.y2
-                            ] if obj.bbox else None,
-                            **obj.metadata,
-                        },
-                    })
+                    events.append(
+                        {
+                            "ts": record.timestamp.value.timestamp(),
+                            "type": obj.class_name,
+                            "camera_id": record.camera_id,
+                            "track_id": obj.track_id,
+                            "evidence": {
+                                "confidence": obj.confidence.value,
+                                "region": record.region_id,
+                                "bbox": [
+                                    obj.bbox.x1,
+                                    obj.bbox.y1,
+                                    obj.bbox.x2,
+                                    obj.bbox.y2,
+                                ]
+                                if obj.bbox
+                                else None,
+                                **obj.metadata,
+                            },
+                        }
+                    )
 
                     if len(events) >= limit:
                         break
@@ -782,7 +816,9 @@ class DetectionServiceDomain:
 
             # 计算平均处理时间
             if records:
-                avg_processing_time = sum(r.processing_time for r in records) / len(records)
+                avg_processing_time = sum(r.processing_time for r in records) / len(
+                    records
+                )
             else:
                 avg_processing_time = 0.0
 
@@ -809,7 +845,10 @@ class DetectionServiceDomain:
                 },
                 "performance_metrics": {
                     "average_processing_time": avg_processing_time,
-                    "detection_accuracy": sum(r.average_confidence for r in records) / len(records) if records else 0.0,
+                    "detection_accuracy": sum(r.average_confidence for r in records)
+                    / len(records)
+                    if records
+                    else 0.0,
                     "system_uptime": "N/A",  # 需要从系统层面获取
                 },
                 "alerts": {
@@ -822,9 +861,7 @@ class DetectionServiceDomain:
             logger.error(f"获取实时统计失败: {e}")
             raise
 
-    async def get_cameras(
-        self, active_only: bool = False
-    ) -> List[Dict[str, Any]]:
+    async def get_cameras(self, active_only: bool = False) -> List[Dict[str, Any]]:
         """
         获取摄像头列表
 
@@ -843,18 +880,22 @@ class DetectionServiceDomain:
             # 转换为字典格式（兼容旧API响应结构）
             formatted_cameras = []
             for camera in cameras:
-                formatted_cameras.append({
-                    "id": camera.id,
-                    "name": camera.name,
-                    "source": camera.metadata.get("source", ""),
-                    "status": camera.status.value,
-                    "location": camera.location,
-                    "resolution": f"{camera.resolution[0]}x{camera.resolution[1]}" if camera.resolution else "1920x1080",
-                    "fps": camera.fps or 25,
-                    "region_id": camera.region_id,
-                    "is_active": camera.is_active,
-                    **camera.metadata,  # 包含其他元数据
-                })
+                formatted_cameras.append(
+                    {
+                        "id": camera.id,
+                        "name": camera.name,
+                        "source": camera.metadata.get("source", ""),
+                        "status": camera.status.value,
+                        "location": camera.location,
+                        "resolution": f"{camera.resolution[0]}x{camera.resolution[1]}"
+                        if camera.resolution
+                        else "1920x1080",
+                        "fps": camera.fps or 25,
+                        "region_id": camera.region_id,
+                        "is_active": camera.is_active,
+                        **camera.metadata,  # 包含其他元数据
+                    }
+                )
 
             return formatted_cameras
 
@@ -960,24 +1001,45 @@ class DetectionServiceDomain:
                     stats = {
                         "total_frames": analytics.get("total_objects_detected", 0),
                         "total_persons": analytics.get("person_count", 0),
-                        "total_hairnet_violations": analytics.get("total_hairnet_violations", 0),
-                        "total_handwash_events": analytics.get("total_handwash_events", 0),
-                        "total_sanitize_events": analytics.get("total_sanitize_events", 0),
-                        "avg_fps": analytics.get("performance", {}).get("fps_estimate", 0.0),
-                        "avg_processing_time": analytics.get("performance", {}).get("avg_processing_time", 0.0),
+                        "total_hairnet_violations": analytics.get(
+                            "total_hairnet_violations", 0
+                        ),
+                        "total_handwash_events": analytics.get(
+                            "total_handwash_events", 0
+                        ),
+                        "total_sanitize_events": analytics.get(
+                            "total_sanitize_events", 0
+                        ),
+                        "avg_fps": analytics.get("performance", {}).get(
+                            "fps_estimate", 0.0
+                        ),
+                        "avg_processing_time": analytics.get("performance", {}).get(
+                            "avg_processing_time", 0.0
+                        ),
                     }
                     summary[camera_id] = stats
 
                     # 累加到总计
                     total_stats["total_frames"] += stats["total_frames"]
                     total_stats["total_persons"] += stats["total_persons"]
-                    total_stats["total_hairnet_violations"] += stats["total_hairnet_violations"]
-                    total_stats["total_handwash_events"] += stats["total_handwash_events"]
-                    total_stats["total_sanitize_events"] += stats["total_sanitize_events"]
+                    total_stats["total_hairnet_violations"] += stats[
+                        "total_hairnet_violations"
+                    ]
+                    total_stats["total_handwash_events"] += stats[
+                        "total_handwash_events"
+                    ]
+                    total_stats["total_sanitize_events"] += stats[
+                        "total_sanitize_events"
+                    ]
                     # FPS和processing_time取平均值（如果有数据）
                     if len(camera_ids) > 0:
-                        total_stats["avg_fps"] = (total_stats["avg_fps"] + stats["avg_fps"]) / len(camera_ids)
-                        total_stats["avg_processing_time"] = (total_stats["avg_processing_time"] + stats["avg_processing_time"]) / len(camera_ids)
+                        total_stats["avg_fps"] = (
+                            total_stats["avg_fps"] + stats["avg_fps"]
+                        ) / len(camera_ids)
+                        total_stats["avg_processing_time"] = (
+                            total_stats["avg_processing_time"]
+                            + stats["avg_processing_time"]
+                        ) / len(camera_ids)
 
                 except Exception as e:
                     logger.warning(f"获取摄像头统计失败 {camera_id}: {e}")
@@ -1030,7 +1092,9 @@ class DetectionServiceDomain:
 
             # 检查仓储是否支持违规状态更新
             repo = self.detection_repository
-            if hasattr(repo, "update_violation_status") and callable(getattr(repo, "update_violation_status")):
+            if hasattr(repo, "update_violation_status") and callable(
+                getattr(repo, "update_violation_status")
+            ):
                 # 如果仓储支持直接更新
                 success = await getattr(repo, "update_violation_status")(
                     violation_id, status, notes, handled_by

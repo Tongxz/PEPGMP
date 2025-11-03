@@ -9,9 +9,9 @@
 
 #### 1. PostgreSQLAlertRepository单元测试 ✅
 
-**测试文件**: `tests/unit/test_postgresql_alert_repository.py`  
-**测试数量**: 14个测试用例  
-**测试结果**: ✅ 全部通过（14/14）  
+**测试文件**: `tests/unit/test_postgresql_alert_repository.py`
+**测试数量**: 14个测试用例
+**测试结果**: ✅ 全部通过（14/14）
 **代码覆盖率**: 96% ✅
 
 **覆盖范围**:
@@ -22,9 +22,9 @@
 
 #### 2. PostgreSQLAlertRuleRepository单元测试 ✅
 
-**测试文件**: `tests/unit/test_postgresql_alert_rule_repository.py`  
-**测试数量**: 23个测试用例  
-**测试结果**: ✅ 全部通过（23/23）  
+**测试文件**: `tests/unit/test_postgresql_alert_rule_repository.py`
+**测试数量**: 23个测试用例
+**测试结果**: ✅ 全部通过（23/23）
 **代码覆盖率**: 95% ✅
 
 **覆盖范围**:
@@ -72,7 +72,7 @@
 #### 代码覆盖率
 
 - **目标**: ≥90%
-- **当前**: 
+- **当前**:
   - PostgreSQLAlertRepository: 96% ✅
   - PostgreSQLAlertRuleRepository: 96% ✅
 
@@ -148,7 +148,7 @@
 
 - ✅ **仓储单元测试**: 37个测试用例，100%通过
 - ✅ **测试覆盖**: 2个仓储全部覆盖
-- ✅ **代码质量**: 
+- ✅ **代码质量**:
   - PostgreSQLAlertRepository: 94%覆盖率 ✅
   - PostgreSQLAlertRuleRepository: 95%覆盖率 ✅
 
@@ -165,9 +165,8 @@
 
 ---
 
-**状态**: ✅ **仓储单元测试完成**  
-**测试数量**: 37个  
-**通过率**: 100%  
-**平均覆盖率**: ≥94%  
+**状态**: ✅ **仓储单元测试完成**
+**测试数量**: 37个
+**通过率**: 100%
+**平均覆盖率**: ≥94%
 **下一步**: 完整集成测试
-

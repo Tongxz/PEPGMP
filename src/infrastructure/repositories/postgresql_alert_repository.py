@@ -2,8 +2,7 @@
 
 import json
 import logging
-from datetime import datetime
-from typing import Any, List, Optional
+from typing import List, Optional
 
 import asyncpg
 from asyncpg import Pool
@@ -158,4 +157,3 @@ class PostgreSQLAlertRepository(IAlertRepository):
             notification_sent=row.get("notification_sent", False),
             notification_channels_used=notification_channels_used,
         )
-

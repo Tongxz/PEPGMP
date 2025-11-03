@@ -31,6 +31,3 @@ def should_use_domain(force_domain: Optional[bool] = None) -> bool:
 
     # 简单的随机采样
     return random.randint(1, 100) <= percent
-
-
-

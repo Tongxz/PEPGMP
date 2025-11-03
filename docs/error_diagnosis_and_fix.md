@@ -21,13 +21,13 @@
 - PID 77159: 主进程
 - PID 88369: 可能是uvicorn的reload子进程
 
-**可能原因**: 
+**可能原因**:
 - uvicorn的`--reload`选项会创建子进程
 - 这可能导致某些请求被路由到错误的进程
 
 #### 问题2: curl成功但httpx失败 ⚠️
 
-**现象**: 
+**现象**:
 - `curl`直接请求返回200，有正常数据
 - `httpx`异步请求返回502，响应为空
 
@@ -91,7 +91,7 @@ except httpx.HTTPStatusError as e:
 **解决**: 在测试脚本中禁用HTTP/2
 ```python
 client = httpx.AsyncClient(
-    base_url=base_url, 
+    base_url=base_url,
     timeout=TIMEOUT,
     http2=False,  # 禁用HTTP/2
     follow_redirects=True
@@ -102,7 +102,7 @@ client = httpx.AsyncClient(
 
 **问题**: 多个进程可能导致请求路由问题
 
-**解决**: 
+**解决**:
 1. 检查是否有多个uvicorn进程
 2. 考虑停止reload模式进行测试
 3. 或使用单个worker模式
@@ -111,7 +111,7 @@ client = httpx.AsyncClient(
 
 **问题**: 502错误通常表示应用内部错误
 
-**解决**: 
+**解决**:
 1. 查看启动uvicorn的终端窗口的输出
 2. 检查是否有应用异常
 3. 检查数据库连接是否正常
@@ -132,6 +132,5 @@ client = httpx.AsyncClient(
 
 ---
 
-**状态**: ⚠️ **部分问题已修复，需要进一步诊断**  
+**状态**: ⚠️ **部分问题已修复，需要进一步诊断**
 **优先级**: 中等（服务运行正常，但测试脚本有问题）
-

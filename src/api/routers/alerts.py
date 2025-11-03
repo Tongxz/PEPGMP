@@ -6,11 +6,12 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, HTTPException, Path, Query
 
 from src.api.utils.rollout import should_use_domain
+
 from ...services.database_service import get_db_service
 
 try:
-    from src.domain.services.alert_service import AlertService
     from src.domain.services.alert_rule_service import AlertRuleService
+    from src.domain.services.alert_service import AlertService
     from src.infrastructure.repositories.postgresql_alert_repository import (
         PostgreSQLAlertRepository,
     )
@@ -64,6 +65,7 @@ async def get_alert_history_db(
     except Exception as e:
         logger.warning(f"告警服务查询历史失败，回退到数据库查询: {e}")
         import traceback
+
         logger.debug(traceback.format_exc())
 
     # 旧实现（回退）

@@ -38,8 +38,8 @@ WORKDIR /app
 # 升级pip
 RUN pip install --upgrade pip setuptools wheel
 
-# 复制依赖文件
-COPY requirements.txt /tmp/requirements.txt
+# 复制依赖文件（使用生产环境依赖）
+COPY requirements.prod.txt /tmp/requirements.txt
 
 # 安装Python依赖到临时目录
 RUN pip install --user --no-cache-dir -r /tmp/requirements.txt
@@ -85,14 +85,13 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # 启动命令（使用Gunicorn + Uvicorn Workers）
 # 配置通过.env文件或环境变量加载
 CMD ["gunicorn", "src.api.app:app", \
-     "--workers", "4", \
-     "--worker-class", "uvicorn.workers.UvicornWorker", \
-     "--bind", "0.0.0.0:8000", \
-     "--timeout", "120", \
-     "--keepalive", "5", \
-     "--max-requests", "1000", \
-     "--max-requests-jitter", "50", \
-     "--access-logfile", "/app/logs/access.log", \
-     "--error-logfile", "/app/logs/error.log", \
-     "--log-level", "info"]
-
+    "--workers", "4", \
+    "--worker-class", "uvicorn.workers.UvicornWorker", \
+    "--bind", "0.0.0.0:8000", \
+    "--timeout", "120", \
+    "--keep-alive", "5", \
+    "--max-requests", "1000", \
+    "--max-requests-jitter", "50", \
+    "--access-logfile", "/app/logs/access.log", \
+    "--error-logfile", "/app/logs/error.log", \
+    "--log-level", "info"]

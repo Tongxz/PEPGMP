@@ -1,9 +1,8 @@
 """告警领域服务."""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from src.domain.entities.alert import Alert
 from src.domain.repositories.alert_repository import IAlertRepository
 
 logger = logging.getLogger(__name__)
@@ -51,4 +50,3 @@ class AlertService:
         except Exception as e:
             logger.error(f"获取告警历史失败: {e}")
             raise
-

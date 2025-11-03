@@ -1,4 +1,3 @@
-import asyncio
 from typing import Any, Dict, List, Optional
 
 import pytest
@@ -26,7 +25,12 @@ class _FakeRepo:
         if violation_type is not None:
             items = [x for x in items if x.get("violation_type") == violation_type]
         sliced = items[offset : offset + limit]
-        return {"violations": sliced, "total": len(items), "limit": limit, "offset": offset}
+        return {
+            "violations": sliced,
+            "total": len(items),
+            "limit": limit,
+            "offset": offset,
+        }
 
 
 class _FakeCameraRepo:
@@ -120,5 +124,3 @@ async def test_get_violation_details_filters_and_pagination():
     for item in result["violations"]:
         assert item["camera_id"] == "cam0"
         assert item["violation_type"] == "no_hairnet"
-
-

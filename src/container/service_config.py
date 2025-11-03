@@ -7,12 +7,12 @@ import logging
 import os
 
 from src.container.service_container import container
+from src.infrastructure.repositories.repository_factory import RepositoryFactory
 from src.interfaces.detection.detector_interface import IDetector
 from src.interfaces.repositories.detection_repository_interface import (
     IDetectionRepository,
 )
 from src.interfaces.tracking.tracker_interface import ITracker
-from src.infrastructure.repositories.repository_factory import RepositoryFactory
 
 logger = logging.getLogger(__name__)
 
@@ -133,9 +133,7 @@ def _configure_repository_services():
         # 通过工厂按配置创建仓储实现（postgresql|redis|hybrid）
         repo = RepositoryFactory.create_repository_from_env()
         container.register_instance(IDetectionRepository, repo)
-        logger.info(
-            f"检测记录仓储服务已注册: {repo.__class__.__name__}"
-        )
+        logger.info(f"检测记录仓储服务已注册: {repo.__class__.__name__}")
 
     except ImportError as e:
         logger.warning(f"仓储服务导入失败: {e}")

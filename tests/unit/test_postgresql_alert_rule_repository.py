@@ -16,13 +16,13 @@ from src.interfaces.repositories.detection_repository_interface import Repositor
 
 class MockRecord:
     """模拟asyncpg.Record."""
-    
+
     def __init__(self, data):
         self._data = data
-    
+
     def __getitem__(self, key):
         return self._data[key]
-    
+
     def get(self, key, default=None):
         return self._data.get(key, default)
 
@@ -59,29 +59,29 @@ def sample_alert_rule():
 @pytest.fixture
 def mock_row():
     """创建模拟的数据库行."""
-    return MockRecord({
-        "id": 1,
-        "name": "测试规则",
-        "camera_id": "cam1",
-        "rule_type": "violation",
-        "conditions": json.dumps({"threshold": 5}),
-        "notification_channels": json.dumps(["email", "sms"]),
-        "recipients": json.dumps(["user@example.com"]),
-        "enabled": True,
-        "priority": "high",
-        "created_at": datetime.now(),
-        "updated_at": datetime.now(),
-        "created_by": "admin",
-    })
+    return MockRecord(
+        {
+            "id": 1,
+            "name": "测试规则",
+            "camera_id": "cam1",
+            "rule_type": "violation",
+            "conditions": json.dumps({"threshold": 5}),
+            "notification_channels": json.dumps(["email", "sms"]),
+            "recipients": json.dumps(["user@example.com"]),
+            "enabled": True,
+            "priority": "high",
+            "created_at": datetime.now(),
+            "updated_at": datetime.now(),
+            "created_by": "admin",
+        }
+    )
 
 
 @pytest.mark.asyncio
 class TestPostgreSQLAlertRuleRepository:
     """测试PostgreSQL告警规则仓储."""
 
-    async def test_find_by_id_success(
-        self, alert_rule_repository, mock_pool, mock_row
-    ):
+    async def test_find_by_id_success(self, alert_rule_repository, mock_pool, mock_row):
         """测试根据ID查找告警规则成功."""
         mock_conn = AsyncMock()
         mock_pool.acquire = AsyncMock(return_value=mock_conn)
@@ -117,9 +117,7 @@ class TestPostgreSQLAlertRuleRepository:
         with pytest.raises(RepositoryError, match="查询告警规则失败"):
             await alert_rule_repository.find_by_id(1)
 
-    async def test_find_all_success(
-        self, alert_rule_repository, mock_pool, mock_row
-    ):
+    async def test_find_all_success(self, alert_rule_repository, mock_pool, mock_row):
         """测试查询所有告警规则成功."""
         mock_conn = AsyncMock()
         mock_pool.acquire = AsyncMock(return_value=mock_conn)
@@ -198,9 +196,7 @@ class TestPostgreSQLAlertRuleRepository:
         mock_pool.acquire.assert_called_once()
         mock_pool.release.assert_called_once_with(mock_conn)
 
-    async def test_save_without_optional_fields(
-        self, alert_rule_repository, mock_pool
-    ):
+    async def test_save_without_optional_fields(self, alert_rule_repository, mock_pool):
         """测试保存没有可选字段的告警规则."""
         rule = AlertRule(
             id=0,
@@ -360,20 +356,22 @@ class TestPostgreSQLAlertRuleRepository:
         self, alert_rule_repository, mock_pool
     ):
         """测试_row_to_alert_rule解析JSON字符串."""
-        row = MockRecord({
-            "id": 1,
-            "name": "测试规则",
-            "camera_id": "cam1",
-            "rule_type": "violation",
-            "conditions": json.dumps({"threshold": 5}),
-            "notification_channels": json.dumps(["email", "sms"]),
-            "recipients": json.dumps(["user@example.com"]),
-            "enabled": True,
-            "priority": "high",
-            "created_at": datetime.now(),
-            "updated_at": datetime.now(),
-            "created_by": "admin",
-        })
+        row = MockRecord(
+            {
+                "id": 1,
+                "name": "测试规则",
+                "camera_id": "cam1",
+                "rule_type": "violation",
+                "conditions": json.dumps({"threshold": 5}),
+                "notification_channels": json.dumps(["email", "sms"]),
+                "recipients": json.dumps(["user@example.com"]),
+                "enabled": True,
+                "priority": "high",
+                "created_at": datetime.now(),
+                "updated_at": datetime.now(),
+                "created_by": "admin",
+            }
+        )
 
         rule = alert_rule_repository._row_to_alert_rule(row)
 
@@ -385,20 +383,22 @@ class TestPostgreSQLAlertRuleRepository:
         self, alert_rule_repository, mock_pool
     ):
         """测试_row_to_alert_rule解析JSON对象."""
-        row = MockRecord({
-            "id": 1,
-            "name": "测试规则",
-            "camera_id": "cam1",
-            "rule_type": "violation",
-            "conditions": {"threshold": 5},
-            "notification_channels": ["email", "sms"],
-            "recipients": ["user@example.com"],
-            "enabled": True,
-            "priority": "high",
-            "created_at": datetime.now(),
-            "updated_at": datetime.now(),
-            "created_by": "admin",
-        })
+        row = MockRecord(
+            {
+                "id": 1,
+                "name": "测试规则",
+                "camera_id": "cam1",
+                "rule_type": "violation",
+                "conditions": {"threshold": 5},
+                "notification_channels": ["email", "sms"],
+                "recipients": ["user@example.com"],
+                "enabled": True,
+                "priority": "high",
+                "created_at": datetime.now(),
+                "updated_at": datetime.now(),
+                "created_by": "admin",
+            }
+        )
 
         rule = alert_rule_repository._row_to_alert_rule(row)
 
@@ -410,20 +410,22 @@ class TestPostgreSQLAlertRuleRepository:
         self, alert_rule_repository, mock_pool
     ):
         """测试_row_to_alert_rule处理无效JSON."""
-        row = MockRecord({
-            "id": 1,
-            "name": "测试规则",
-            "camera_id": "cam1",
-            "rule_type": "violation",
-            "conditions": "invalid json{",
-            "notification_channels": None,
-            "recipients": None,
-            "enabled": True,
-            "priority": "high",
-            "created_at": datetime.now(),
-            "updated_at": datetime.now(),
-            "created_by": "admin",
-        })
+        row = MockRecord(
+            {
+                "id": 1,
+                "name": "测试规则",
+                "camera_id": "cam1",
+                "rule_type": "violation",
+                "conditions": "invalid json{",
+                "notification_channels": None,
+                "recipients": None,
+                "enabled": True,
+                "priority": "high",
+                "created_at": datetime.now(),
+                "updated_at": datetime.now(),
+                "created_by": "admin",
+            }
+        )
 
         rule = alert_rule_repository._row_to_alert_rule(row)
 

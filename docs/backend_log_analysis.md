@@ -28,16 +28,16 @@ INFO:     Application startup complete.
 ERROR:src.api.redis_listener:Redis connection failed: Authentication required.. Retrying in 5 seconds...
 ```
 
-**影响**: 
+**影响**:
 - ❌ Redis监听器无法连接
 - ⚠️ 不影响基本API功能（健康检查显示redis: ok）
 - ⚠️ 可能影响实时功能
 
-**原因**: 
+**原因**:
 - Redis URL格式可能不正确
 - 环境变量`REDIS_URL="redis://:pyt_dev_redis@localhost:6379/0"`中的密码格式可能有问题
 
-**建议**: 
+**建议**:
 - 检查Redis密码配置
 - 或禁用Redis监听器（如果不需要）
 
@@ -48,11 +48,11 @@ ERROR:src.api.redis_listener:Redis connection failed: Authentication required.. 
 WARNING:src.core.behavior:Failed to load ML classifier: name 'xgb' is not defined
 ```
 
-**影响**: 
+**影响**:
 - ⚠️ ML分类器功能不可用
 - ✅ 不影响基本检测功能（代码中有fallback）
 
-**原因**: 
+**原因**:
 - XGBoost未安装或导入失败
 - 这不是关键功能
 
@@ -110,7 +110,7 @@ r = requests.get('http://localhost:8000/api/v1/monitoring/health')
 **禁用连接池**:
 ```python
 async with httpx.AsyncClient(
-    timeout=5.0, 
+    timeout=5.0,
     http2=False,
     limits=httpx.Limits(max_keepalive_connections=0)  # 禁用连接复用
 ) as client:
@@ -144,6 +144,5 @@ async with httpx.AsyncClient(
 
 ---
 
-**状态**: ⚠️ **应用运行正常，但httpx异步客户端有问题**  
+**状态**: ⚠️ **应用运行正常，但httpx异步客户端有问题**
 **建议**: 使用同步HTTP客户端或curl脚本进行测试
-

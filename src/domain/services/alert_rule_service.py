@@ -1,7 +1,7 @@
 """告警规则领域服务."""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from src.domain.entities.alert_rule import AlertRule
 from src.domain.repositories.alert_rule_repository import IAlertRuleRepository
@@ -70,7 +70,7 @@ class AlertRuleService:
                     raise ValueError(f"缺少必填字段: {field}")
 
             # 创建AlertRule实体
-            from datetime import datetime
+
             rule = AlertRule(
                 id=0,  # 临时ID，保存后会返回真实ID
                 name=rule_data["name"],
@@ -130,9 +130,7 @@ class AlertRuleService:
             ]
 
             # 过滤允许的字段
-            filtered_updates = {
-                k: v for k, v in updates.items() if k in allowed_fields
-            }
+            filtered_updates = {k: v for k, v in updates.items() if k in allowed_fields}
 
             if not filtered_updates:
                 return {"ok": True}
@@ -151,4 +149,3 @@ class AlertRuleService:
         except Exception as e:
             logger.error(f"更新告警规则失败: {e}")
             raise
-

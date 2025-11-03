@@ -204,7 +204,7 @@ async def get_detection_records_by_camera(
 ) -> Dict[str, Any]
 
 async def get_detection_records_by_time_range(
-    self, start_time: datetime, end_time: datetime, 
+    self, start_time: datetime, end_time: datetime,
     camera_id: Optional[str] = None, limit: int = 100
 ) -> Dict[str, Any]
 
@@ -256,7 +256,7 @@ async def endpoint_handler(
             return result
         except Exception as e:
             logger.warning(f"领域服务失败，回退: {e}")
-    
+
     # 旧实现（回退）
     ...
 ```
@@ -311,7 +311,6 @@ async def endpoint_handler(
 
 ---
 
-**创建日期**: 2025-10-31  
-**更新日期**: 2025-10-31  
+**创建日期**: 2025-10-31
+**更新日期**: 2025-10-31
 **状态**: 待执行
-

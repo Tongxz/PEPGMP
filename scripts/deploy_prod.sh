@@ -43,10 +43,10 @@ if [ -d ".git" ]; then
     else
         echo -e "${GREEN}✅ Git工作目录干净${NC}"
     fi
-    
+
     current_branch=$(git branch --show-current)
     echo "当前分支: $current_branch"
-    
+
     if [ "$current_branch" != "main" ] && [ "$current_branch" != "master" ]; then
         echo -e "${YELLOW}⚠️  警告：不在main/master分支${NC}"
         read -p "继续部署？(y/n) " -n 1 -r
@@ -121,18 +121,18 @@ case $DEPLOY_MODE in
     docker)
         echo "使用Docker Compose部署..."
         echo ""
-        
+
         # 检查Docker
         if ! command -v docker &> /dev/null; then
             echo -e "${RED}❌ Docker未安装${NC}"
             exit 1
         fi
-        
+
         if ! command -v docker-compose &> /dev/null; then
             echo -e "${RED}❌ Docker Compose未安装${NC}"
             exit 1
         fi
-        
+
         # 构建镜像
         echo "1. 构建Docker镜像..."
         docker build -f Dockerfile.prod.new -t pyt-api:latest . || {
@@ -141,18 +141,18 @@ case $DEPLOY_MODE in
         }
         echo -e "${GREEN}✅ 镜像构建成功${NC}"
         echo ""
-        
+
         # 停止旧服务
         echo "2. 停止旧服务..."
         docker-compose -f docker-compose.prod.yml down || true
         echo ""
-        
+
         # 启动新服务
         echo "3. 启动新服务..."
         docker-compose -f docker-compose.prod.yml up -d
         echo -e "${GREEN}✅ 服务启动成功${NC}"
         echo ""
-        
+
         # 等待服务启动
         echo "4. 等待服务启动..."
         for i in {1..30}; do
@@ -165,48 +165,48 @@ case $DEPLOY_MODE in
             fi
         done
         echo ""
-        
+
         # 显示服务状态
         echo "5. 服务状态："
         docker-compose -f docker-compose.prod.yml ps
         ;;
-        
+
     k8s)
         echo "使用Kubernetes部署..."
         echo ""
-        
+
         # 检查kubectl
         if ! command -v kubectl &> /dev/null; then
             echo -e "${RED}❌ kubectl未安装${NC}"
             exit 1
         fi
-        
+
         # 应用配置
         echo "1. 应用Kubernetes配置..."
         kubectl apply -f k8s/
         echo ""
-        
+
         # 等待部署完成
         echo "2. 等待部署完成..."
         kubectl rollout status deployment/pyt-api
         echo ""
-        
+
         # 显示Pod状态
         echo "3. Pod状态："
         kubectl get pods -l app=pyt-api
         ;;
-        
+
     local)
         echo "本地部署..."
         echo ""
-        
+
         # 运行数据库迁移（如果需要）
         # python manage.py migrate
-        
+
         # 启动服务
         ./scripts/start_prod.sh
         ;;
-        
+
     *)
         echo -e "${RED}❌ 未知的部署模式: $DEPLOY_MODE${NC}"
         echo "支持的模式: docker, k8s, local"

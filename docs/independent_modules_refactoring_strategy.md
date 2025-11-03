@@ -242,7 +242,7 @@
    - Dataset.py
    - Deployment.py
    - Workflow.py
-   
+
    # src/domain/entities/security/
    - User.py
    - AccessRule.py
@@ -255,7 +255,7 @@
    - IDatasetRepository.py
    - IDeploymentRepository.py
    - IWorkflowRepository.py
-   
+
    # src/domain/repositories/security/
    - IUserRepository.py
    - IAccessRuleRepository.py
@@ -268,7 +268,7 @@
    - PostgreSQLDatasetRepository.py
    - PostgreSQLDeploymentRepository.py
    - PostgreSQLWorkflowRepository.py
-   
+
    # src/infrastructure/repositories/security/
    - PostgreSQLUserRepository.py
    - PostgreSQLAccessRuleRepository.py
@@ -283,7 +283,7 @@
    - DatasetService.py
    - DeploymentService.py
    - WorkflowService.py
-   
+
    # src/domain/services/security/
    - AuthenticationService.py
    - AuthorizationService.py
@@ -513,7 +513,6 @@
 
 ---
 
-**状态**: ✅ **策略已制定**  
-**建议**: 优先完成核心业务端点，保持独立模块现状  
+**状态**: ✅ **策略已制定**
+**建议**: 优先完成核心业务端点，保持独立模块现状
 **下一步**: 实施摄像头操作端点重构
-

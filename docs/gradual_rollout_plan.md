@@ -111,7 +111,7 @@
    ```bash
    # 停止当前服务
    pkill -f "uvicorn.*app:app"
-   
+
    # 启动服务（已配置环境变量）
    source venv/bin/activate
    export DATABASE_URL="postgresql://..."
@@ -125,7 +125,7 @@
    ```bash
    # 检查环境变量
    ./tools/rollout_preparation_check.sh
-   
+
    # 测试端点（可能使用新实现，概率10%）
    curl "http://localhost:8000/api/v1/alerts/rules"
    ```
@@ -152,7 +152,7 @@
 
 **如果通过**: 继续提升到25%
 
-**如果未通过**: 
+**如果未通过**:
 - 分析问题原因
 - 修复问题
 - 重新10%灰度或回滚
@@ -385,7 +385,6 @@ source /tmp/quick_rollback.sh
 
 ---
 
-**状态**: ⏳ **准备开始灰度发布**  
-**下一步**: 启动10%灰度发布  
+**状态**: ⏳ **准备开始灰度发布**
+**下一步**: 启动10%灰度发布
 **详细计划**: 请查看本文档
-

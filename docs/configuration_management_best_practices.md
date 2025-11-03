@@ -153,7 +153,7 @@ class Config:
 
     def __init__(self, env_file: Optional[str] = None):
         """初始化配置.
-        
+
         Args:
             env_file: 环境文件路径，如果为None则按优先级加载
         """
@@ -165,89 +165,89 @@ class Config:
             # 2. .env.{ENVIRONMENT} (环境特定)
             # 3. .env (默认配置)
             project_root = Path(__file__).parent.parent.parent
-            
+
             # 加载默认配置
             default_env = project_root / ".env"
             if default_env.exists():
                 load_dotenv(default_env)
-            
+
             # 加载环境特定配置
             environment = os.getenv("ENVIRONMENT", "development")
             env_specific = project_root / f".env.{environment}"
             if env_specific.exists():
                 load_dotenv(env_specific, override=True)
-            
+
             # 加载本地覆盖配置
             local_env = project_root / ".env.local"
             if local_env.exists():
                 load_dotenv(local_env, override=True)
-    
+
     # 应用配置
     @property
     def environment(self) -> str:
         return os.getenv("ENVIRONMENT", "development")
-    
+
     @property
     def log_level(self) -> str:
         return os.getenv("LOG_LEVEL", "INFO")
-    
+
     @property
     def auto_convert_tensorrt(self) -> bool:
         return os.getenv("AUTO_CONVERT_TENSORRT", "false").lower() == "true"
-    
+
     # 数据库配置
     @property
     def database_url(self) -> str:
         return os.getenv("DATABASE_URL", "")
-    
+
     # Redis配置
     @property
     def redis_url(self) -> str:
         return os.getenv("REDIS_URL", "")
-    
+
     # 领域服务配置
     @property
     def use_domain_service(self) -> bool:
         return os.getenv("USE_DOMAIN_SERVICE", "false").lower() == "true"
-    
+
     @property
     def rollout_percent(self) -> int:
         return int(os.getenv("ROLLOUT_PERCENT", "0"))
-    
+
     # API配置
     @property
     def api_host(self) -> str:
         return os.getenv("API_HOST", "0.0.0.0")
-    
+
     @property
     def api_port(self) -> int:
         return int(os.getenv("API_PORT", "8000"))
-    
+
     @property
     def api_reload(self) -> bool:
         return os.getenv("API_RELOAD", "false").lower() == "true"
-    
+
     # 安全配置
     @property
     def admin_username(self) -> str:
         return os.getenv("ADMIN_USERNAME", "admin")
-    
+
     @property
     def admin_password(self) -> str:
         return os.getenv("ADMIN_PASSWORD", "")
-    
+
     @property
     def secret_key(self) -> str:
         return os.getenv("SECRET_KEY", "")
-    
+
     # 摄像头配置
     @property
     def cameras_yaml_path(self) -> str:
         return os.getenv("CAMERAS_YAML_PATH", "config/cameras.yaml")
-    
+
     def validate(self) -> bool:
         """验证必需的配置项是否存在.
-        
+
         Returns:
             配置是否有效
         """
@@ -255,12 +255,12 @@ class Config:
             ("DATABASE_URL", self.database_url),
             ("REDIS_URL", self.redis_url),
         ]
-        
+
         missing = [name for name, value in required if not value]
-        
+
         if missing:
             raise ValueError(f"缺少必需的配置项: {', '.join(missing)}")
-        
+
         return True
 
 
@@ -671,7 +671,6 @@ chmod 600 .env.production
 
 ---
 
-**状态**: 配置管理最佳实践方案  
-**优先级**: 高  
+**状态**: 配置管理最佳实践方案
+**优先级**: 高
 **影响**: 提高配置管理的安全性、可维护性和可靠性
-

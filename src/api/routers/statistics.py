@@ -7,17 +7,15 @@ import json
 import logging
 import os
 from datetime import datetime, timedelta
-import os
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Query
-from src.api.utils.rollout import should_use_domain
 
+from src.api.utils.rollout import should_use_domain
 from src.services.region_service import RegionService, get_region_service
+
 try:
-    from src.services.detection_service_domain import (
-        get_detection_service_domain,
-    )
+    from src.services.detection_service_domain import get_detection_service_domain
 except Exception:
     get_detection_service_domain = None  # type: ignore
 
@@ -307,24 +305,25 @@ async def get_statistics_events(
     try:
         if should_use_domain(force_domain) and get_detection_service_domain is not None:
             domain_service = get_detection_service_domain()
-            
+
             # 解析时间范围
             from datetime import datetime as dt
+
             start_dt = None
             end_dt = None
-            
+
             if start_time:
                 try:
-                    start_dt = dt.fromisoformat(start_time.replace('Z', '+00:00'))
+                    start_dt = dt.fromisoformat(start_time.replace("Z", "+00:00"))
                 except Exception:
                     pass
-            
+
             if end_time:
                 try:
-                    end_dt = dt.fromisoformat(end_time.replace('Z', '+00:00'))
+                    end_dt = dt.fromisoformat(end_time.replace("Z", "+00:00"))
                 except Exception:
                     pass
-            
+
             result = await domain_service.get_event_history(
                 start_time=start_dt,
                 end_time=end_dt,
@@ -342,7 +341,7 @@ async def get_statistics_events(
     # 解析时间范围
     if start_time:
         try:
-            start_dt = dt.fromisoformat(start_time.replace('Z', '+00:00'))
+            start_dt = dt.fromisoformat(start_time.replace("Z", "+00:00"))
             since_ts = start_dt.timestamp()
         except Exception:
             since_ts = (datetime.utcnow() - timedelta(hours=24)).timestamp()
@@ -351,7 +350,7 @@ async def get_statistics_events(
 
     if end_time:
         try:
-            end_dt = dt.fromisoformat(end_time.replace('Z', '+00:00'))
+            end_dt = dt.fromisoformat(end_time.replace("Z", "+00:00"))
             until_ts = end_dt.timestamp()
         except Exception:
             until_ts = datetime.utcnow().timestamp()
@@ -364,30 +363,32 @@ async def get_statistics_events(
     for r in reversed(rows):
         try:
             event_ts = float(r.get("ts", 0.0))
-            
+
             # 时间范围过滤
             if event_ts < since_ts or event_ts > until_ts:
                 continue
-            
+
             # 摄像头过滤
             if camera_id is not None and str(r.get("camera_id", "")) != str(camera_id):
                 continue
-            
+
             # 事件类型过滤
             if event_type is not None and str(r.get("type", "")) != str(event_type):
                 continue
-            
-            out.append({
-                "id": str(r.get("ts", "")) + "_" + str(r.get("track_id", "")),
-                "timestamp": dt.utcfromtimestamp(event_ts).isoformat() + 'Z',
-                "type": r.get("type"),
-                "camera_id": r.get("camera_id"),
-                "confidence": r.get("evidence", {}).get("confidence", 0.0),
-                "track_id": r.get("track_id"),
-                "region": (r.get("evidence", {}) or {}).get("region"),
-                "metadata": r.get("evidence", {}),
-            })
-            
+
+            out.append(
+                {
+                    "id": str(r.get("ts", "")) + "_" + str(r.get("track_id", "")),
+                    "timestamp": dt.utcfromtimestamp(event_ts).isoformat() + "Z",
+                    "type": r.get("type"),
+                    "camera_id": r.get("camera_id"),
+                    "confidence": r.get("evidence", {}).get("confidence", 0.0),
+                    "track_id": r.get("track_id"),
+                    "region": (r.get("evidence", {}) or {}).get("region"),
+                    "metadata": r.get("evidence", {}),
+                }
+            )
+
             if len(out) >= limit:
                 break
         except Exception:
@@ -424,14 +425,16 @@ async def get_statistics_history(
             # 转换为旧格式
             formatted_result = []
             for event in result:
-                formatted_result.append({
-                    "ts": event.get("timestamp"),
-                    "camera_id": event.get("camera_id"),
-                    "type": event.get("type"),
-                    "track_id": event.get("track_id"),
-                    "region": event.get("region"),
-                    "detail": event.get("metadata", {}),
-                })
+                formatted_result.append(
+                    {
+                        "ts": event.get("timestamp"),
+                        "camera_id": event.get("camera_id"),
+                        "type": event.get("type"),
+                        "track_id": event.get("track_id"),
+                        "region": event.get("region"),
+                        "detail": event.get("metadata", {}),
+                    }
+                )
             return formatted_result
     except Exception as e:
         logger.warning(f"领域服务近期历史查询失败，回退到日志查询: {e}")

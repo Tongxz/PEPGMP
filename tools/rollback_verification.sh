@@ -28,11 +28,11 @@ test_endpoint() {
     local endpoint=$2
     local params=$3
     local description=$4
-    
+
     echo -e "${BLUE}----------------------------------------${NC}"
     echo -e "${BLUE}测试: $description${NC}"
     echo -e "${BLUE}----------------------------------------${NC}"
-    
+
     if [ "$method" = "GET" ]; then
         if [ -n "$params" ]; then
             response=$(curl -s "$BASE_URL$endpoint?$params" 2>&1) || true
@@ -48,7 +48,7 @@ test_endpoint() {
         code=$(echo "$response" | tail -n1)
         response=$(echo "$response" | sed '$d')
     fi
-    
+
     echo ""
     echo -n "  响应状态码 ... "
     if [ "$code" = "200" ] || [ "$code" = "201" ]; then
@@ -59,7 +59,7 @@ test_endpoint() {
         echo "    响应: $(echo "$response" | head -c 200)"
         ((FAILED++))
     fi
-    
+
     echo ""
 }
 
@@ -195,4 +195,3 @@ else
     echo -e "${RED}✗ 部分验证失败${NC}"
     exit 1
 fi
-

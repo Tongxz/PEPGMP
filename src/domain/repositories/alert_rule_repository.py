@@ -22,7 +22,6 @@ class IAlertRuleRepository(ABC):
         Returns:
             告警规则实体，如果不存在则返回None
         """
-        pass
 
     @abstractmethod
     async def find_all(
@@ -39,7 +38,6 @@ class IAlertRuleRepository(ABC):
         Returns:
             告警规则列表
         """
-        pass
 
     @abstractmethod
     async def save(self, rule: AlertRule) -> int:
@@ -51,7 +49,6 @@ class IAlertRuleRepository(ABC):
         Returns:
             保存后的规则ID
         """
-        pass
 
     @abstractmethod
     async def update(self, rule_id: int, updates: dict) -> bool:
@@ -64,7 +61,6 @@ class IAlertRuleRepository(ABC):
         Returns:
             更新是否成功
         """
-        pass
 
     @abstractmethod
     async def delete(self, rule_id: int) -> bool:
@@ -76,5 +72,3 @@ class IAlertRuleRepository(ABC):
         Returns:
             删除是否成功
         """
-        pass
-

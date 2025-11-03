@@ -5,7 +5,6 @@ from datetime import datetime
 from pathlib import Path as FilePath
 from typing import Any, Dict, List, Optional
 
-from src.domain.entities.camera import Camera, CameraStatus
 from src.domain.services.camera_service import CameraService
 
 logger = logging.getLogger(__name__)
@@ -175,12 +174,12 @@ class CameraControlService:
         try:
             # 更新摄像头状态为激活
             updates = {"active": True}
-            result = await self.camera_service.update_camera(camera_id, updates)
+            await self.camera_service.update_camera(camera_id, updates)
 
             logger.info(f"摄像头激活成功 {camera_id}")
             return {"ok": True, "camera_id": camera_id, "active": True}
 
-        except ValueError as e:
+        except ValueError:
             raise
         except Exception as e:
             logger.error(f"激活摄像头异常 {camera_id}: {e}")
@@ -222,7 +221,7 @@ class CameraControlService:
                 "stopped": was_running,
             }
 
-        except ValueError as e:
+        except ValueError:
             raise
         except Exception as e:
             logger.error(f"停用摄像头异常 {camera_id}: {e}")
@@ -254,7 +253,7 @@ class CameraControlService:
             logger.info(f"自动启动设置更新 {camera_id}: {auto_start}")
             return {"ok": True, "camera_id": camera_id, "auto_start": bool(auto_start)}
 
-        except ValueError as e:
+        except ValueError:
             raise
         except Exception as e:
             logger.error(f"切换自动启动异常 {camera_id}: {e}")
@@ -321,4 +320,3 @@ class CameraControlService:
             "message": "所有摄像头状态已刷新",
             "timestamp": datetime.now().isoformat(),
         }
-

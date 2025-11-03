@@ -32,15 +32,15 @@ perf_test() {
     local concurrent=${4:-10}
     local requests=${5:-100}
     local force_domain=${6:-"false"}
-    
+
     local url="${BASE_URL}${endpoint}"
     if [ "$force_domain" = "true" ]; then
         url="${url}${endpoint}?force_domain=true"
     fi
-    
+
     echo "--- 性能测试: ${method} ${endpoint} (force_domain=${force_domain}) ---"
     echo "并发数: ${concurrent}, 总请求数: ${requests}"
-    
+
     # 使用Python脚本进行性能测试
     python3 <<EOF
 import asyncio
@@ -80,12 +80,12 @@ async def run_perf_test(url, method, payload, concurrent, total_requests):
         tasks = []
         for i in range(total_requests):
             tasks.append(fetch(session, url, method, payload))
-        
+
         results = await asyncio.gather(*tasks)
-        
+
         latencies = [r[0] for r in results if r[1] == 200]
         statuses = [r[1] for r in results]
-        
+
         if latencies:
             latencies.sort()
             p50 = latencies[len(latencies) // 2]
@@ -94,11 +94,11 @@ async def run_perf_test(url, method, payload, concurrent, total_requests):
             avg = statistics.mean(latencies)
             max_latency = max(latencies)
             min_latency = min(latencies)
-            
+
             success_count = statuses.count(200)
             success_rate = (success_count / len(statuses)) * 100
             qps = (success_count / (sum(latencies) / 1000)) if latencies else 0
-            
+
             print(f"  成功请求: {success_count}/{len(statuses)} ({success_rate:.1f}%)")
             print(f"  QPS: {qps:.2f}")
             print(f"  平均延迟: {avg:.2f}ms")
@@ -355,4 +355,3 @@ echo ""
 echo "✅ 性能测试完成"
 echo ""
 echo "详细性能数据已收集，请查看上方输出"
-

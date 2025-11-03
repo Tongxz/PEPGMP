@@ -1,0 +1,88 @@
+version: "3.8"
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+
+volumes:
+  postgres_test_data:
+  redis_test_data:
+  app_logs:
+  app_output:
+
+services:
+  # PostgreSQL数据库
+  database:
+    image: postgres:16-alpine
+    container_name: pyt-postgres-test
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pyt_production}
+      POSTGRES_USER: ${POSTGRES_USER:-pyt_prod}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pyt_prod} -d ${POSTGRES_DB:-pyt_production}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # Redis缓存
+  redis:
+    image: redis:7-alpine
+    container_name: pyt-redis-test
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_test_data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  # API服务（使用Registry镜像）
+  api:
+    image: 192.168.30.83:5433/pyt-backend:latest
+    container_name: pyt-api-test
+    env_file:
+      - .env.production
+    environment:
+      - ENVIRONMENT=production
+    ports:
+      - "8000:8000"
+    volumes:
+      - app_logs:/app/logs
+      - app_output:/app/output
+      - ./config:/app/config:ro
+      - ./models:/app/models:ro
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/monitoring/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped

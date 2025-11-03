@@ -19,16 +19,16 @@ from src.services.scheduler import get_scheduler
 
 try:
     from src.services.detection_service_domain import (
-        get_detection_service_domain,
         DefaultCameraRepository,
+        get_detection_service_domain,
     )
 except Exception:
     get_detection_service_domain = None  # type: ignore
     DefaultCameraRepository = None  # type: ignore
 
 try:
-    from src.domain.services.camera_service import CameraService
     from src.domain.services.camera_control_service import CameraControlService
+    from src.domain.services.camera_service import CameraService
 
     async def get_camera_service() -> CameraService | None:
         """获取摄像头服务实例."""

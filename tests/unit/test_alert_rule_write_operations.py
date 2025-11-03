@@ -1,11 +1,11 @@
 """告警规则写操作单元测试."""
 
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock
 
 from src.domain.entities.alert_rule import AlertRule
-from src.domain.services.alert_rule_service import AlertRuleService
 from src.domain.repositories.alert_rule_repository import IAlertRuleRepository
+from src.domain.services.alert_rule_service import AlertRuleService
 
 
 class MockAlertRuleRepository(IAlertRuleRepository):
@@ -172,7 +172,9 @@ class TestUpdateAlertRule:
             await alert_rule_service.update_alert_rule(999, updates)
 
     @pytest.mark.asyncio
-    async def test_update_alert_rule_empty_updates(self, alert_rule_service, mock_repository):
+    async def test_update_alert_rule_empty_updates(
+        self, alert_rule_service, mock_repository
+    ):
         """测试空更新（应该成功但不做任何更改）."""
         # 先创建一个规则
         rule_data = {
@@ -189,7 +191,9 @@ class TestUpdateAlertRule:
         assert result["ok"] is True
 
     @pytest.mark.asyncio
-    async def test_update_alert_rule_filter_disallowed_fields(self, alert_rule_service, mock_repository):
+    async def test_update_alert_rule_filter_disallowed_fields(
+        self, alert_rule_service, mock_repository
+    ):
         """测试过滤不允许的字段."""
         # 先创建一个规则
         rule_data = {
@@ -216,7 +220,9 @@ class TestUpdateAlertRule:
         # disallowed_field 不应该被设置
 
     @pytest.mark.asyncio
-    async def test_update_alert_rule_all_allowed_fields(self, alert_rule_service, mock_repository):
+    async def test_update_alert_rule_all_allowed_fields(
+        self, alert_rule_service, mock_repository
+    ):
         """测试更新所有允许的字段."""
         # 先创建一个规则
         rule_data = {
@@ -253,4 +259,3 @@ class TestUpdateAlertRule:
         assert rule.recipients == ["user@example.com"]
         assert rule.enabled is False
         assert rule.priority == "high"
-

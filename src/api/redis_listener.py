@@ -30,16 +30,21 @@ async def redis_stats_listener():
         try:
             # 优先使用REDIS_URL，然后回退到单独的环境变量
             redis_url = os.getenv("REDIS_URL")
-            
+
             if redis_url:
                 # 从URL解析连接参数
                 from urllib.parse import urlparse
+
                 parsed = urlparse(redis_url)
                 redis_host = parsed.hostname or "localhost"
                 redis_port = parsed.port or 6379
                 redis_password = parsed.password
                 # 从路径中解析db编号
-                redis_db = int(parsed.path.lstrip('/')) if parsed.path and parsed.path != '/' else 0
+                redis_db = (
+                    int(parsed.path.lstrip("/"))
+                    if parsed.path and parsed.path != "/"
+                    else 0
+                )
             else:
                 # 回退到单独的环境变量
                 redis_host = os.getenv("REDIS_HOST", "localhost")
@@ -53,7 +58,7 @@ async def redis_stats_listener():
                 db=redis_db,
                 password=redis_password,
                 encoding="utf-8",
-                decode_responses=True
+                decode_responses=True,
             )
             async with r.pubsub() as pubsub:
                 await pubsub.subscribe("hbd:stats")

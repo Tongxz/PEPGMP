@@ -8,7 +8,7 @@
 
 ## 已完成重构（5个）
 
-### ✅ 1. `GET /api/v1/records/detection-records/{camera_id}` 
+### ✅ 1. `GET /api/v1/records/detection-records/{camera_id}`
 - **状态**: 已完成
 - **文件**: `src/api/routers/records.py`
 - **领域服务方法**: `DetectionServiceDomain.get_detection_records_by_camera()`
@@ -93,6 +93,5 @@
 
 ---
 
-**创建日期**: 2025-10-31  
+**创建日期**: 2025-10-31
 **状态**: 进行中（5/7完成）
-

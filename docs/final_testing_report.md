@@ -74,7 +74,7 @@ INFO:     127.0.0.1:58916 - "GET /api/v1/monitoring/health HTTP/1.1" 200 OK
 ERROR:src.api.redis_listener:Redis connection failed: Authentication required.. Retrying in 5 seconds...
 ```
 
-**影响**: 
+**影响**:
 - ⚠️ Redis监听器无法连接
 - ✅ 不影响基本API功能（健康检查显示redis: ok）
 - ⚠️ 可能影响实时功能
@@ -86,7 +86,7 @@ ERROR:src.api.redis_listener:Redis connection failed: Authentication required.. 
 WARNING:src.core.behavior:Failed to load ML classifier: name 'xgb' is not defined
 ```
 
-**影响**: 
+**影响**:
 - ⚠️ ML分类器功能不可用
 - ✅ 不影响基本检测功能（代码中有fallback）
 
@@ -96,11 +96,11 @@ WARNING:src.core.behavior:Failed to load ML classifier: name 'xgb' is not define
 
 #### 1. httpx客户端问题 ✅
 
-**问题**: 
+**问题**:
 - httpx异步和同步客户端都返回502错误
 - curl请求正常，但httpx失败
 
-**原因**: 
+**原因**:
 - httpx与uvicorn的reload机制存在兼容性问题
 - 连接池或连接复用导致问题
 
@@ -110,11 +110,11 @@ WARNING:src.core.behavior:Failed to load ML classifier: name 'xgb' is not define
 
 #### 2. 系统信息端点错误 ✅
 
-**问题**: 
+**问题**:
 - GET /api/v1/system/info 返回500错误
 - 错误信息: `name 'logger' is not defined`
 
-**原因**: 
+**原因**:
 - 缺少`logger`导入
 - 缺少`should_use_domain`导入
 - 缺少`get_system_service`导入
@@ -184,19 +184,19 @@ logger = logging.getLogger(__name__)
 
 #### 1. Redis连接错误 ⚠️
 
-**建议**: 
+**建议**:
 - 检查Redis密码配置
 - 或禁用Redis监听器（如果不需要）
 
 #### 2. ML分类器加载失败 ⚠️
 
-**建议**: 
+**建议**:
 - 安装XGBoost或禁用ML分类器功能
 - 这不是关键功能
 
 #### 3. 测试数据清理 ⏳
 
-**建议**: 
+**建议**:
 - 在测试前清理测试数据
 - 或使用随机ID避免冲突
 
@@ -217,6 +217,5 @@ logger = logging.getLogger(__name__)
 
 ---
 
-**状态**: ✅ **集成测试基本成功** (95.8%通过率)  
+**状态**: ✅ **集成测试基本成功** (95.8%通过率)
 **下一步**: 修复Redis连接问题（可选）和改进测试数据管理
-

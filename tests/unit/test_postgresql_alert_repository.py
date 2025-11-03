@@ -16,13 +16,13 @@ from src.interfaces.repositories.detection_repository_interface import Repositor
 
 class MockRecord:
     """模拟asyncpg.Record."""
-    
+
     def __init__(self, data):
         self._data = data
-    
+
     def __getitem__(self, key):
         return self._data[key]
-    
+
     def get(self, key, default=None):
         return self._data.get(key, default)
 
@@ -58,17 +58,19 @@ def sample_alert():
 @pytest.fixture
 def mock_row():
     """创建模拟的数据库行."""
-    return MockRecord({
-        "id": 1,
-        "rule_id": 10,
-        "camera_id": "cam1",
-        "alert_type": "violation",
-        "message": "测试告警",
-        "details": json.dumps({"key": "value"}),
-        "notification_sent": True,
-        "notification_channels_used": json.dumps(["email"]),
-        "timestamp": datetime.now(),
-    })
+    return MockRecord(
+        {
+            "id": 1,
+            "rule_id": 10,
+            "camera_id": "cam1",
+            "alert_type": "violation",
+            "message": "测试告警",
+            "details": json.dumps({"key": "value"}),
+            "notification_sent": True,
+            "notification_channels_used": json.dumps(["email"]),
+            "timestamp": datetime.now(),
+        }
+    )
 
 
 @pytest.mark.asyncio
@@ -222,17 +224,19 @@ class TestPostgreSQLAlertRepository:
 
     async def test_row_to_alert_with_json_string(self, alert_repository, mock_pool):
         """测试_row_to_alert解析JSON字符串."""
-        row = MockRecord({
-            "id": 1,
-            "rule_id": 10,
-            "camera_id": "cam1",
-            "alert_type": "violation",
-            "message": "测试告警",
-            "details": json.dumps({"key": "value"}),
-            "notification_sent": True,
-            "notification_channels_used": json.dumps(["email"]),
-            "timestamp": datetime.now(),
-        })
+        row = MockRecord(
+            {
+                "id": 1,
+                "rule_id": 10,
+                "camera_id": "cam1",
+                "alert_type": "violation",
+                "message": "测试告警",
+                "details": json.dumps({"key": "value"}),
+                "notification_sent": True,
+                "notification_channels_used": json.dumps(["email"]),
+                "timestamp": datetime.now(),
+            }
+        )
 
         alert = alert_repository._row_to_alert(row)
 
@@ -241,17 +245,19 @@ class TestPostgreSQLAlertRepository:
 
     async def test_row_to_alert_with_json_object(self, alert_repository, mock_pool):
         """测试_row_to_alert解析JSON对象."""
-        row = MockRecord({
-            "id": 1,
-            "rule_id": 10,
-            "camera_id": "cam1",
-            "alert_type": "violation",
-            "message": "测试告警",
-            "details": {"key": "value"},
-            "notification_sent": True,
-            "notification_channels_used": ["email"],
-            "timestamp": datetime.now(),
-        })
+        row = MockRecord(
+            {
+                "id": 1,
+                "rule_id": 10,
+                "camera_id": "cam1",
+                "alert_type": "violation",
+                "message": "测试告警",
+                "details": {"key": "value"},
+                "notification_sent": True,
+                "notification_channels_used": ["email"],
+                "timestamp": datetime.now(),
+            }
+        )
 
         alert = alert_repository._row_to_alert(row)
 
@@ -260,17 +266,19 @@ class TestPostgreSQLAlertRepository:
 
     async def test_row_to_alert_with_invalid_json(self, alert_repository, mock_pool):
         """测试_row_to_alert处理无效JSON."""
-        row = MockRecord({
-            "id": 1,
-            "rule_id": 10,
-            "camera_id": "cam1",
-            "alert_type": "violation",
-            "message": "测试告警",
-            "details": "invalid json{",
-            "notification_sent": True,
-            "notification_channels_used": None,
-            "timestamp": datetime.now(),
-        })
+        row = MockRecord(
+            {
+                "id": 1,
+                "rule_id": 10,
+                "camera_id": "cam1",
+                "alert_type": "violation",
+                "message": "测试告警",
+                "details": "invalid json{",
+                "notification_sent": True,
+                "notification_channels_used": None,
+                "timestamp": datetime.now(),
+            }
+        )
 
         alert = alert_repository._row_to_alert(row)
 

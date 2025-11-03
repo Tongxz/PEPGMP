@@ -41,7 +41,7 @@ async def redis_stats_listener():
         try:
             # 优先使用REDIS_URL，然后回退到单独的环境变量
             redis_url = os.getenv("REDIS_URL")
-            
+
             if redis_url:
                 # 从URL解析连接参数
                 from urllib.parse import urlparse
@@ -221,7 +221,6 @@ python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload --log-leve
 
 ---
 
-**状态**: ✅ **Redis认证问题已完全解决**  
-**修复时间**: 2025-11-03  
+**状态**: ✅ **Redis认证问题已完全解决**
+**修复时间**: 2025-11-03
 **影响**: 所有Redis相关功能恢复正常
-

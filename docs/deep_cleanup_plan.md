@@ -19,7 +19,7 @@ archive/phase1/
 ├── optimization/          # TensorRT优化器（已重构）
 └── utils/                 # 旧工具函数（已重构）
 ```
-**状态**: 已归档超过30天，可安全删除  
+**状态**: 已归档超过30天，可安全删除
 **原因**: 这些代码已被新的DDD架构完全替代
 
 #### Phase 2 归档（服务重构相关）
@@ -29,7 +29,7 @@ archive/phase2/
 ├── services/              # 旧服务层（已被domain services替代）
 └── strategies/            # 旧策略实现（已重构）
 ```
-**状态**: 已归档，被domain层替代  
+**状态**: 已归档，被domain层替代
 **原因**: 这些服务已被domain/services/完全替代
 
 #### Phase 3 归档（配置和工具）
@@ -38,7 +38,7 @@ archive/phase3/
 ├── config/                # 旧配置加载器（已被src/config替代）
 └── utils/                 # 旧工具函数（已被src/utils替代）
 ```
-**状态**: 已归档，有新实现  
+**状态**: 已归档，有新实现
 **原因**: 配置系统已完全重构
 
 #### Deployment Legacy 归档
@@ -48,7 +48,7 @@ archive/deployment_legacy/
 ├── scripts_deployment/    # 旧部署脚本
 └── src_deployment/        # 旧部署代码
 ```
-**状态**: 已归档，有新的scripts/  
+**状态**: 已归档，有新的scripts/
 **原因**: 部署系统已完全重构
 
 **建议**: 删除整个archive/目录（或保留最近30天的备份）
@@ -63,7 +63,7 @@ archive/deployment_legacy/
 | `examples/use_yolo_hairnet_detector.py` | 未被引用 | ❌ 删除（已集成）|
 | `examples/domain_model_usage.py` | 有价值的示例 | ✅ 保留（更新）|
 
-**原因**: 
+**原因**:
 - 大部分示例已过时，功能已集成到主代码
 - `domain_model_usage.py`是唯一展示新DDD架构的示例
 
@@ -73,7 +73,7 @@ archive/deployment_legacy/
 |------|------|----------|------|
 | `src/services/detection_service_di.py` | 仅2处引用 | domain/services/ | ⚠️ 检查后删除 |
 
-**原因**: 
+**原因**:
 - 这是DI容器的示例实现
 - 实际使用的是domain/services/detection_service.py
 
@@ -353,8 +353,7 @@ git reset --hard <commit-hash>
 
 ---
 
-**状态**: 📋 待执行  
-**优先级**: 中  
-**预计时间**: 30-45分钟  
+**状态**: 📋 待执行
+**优先级**: 中
+**预计时间**: 30-45分钟
 **风险等级**: 低-中
-

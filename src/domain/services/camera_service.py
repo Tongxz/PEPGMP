@@ -19,7 +19,11 @@ class CameraService:
     提供摄像头相关的业务逻辑，包括CRUD操作。
     """
 
-    def __init__(self, camera_repository: ICameraRepository, cameras_yaml_path: Optional[str] = None):
+    def __init__(
+        self,
+        camera_repository: ICameraRepository,
+        cameras_yaml_path: Optional[str] = None,
+    ):
         """初始化摄像头服务.
 
         Args:
@@ -47,11 +51,14 @@ class CameraService:
         """写入YAML配置文件（原子写）."""
         if not self.cameras_yaml_path:
             raise ValueError("摄像头YAML配置文件路径未配置")
-        
+
         os.makedirs(os.path.dirname(self.cameras_yaml_path), exist_ok=True)
         # 原子写
         with tempfile.NamedTemporaryFile(
-            "w", encoding="utf-8", delete=False, dir=os.path.dirname(self.cameras_yaml_path)
+            "w",
+            encoding="utf-8",
+            delete=False,
+            dir=os.path.dirname(self.cameras_yaml_path),
         ) as tf:
             yaml.safe_dump(data, tf, allow_unicode=True, sort_keys=False)
             tmp_name = tf.name
@@ -87,10 +94,14 @@ class CameraService:
             camera = Camera(
                 id=camera_id,
                 name=camera_data["name"],
-                status=CameraStatus.ACTIVE if camera_data.get("active", True) else CameraStatus.INACTIVE,
+                status=CameraStatus.ACTIVE
+                if camera_data.get("active", True)
+                else CameraStatus.INACTIVE,
                 camera_type=CameraType.FIXED,  # 默认类型
                 location=camera_data.get("location", "unknown"),
-                resolution=tuple(camera_data["resolution"]) if camera_data.get("resolution") else (1920, 1080),
+                resolution=tuple(camera_data["resolution"])
+                if camera_data.get("resolution")
+                else (1920, 1080),
                 fps=camera_data.get("fps", 25),
                 region_id=camera_data.get("region_id"),
             )
@@ -98,7 +109,15 @@ class CameraService:
             if "source" in camera_data:
                 camera.metadata["source"] = camera_data["source"]
             # 复制其他字段到metadata
-            for key in ["regions_file", "profile", "device", "imgsz", "auto_tune", "auto_start", "env"]:
+            for key in [
+                "regions_file",
+                "profile",
+                "device",
+                "imgsz",
+                "auto_tune",
+                "auto_start",
+                "env",
+            ]:
                 if key in camera_data:
                     camera.metadata[key] = camera_data[key]
 
@@ -110,16 +129,24 @@ class CameraService:
             if self.cameras_yaml_path:
                 config_data = self._read_yaml_config()
                 cameras = config_data.get("cameras", [])
-                
+
                 # 检查YAML中是否已存在
                 if any(c.get("id") == camera_id for c in cameras):
                     raise ValueError(f"摄像头ID在配置文件中已存在: {camera_id}")
-                
+
                 # 转换为YAML格式（提取metadata中的字段到顶层）
                 camera_dict = camera.to_dict()
                 if "source" in camera.metadata:
                     camera_dict["source"] = camera.metadata["source"]
-                for key in ["regions_file", "profile", "device", "imgsz", "auto_tune", "auto_start", "env"]:
+                for key in [
+                    "regions_file",
+                    "profile",
+                    "device",
+                    "imgsz",
+                    "auto_tune",
+                    "auto_start",
+                    "env",
+                ]:
                     if key in camera.metadata:
                         camera_dict[key] = camera.metadata[key]
                 cameras.append(camera_dict)
@@ -135,7 +162,9 @@ class CameraService:
             logger.error(f"创建摄像头失败: {e}")
             raise
 
-    async def update_camera(self, camera_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+    async def update_camera(
+        self, camera_id: str, updates: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """更新摄像头.
 
         Args:
@@ -162,15 +191,29 @@ class CameraService:
             if "location" in updates:
                 camera.location = updates["location"]
             if "resolution" in updates:
-                camera.resolution = tuple(updates["resolution"]) if isinstance(updates["resolution"], list) else updates["resolution"]
+                camera.resolution = (
+                    tuple(updates["resolution"])
+                    if isinstance(updates["resolution"], list)
+                    else updates["resolution"]
+                )
             if "fps" in updates:
                 camera.fps = updates["fps"]
             if "region_id" in updates:
                 camera.region_id = updates["region_id"]
             if "active" in updates:
-                camera.status = CameraStatus.ACTIVE if updates["active"] else CameraStatus.INACTIVE
+                camera.status = (
+                    CameraStatus.ACTIVE if updates["active"] else CameraStatus.INACTIVE
+                )
             # 更新metadata中的其他字段
-            for key in ["regions_file", "profile", "device", "imgsz", "auto_tune", "auto_start", "env"]:
+            for key in [
+                "regions_file",
+                "profile",
+                "device",
+                "imgsz",
+                "auto_tune",
+                "auto_start",
+                "env",
+            ]:
                 if key in updates:
                     camera.metadata[key] = updates[key]
 
@@ -182,7 +225,7 @@ class CameraService:
             if self.cameras_yaml_path:
                 config_data = self._read_yaml_config()
                 cameras = config_data.get("cameras", [])
-                
+
                 # 查找并更新
                 camera_found = False
                 for i, cam in enumerate(cameras):
@@ -191,24 +234,40 @@ class CameraService:
                         # 将metadata中的字段提取到顶层（YAML格式）
                         if "source" in camera.metadata:
                             camera_dict["source"] = camera.metadata["source"]
-                        for key in ["regions_file", "profile", "device", "imgsz", "auto_tune", "auto_start", "env"]:
+                        for key in [
+                            "regions_file",
+                            "profile",
+                            "device",
+                            "imgsz",
+                            "auto_tune",
+                            "auto_start",
+                            "env",
+                        ]:
                             if key in camera.metadata:
                                 camera_dict[key] = camera.metadata[key]
                         cameras[i] = camera_dict
                         camera_found = True
                         break
-                
+
                 if not camera_found:
                     # 如果YAML中不存在，添加
                     camera_dict = camera.to_dict()
                     # 将metadata中的字段提取到顶层（YAML格式）
                     if "source" in camera.metadata:
                         camera_dict["source"] = camera.metadata["source"]
-                    for key in ["regions_file", "profile", "device", "imgsz", "auto_tune", "auto_start", "env"]:
+                    for key in [
+                        "regions_file",
+                        "profile",
+                        "device",
+                        "imgsz",
+                        "auto_tune",
+                        "auto_start",
+                        "env",
+                    ]:
                         if key in camera.metadata:
                             camera_dict[key] = camera.metadata[key]
                     cameras.append(camera_dict)
-                
+
                 config_data["cameras"] = cameras
                 self._write_yaml_config(config_data)
 
@@ -247,7 +306,7 @@ class CameraService:
             if self.cameras_yaml_path:
                 config_data = self._read_yaml_config()
                 cameras = config_data.get("cameras", [])
-                
+
                 # 查找并删除
                 cameras = [c for c in cameras if c.get("id") != camera_id]
                 config_data["cameras"] = cameras
@@ -261,4 +320,3 @@ class CameraService:
         except Exception as e:
             logger.error(f"删除摄像头失败: {e}")
             raise
-

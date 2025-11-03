@@ -68,7 +68,7 @@
    ```bash
    # 回滚到10%
    ./tools/start_rollout.sh 10
-   
+
    # 或完全回滚
    source /tmp/quick_rollback.sh
    # 然后重启服务
@@ -145,8 +145,7 @@ curl "http://localhost:8000/api/v1/alerts/rules"
 
 ---
 
-**状态**: ✅ **25%灰度发布已启动**  
-**观察期**: 3-5天  
-**下一步**: 持续监控，准备提升到50%  
+**状态**: ✅ **25%灰度发布已启动**
+**观察期**: 3-5天
+**下一步**: 持续监控，准备提升到50%
 **详细计划**: 请查看 `docs/gradual_rollout_plan.md`
-

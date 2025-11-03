@@ -100,7 +100,7 @@
    ```bash
    # 验证健康检查端点
    curl http://localhost:8000/api/v1/monitoring/health
-   
+
    # 验证监控指标端点
    curl http://localhost:8000/api/v1/monitoring/metrics
    ```
@@ -234,7 +234,6 @@
 
 ---
 
-**状态**: ⏳ **准备中**  
-**下一步**: 重启服务验证监控端点，完成完整集成测试  
+**状态**: ⏳ **准备中**
+**下一步**: 重启服务验证监控端点，完成完整集成测试
 **详细计划**: 请查看 `docs/immediate_next_steps.md`
-

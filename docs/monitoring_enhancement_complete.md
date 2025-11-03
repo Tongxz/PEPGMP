@@ -301,7 +301,6 @@ async def check_and_record():
 
 ---
 
-**状态**: ✅ **持续监控配置完成**  
-**下一步**: 验证功能并配置告警规则  
+**状态**: ✅ **持续监控配置完成**
+**下一步**: 验证功能并配置告警规则
 **详细文档**: `docs/monitoring_configuration_plan.md`
-

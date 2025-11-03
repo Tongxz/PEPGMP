@@ -26,7 +26,7 @@ class TrackerFactory:
     _strategies: Dict[str, Optional[Type[ITracker]]] = {
         "simple_tracker": SimpleTrackerStrategy,
     }
-    
+
     # 如果 ByteTrackerStrategy 可用，注册它
     if ByteTrackerStrategy is not None:
         _strategies["byte_tracker"] = ByteTrackerStrategy

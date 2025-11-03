@@ -30,11 +30,11 @@ test_endpoint() {
     local name=$3
     local params=$4
     local expected_status=${5:-200}
-    
+
     TOTAL=$((TOTAL + 1))
-    
+
     echo -n "测试 $TOTAL: $name ... "
-    
+
     if [ "$method" = "GET" ]; then
         response=$(curl -s -w "\n%{http_code}" -X GET "$BASE_URL$path?$params" --max-time $TIMEOUT 2>&1)
     elif [ "$method" = "POST" ]; then
@@ -52,10 +52,10 @@ test_endpoint() {
         FAILED=$((FAILED + 1))
         return
     fi
-    
+
     http_code=$(echo "$response" | tail -n1)
     body=$(echo "$response" | sed '$d')
-    
+
     if [ "$http_code" = "$expected_status" ]; then
         echo -e "${GREEN}✅ 通过${NC} (状态码: $http_code)"
         PASSED=$((PASSED + 1))
@@ -178,4 +178,3 @@ if [ $FAILED -eq 0 ]; then
 else
     exit 1
 fi
-

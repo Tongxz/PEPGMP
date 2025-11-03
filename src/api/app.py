@@ -31,7 +31,6 @@ try:
         error_monitoring,
         events,
         metrics,
-        mlops,
         monitoring,
         records,
         region_management,
@@ -59,7 +58,6 @@ except ImportError:
         error_monitoring,
         events,
         metrics,
-        mlops,
         monitoring,
         records,
         region_management,
@@ -79,6 +77,7 @@ logger = logging.getLogger(__name__)
 # 触发依赖注入容器的服务配置（包括 USE_DOMAIN_SERVICE 开关与仓储绑定）
 try:
     import src.container.service_config  # noqa: F401
+
     logger.info("依赖注入服务配置已加载")
 except Exception as e:
     logger.warning(f"依赖注入服务配置加载失败（不影响启动）: {e}")
@@ -92,8 +91,8 @@ async def lifespan(app: FastAPI):
 
     # 初始化数据库服务
     try:
-        from src.services.database_service import close_db_service, get_db_service
         from src.database.connection import init_database
+        from src.services.database_service import close_db_service, get_db_service
 
         await get_db_service()
         await init_database()
@@ -249,7 +248,6 @@ app.include_router(alerts.router, prefix="/api/v1", tags=["Alerts"])
 app.include_router(security.router, prefix="/api/v1", tags=["Security Management"])
 app.include_router(records.router, tags=["Records"])
 app.include_router(video_stream.router, prefix="/api/v1", tags=["Video Stream"])
-app.include_router(mlops.router, tags=["MLOps"])
 
 
 @app.get("/", include_in_schema=False)

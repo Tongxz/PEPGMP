@@ -562,6 +562,7 @@ class PostgreSQLDetectionRepository(IDetectionRepository):
                 LIMIT ${p + 1} OFFSET ${p + 2}
                 """
                 rows = await conn.fetch(detail_sql, *params, limit, offset)
+
                 def _row_to_obj(r):
                     item = dict(r)
                     # 反序列化 JSON
@@ -575,8 +576,14 @@ class PostgreSQLDetectionRepository(IDetectionRepository):
                         if item.get(k) is not None and hasattr(item[k], "isoformat"):
                             item[k] = item[k].isoformat()
                     return item
+
                 violations = [_row_to_obj(r) for r in rows]
-                return {"violations": violations, "total": int(total or 0), "limit": limit, "offset": offset}
+                return {
+                    "violations": violations,
+                    "total": int(total or 0),
+                    "limit": limit,
+                    "offset": offset,
+                }
             except Exception:
                 # 兼容最小字段集合
                 compat_sql = f"""
@@ -588,16 +595,32 @@ class PostgreSQLDetectionRepository(IDetectionRepository):
                 LIMIT ${p + 1} OFFSET ${p + 2}
                 """
                 rows = await conn.fetch(compat_sql, *params, limit, offset)
+
                 def _row_to_min(r):
                     item = dict(r)
-                    if item.get("timestamp") is not None and hasattr(item["timestamp"], "isoformat"):
+                    if item.get("timestamp") is not None and hasattr(
+                        item["timestamp"], "isoformat"
+                    ):
                         item["timestamp"] = item["timestamp"].isoformat()
                     # 补齐缺失字段
-                    for k in ("bbox", "handled_at", "handled_by", "notes", "created_at", "updated_at"):
+                    for k in (
+                        "bbox",
+                        "handled_at",
+                        "handled_by",
+                        "notes",
+                        "created_at",
+                        "updated_at",
+                    ):
                         item.setdefault(k, None)
                     return item
+
                 violations = [_row_to_min(r) for r in rows]
-                return {"violations": violations, "total": int(total or 0), "limit": limit, "offset": offset}
+                return {
+                    "violations": violations,
+                    "total": int(total or 0),
+                    "limit": limit,
+                    "offset": offset,
+                }
 
         except Exception as e:
             logger.error(f"查询违规明细失败: {e}")
@@ -680,7 +703,9 @@ class PostgreSQLDetectionRepository(IDetectionRepository):
 
         # 置信度兼容
         try:
-            confidence_val = float(row["confidence"]) if row["confidence"] is not None else 0.0
+            confidence_val = (
+                float(row["confidence"]) if row["confidence"] is not None else 0.0
+            )
         except Exception:
             confidence_val = 0.0
 

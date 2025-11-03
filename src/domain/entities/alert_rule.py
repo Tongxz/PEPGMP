@@ -16,7 +16,7 @@ class AlertRule:
     name: str
     rule_type: str
     conditions: Dict[str, Any]
-    
+
     # 可选字段
     camera_id: Optional[str] = None
     notification_channels: Optional[List[str]] = None
@@ -26,7 +26,7 @@ class AlertRule:
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     created_by: Optional[str] = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式.
 
@@ -41,35 +41,35 @@ class AlertRule:
             "enabled": self.enabled,
             "priority": self.priority,
         }
-        
+
         if self.camera_id is not None:
             result["camera_id"] = self.camera_id
-        
+
         if self.notification_channels is not None:
             result["notification_channels"] = self.notification_channels
-        
+
         if self.recipients is not None:
             result["recipients"] = self.recipients
-        
+
         if self.created_at is not None:
             result["created_at"] = (
                 self.created_at.isoformat()
                 if isinstance(self.created_at, datetime)
                 else str(self.created_at)
             )
-        
+
         if self.updated_at is not None:
             result["updated_at"] = (
                 self.updated_at.isoformat()
                 if isinstance(self.updated_at, datetime)
                 else str(self.updated_at)
             )
-        
+
         if self.created_by is not None:
             result["created_by"] = self.created_by
-        
+
         return result
-    
+
     def is_active(self) -> bool:
         """检查规则是否激活.
 
@@ -77,4 +77,3 @@ class AlertRule:
             规则是否激活
         """
         return self.enabled
-

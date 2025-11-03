@@ -213,7 +213,7 @@ curl "http://localhost:8000/api/v1/cameras?force_domain=true"
 
 **当前状态**: 指标存储在内存中（应用重启后丢失）
 
-**建议**: 
+**建议**:
 - 集成Redis存储历史指标
 - 集成Prometheus + Grafana进行长期监控
 - 定期导出指标到数据库
@@ -269,7 +269,6 @@ curl "http://localhost:8000/api/v1/cameras?force_domain=true"
 
 ---
 
-**状态**: ✅ **基础监控已完成**  
-**完成日期**: 2025-10-31  
+**状态**: ✅ **基础监控已完成**
+**完成日期**: 2025-10-31
 **下一步**: 集成持久化存储和告警系统
-

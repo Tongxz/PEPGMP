@@ -7,8 +7,8 @@
 
 ### ✅ 已完成测试
 
-**测试文件**: `tests/unit/test_camera_service.py`  
-**测试数量**: 30个测试用例  
+**测试文件**: `tests/unit/test_camera_service.py`
+**测试数量**: 30个测试用例
 **测试结果**: ✅ 全部通过（30/30）
 
 ### 📋 测试覆盖范围
@@ -87,7 +87,7 @@
 
 ### 📈 代码覆盖率
 
-**目标**: ≥90%  
+**目标**: ≥90%
 **当前**: 待验证（需要运行覆盖率测试）
 
 ### ✅ 测试质量
@@ -105,7 +105,7 @@
 async def test_concurrent_camera_creation(self, camera_service):
     """测试并发创建摄像头."""
     import asyncio
-    
+
     async def create_camera(id_suffix):
         camera_data = {
             "id": f"test_cam_{id_suffix}",
@@ -113,11 +113,11 @@ async def test_concurrent_camera_creation(self, camera_service):
             "source": f"rtsp://example.com/stream{id_suffix}",
         }
         return await camera_service.create_camera(camera_data)
-    
+
     # 并发创建10个摄像头
     tasks = [create_camera(i) for i in range(10)]
     results = await asyncio.gather(*tasks)
-    
+
     assert all(r["ok"] for r in results)
 ```
 
@@ -131,13 +131,13 @@ async def test_database_yaml_consistency(self, camera_service):
         "name": "测试摄像头",
         "source": "rtsp://example.com/stream",
     }
-    
+
     await camera_service.create_camera(camera_data)
-    
+
     # 验证数据库和YAML中都有数据
     db_camera = await camera_service.camera_repository.find_by_id("test_cam_consistency")
     assert db_camera is not None
-    
+
     config = camera_service._read_yaml_config()
     yaml_cameras = [c for c in config.get("cameras", []) if c.get("id") == "test_cam_consistency"]
     assert len(yaml_cameras) == 1
@@ -166,8 +166,7 @@ async def test_database_yaml_consistency(self, camera_service):
 
 ---
 
-**状态**: ✅ **CameraService单元测试补充完成**  
-**测试数量**: 30个  
-**测试结果**: 100%通过  
+**状态**: ✅ **CameraService单元测试补充完成**
+**测试数量**: 30个
+**测试结果**: 100%通过
 **下一步**: 持续监控配置和数据一致性监控
-

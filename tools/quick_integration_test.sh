@@ -39,9 +39,9 @@ test_endpoint() {
     local data=$3
     local expected_status=$4
     local description=$5
-    
+
     echo -n "测试: $description ... "
-    
+
     if [ "$method" = "GET" ]; then
         response=$(curl -s -w "\n%{http_code}" "$BASE_URL$endpoint" 2>&1) || true
     elif [ "$method" = "POST" ]; then
@@ -61,10 +61,10 @@ test_endpoint() {
             response=$(curl -s -w "\n%{http_code}" -X PUT "$BASE_URL$endpoint?force_domain=true" 2>&1) || true
         fi
     fi
-    
+
     http_code=$(echo "$response" | tail -n1)
     body=$(echo "$response" | sed '$d')
-    
+
     if [ "$http_code" = "$expected_status" ]; then
         echo -e "${GREEN}✓ PASS${NC} (HTTP $http_code)"
         ((PASSED++))
@@ -95,7 +95,7 @@ if [ $? -eq 0 ]; then
     rule_id=$(echo "$body" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2 || echo "")
     if [ -n "$rule_id" ] && [ "$rule_id" != "" ]; then
         echo "  创建的规则ID: $rule_id"
-        
+
         # 测试更新告警规则
         echo ""
         test_endpoint "PUT" "/api/v1/alerts/rules/$rule_id" \
@@ -122,22 +122,22 @@ if [ -z "$camera_id" ]; then
     echo -e "${YELLOW}⚠ 未找到摄像头，跳过摄像头操作测试${NC}"
 else
     echo "  使用摄像头ID: $camera_id"
-    
+
     # 测试获取摄像头状态（只读，安全）
     echo ""
     test_endpoint "GET" "/api/v1/cameras/$camera_id/status?force_domain=true" "" "200" "获取摄像头状态"
-    
+
     # 测试批量状态查询
     echo ""
     test_endpoint "POST" "/api/v1/cameras/batch-status?force_domain=true" \
         "{\"camera_ids\":[\"$camera_id\"]}" \
         "200" \
         "批量查询摄像头状态"
-    
+
     # 测试刷新所有摄像头
     echo ""
     test_endpoint "POST" "/api/v1/cameras/refresh?force_domain=true" "" "200" "刷新所有摄像头"
-    
+
     echo ""
     echo -e "${YELLOW}⚠ 以下操作会实际控制摄像头，已跳过：${NC}"
     echo -e "${YELLOW}   - 启动/停止/重启摄像头${NC}"
@@ -161,4 +161,3 @@ else
     echo -e "${RED}✗ 部分测试失败${NC}"
     exit 1
 fi
-

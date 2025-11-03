@@ -41,4 +41,3 @@
 ## 执行记录
 - Phase 0：扫描完成，生成 legacy_cleanup_report.json/.md（本次）
 - Phase 1：待执行（建议你确认白名单外文件归档）
-

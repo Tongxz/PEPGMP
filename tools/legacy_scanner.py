@@ -8,12 +8,11 @@
 使用:
   python tools/legacy_scanner.py
 """
-import os
-import re
 import ast
 import json
+import re
 from pathlib import Path
-from typing import Dict, Set, List, Tuple
+from typing import Dict, List, Set, Tuple
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -174,7 +173,11 @@ def main() -> None:
         "\n".join(lines), encoding="utf-8"
     )
 
-    print(json.dumps({"ok": True, "report": str((REPORT_DIR / 'legacy_cleanup_report.json'))}))
+    print(
+        json.dumps(
+            {"ok": True, "report": str((REPORT_DIR / "legacy_cleanup_report.json"))}
+        )
+    )
 
 
 if __name__ == "__main__":

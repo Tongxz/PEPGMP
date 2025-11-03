@@ -31,9 +31,9 @@ test_endpoint() {
     local data=$3
     local expected_status=$4
     local description=$5
-    
+
     echo -n "测试: $description ... "
-    
+
     if [ "$method" = "GET" ]; then
         if [ -n "$data" ]; then
             response=$(curl -s -w "\n%{http_code}" "$BASE_URL$endpoint?$data" 2>&1) || true
@@ -57,10 +57,10 @@ test_endpoint() {
             response=$(curl -s -w "\n%{http_code}" -X PUT "$BASE_URL$endpoint?force_domain=$FORCE_DOMAIN" 2>&1) || true
         fi
     fi
-    
+
     http_code=$(echo "$response" | tail -n1)
     body=$(echo "$response" | sed '$d')
-    
+
     if [ "$http_code" = "$expected_status" ]; then
         echo -e "${GREEN}✓ PASS${NC} (HTTP $http_code)"
         ((PASSED++))
@@ -89,7 +89,7 @@ if [ $? -eq 0 ]; then
     rule_id=$(echo "$body" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
     if [ -n "$rule_id" ]; then
         echo "  创建的规则ID: $rule_id"
-        
+
         # 测试更新告警规则
         echo ""
         test_endpoint "PUT" "/api/v1/alerts/rules/$rule_id" \
@@ -114,43 +114,43 @@ if [ -z "$camera_id" ]; then
     echo -e "${YELLOW}⚠ 警告: 未找到摄像头，跳过摄像头操作测试${NC}"
 else
     echo "  使用摄像头ID: $camera_id"
-    
+
     # 测试获取摄像头状态
     echo ""
     test_endpoint "GET" "/api/v1/cameras/$camera_id/status" "force_domain=$FORCE_DOMAIN" "200" "获取摄像头状态"
-    
+
     # 测试批量状态查询
     echo ""
     test_endpoint "POST" "/api/v1/cameras/batch-status" \
         "{\"camera_ids\":[\"$camera_id\"]}" \
         "200" \
         "批量查询摄像头状态"
-    
+
     # 测试获取摄像头日志
     echo ""
     test_endpoint "GET" "/api/v1/cameras/$camera_id/logs" "lines=10&force_domain=$FORCE_DOMAIN" "200" "获取摄像头日志"
-    
+
     # 测试刷新所有摄像头
     echo ""
     test_endpoint "POST" "/api/v1/cameras/refresh" "" "200" "刷新所有摄像头"
-    
+
     echo ""
     echo -e "${YELLOW}⚠ 注意: 以下操作会实际控制摄像头，请谨慎测试${NC}"
     echo -e "${YELLOW}   - 启动/停止/重启摄像头${NC}"
     echo -e "${YELLOW}   - 激活/停用摄像头${NC}"
     echo -e "${YELLOW}   - 切换自动启动${NC}"
-    
+
     read -p "是否继续测试摄像头控制操作? (y/N): " -n 1 -r
     echo ""
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         # 测试激活摄像头（相对安全）
         echo ""
         test_endpoint "POST" "/api/v1/cameras/$camera_id/activate" "" "200" "激活摄像头"
-        
+
         # 测试切换自动启动
         echo ""
         test_endpoint "PUT" "/api/v1/cameras/$camera_id/auto-start" "auto_start=false" "200" "切换自动启动"
-        
+
         # 测试停用摄像头
         echo ""
         test_endpoint "POST" "/api/v1/cameras/$camera_id/deactivate" "" "200" "停用摄像头"
@@ -172,4 +172,3 @@ else
     echo -e "${RED}✗ 部分测试失败${NC}"
     exit 1
 fi
-

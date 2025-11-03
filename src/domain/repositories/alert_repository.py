@@ -22,7 +22,6 @@ class IAlertRepository(ABC):
         Returns:
             告警实体，如果不存在则返回None
         """
-        pass
 
     @abstractmethod
     async def find_all(
@@ -41,7 +40,6 @@ class IAlertRepository(ABC):
         Returns:
             告警列表，按时间倒序
         """
-        pass
 
     @abstractmethod
     async def save(self, alert: Alert) -> int:
@@ -53,5 +51,3 @@ class IAlertRepository(ABC):
         Returns:
             保存后的告警ID
         """
-        pass
-

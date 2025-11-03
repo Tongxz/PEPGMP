@@ -43,7 +43,7 @@
 
 **问题**: `DATABASE_URL`和`REDIS_URL`在当前shell环境中未设置
 
-**影响**: 
+**影响**:
 - 不影响已运行的服务（服务启动时已设置）
 - 但可能在测试脚本中导致问题
 
@@ -62,7 +62,7 @@ export REDIS_URL="redis://:pyt_dev_redis@localhost:6379/0"
 - 日志输出到stdout/stderr
 - 日志目录不存在
 
-**检查**: 
+**检查**:
 ```bash
 # 检查是否有日志输出到stdout/stderr
 ps aux | grep uvicorn | grep -v grep
@@ -79,11 +79,11 @@ ls -la logs/
 - YAML中存在: `cam0`, `vid1`
 - 数据库中不存在这些摄像头
 
-**影响**: 
+**影响**:
 - 不影响API基本功能
 - 但可能导致某些端点返回空数据或错误
 
-**解决**: 
+**解决**:
 - 同步摄像头数据到数据库
 - 或更新YAML配置以匹配数据库
 
@@ -152,4 +152,3 @@ find . -name "*.log" -mtime -1
 ---
 
 **状态**: ✅ **服务运行正常，可以运行集成测试**
-

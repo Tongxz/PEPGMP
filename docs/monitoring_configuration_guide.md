@@ -104,7 +104,7 @@ curl http://localhost:8000/api/v1/monitoring/metrics | jq
 
 **条件**: 错误率 > 5%
 
-**动作**: 
+**动作**:
 - 立即告警
 - 记录错误日志
 - 通知相关人员
@@ -345,7 +345,6 @@ curl http://localhost:8000/api/v1/monitoring/metrics | jq
 
 ---
 
-**状态**: ✅ **监控配置指南已完成**  
-**下一步**: 重启服务验证监控端点，配置告警规则  
+**状态**: ✅ **监控配置指南已完成**
+**下一步**: 重启服务验证监控端点，配置告警规则
 **详细计划**: 请查看 `docs/rollout_preparation_guide.md`
-

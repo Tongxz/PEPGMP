@@ -162,7 +162,7 @@ if not real_file_path.startswith(real_video_dir):
 
 **位置**: `src/api/routers/security.py:106`
 
-**问题**: 
+**问题**:
 ```python
 if request.username == "admin" and request.password == "admin123":
 ```
@@ -209,7 +209,7 @@ if user and verify_password(request.password, user.password_hash):
 
 **检查**: 未发现明显的敏感信息泄露
 
-**建议**: 
+**建议**:
 - ✅ 避免在日志中记录密码、token等敏感信息
 - ✅ 使用日志脱敏处理敏感字段
 
@@ -217,7 +217,7 @@ if user and verify_password(request.password, user.password_hash):
 
 **位置**: `src/api/routers/comprehensive.py`, `src/api/routers/mlops.py`
 
-**检查**: 
+**检查**:
 - ✅ 文件大小限制（FastAPI自动处理）
 - ✅ 文件类型验证（通过文件扩展名）
 - ⚠️ 建议添加文件内容验证（如文件头检查）
@@ -233,13 +233,13 @@ def validate_file_type(file_content: bytes, filename: str) -> bool:
     allowed_extensions = {'.jpg', '.jpeg', '.png', '.mp4'}
     if ext not in allowed_extensions:
         return False
-    
+
     # 检查文件内容（MIME类型）
     mime_type = magic.from_buffer(file_content, mime=True)
     allowed_mimes = {'image/jpeg', 'image/png', 'video/mp4'}
     if mime_type not in allowed_mimes:
         return False
-    
+
     return True
 ```
 
@@ -389,7 +389,6 @@ def validate_file_type(file_content: bytes, filename: str) -> bool:
 
 ---
 
-**状态**: ✅ **代码审查和安全检查完成**  
-**主要问题**: 硬编码密码需要立即修复  
+**状态**: ✅ **代码审查和安全检查完成**
+**主要问题**: 硬编码密码需要立即修复
 **下一步**: 修复硬编码密码问题
-

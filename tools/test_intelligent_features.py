@@ -21,7 +21,9 @@ from websockets import connect
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-from src.core.optimized_detection_pipeline import OptimizedDetectionPipeline  # noqa: E402
+from src.core.optimized_detection_pipeline import (  # noqa: E402
+    OptimizedDetectionPipeline,
+)
 from src.detection.intelligent_detection_system import (  # noqa: E402
     DetectionConfig,
     IntelligentDetectionSystem,

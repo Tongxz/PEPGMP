@@ -25,9 +25,9 @@ FAILED=0
 check_item() {
     local description=$1
     local command=$2
-    
+
     echo -n "检查: $description ... "
-    
+
     if eval "$command" > /dev/null 2>&1; then
         echo -e "${GREEN}✓ PASS${NC}"
         ((PASSED++))
@@ -140,4 +140,3 @@ else
     echo -e "${RED}✗ 部分检查失败，请修复后再开始灰度发布${NC}"
     exit 1
 fi
-

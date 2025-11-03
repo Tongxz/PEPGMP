@@ -65,7 +65,7 @@ if command -v docker &> /dev/null; then
     else
         echo "✅ PostgreSQL服务运行中"
     fi
-    
+
     if ! docker ps | grep -q pyt-redis-dev; then
         echo "⚠️  Redis服务未运行"
         echo "   启动命令: docker-compose up -d redis"

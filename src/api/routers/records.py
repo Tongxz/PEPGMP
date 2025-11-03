@@ -2,15 +2,14 @@
 
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+
 from src.api.utils.rollout import should_use_domain
-import os
+
 try:
-    from src.services.detection_service_domain import (
-        get_detection_service_domain,
-    )
+    from src.services.detection_service_domain import get_detection_service_domain
 except Exception:
     get_detection_service_domain = None  # type: ignore
 
@@ -67,7 +66,7 @@ async def get_violations(
                     "limit": limit,
                     "offset": offset,
                 }
-            except Exception as _:
+            except Exception:
                 # 领域路径出错则回退至数据库路径
                 pass
 
@@ -78,7 +77,9 @@ async def get_violations(
 
         # 如果指定了违规类型，进行过滤
         if violation_type:
-            violations = [v for v in violations if v["violation_type"] == violation_type]
+            violations = [
+                v for v in violations if v["violation_type"] == violation_type
+            ]
 
         # 应用偏移量
         if offset > 0:
@@ -141,16 +142,30 @@ async def get_violation_detail(
             violation = await domain_service.get_violation_by_id(violation_id)
             if violation:
                 # 确保时间字段格式正确
-                if "timestamp" in violation and not isinstance(violation["timestamp"], str):
+                if "timestamp" in violation and not isinstance(
+                    violation["timestamp"], str
+                ):
                     if hasattr(violation["timestamp"], "isoformat"):
                         violation["timestamp"] = violation["timestamp"].isoformat()
-                if "handled_at" in violation and violation["handled_at"] and not isinstance(violation["handled_at"], str):
+                if (
+                    "handled_at" in violation
+                    and violation["handled_at"]
+                    and not isinstance(violation["handled_at"], str)
+                ):
                     if hasattr(violation["handled_at"], "isoformat"):
                         violation["handled_at"] = violation["handled_at"].isoformat()
-                if "created_at" in violation and violation["created_at"] and not isinstance(violation["created_at"], str):
+                if (
+                    "created_at" in violation
+                    and violation["created_at"]
+                    and not isinstance(violation["created_at"], str)
+                ):
                     if hasattr(violation["created_at"], "isoformat"):
                         violation["created_at"] = violation["created_at"].isoformat()
-                if "updated_at" in violation and violation["updated_at"] and not isinstance(violation["updated_at"], str):
+                if (
+                    "updated_at" in violation
+                    and violation["updated_at"]
+                    and not isinstance(violation["updated_at"], str)
+                ):
                     if hasattr(violation["updated_at"], "isoformat"):
                         violation["updated_at"] = violation["updated_at"].isoformat()
                 return violation
@@ -294,8 +309,9 @@ async def get_all_cameras_summary(
             start_time = end_time - timedelta(days=7)
 
         # 获取所有摄像头列表（从cameras.yaml）
-        import yaml
         from pathlib import Path
+
+        import yaml
 
         config_path = Path("config/cameras.yaml")
         if config_path.exists():
@@ -398,7 +414,7 @@ async def get_camera_statistics(
                     "period": period,
                     "statistics": analytics,
                 }
-            except Exception as _:
+            except Exception:
                 # 领域路径出错则回退至数据库路径
                 pass
 
@@ -524,4 +540,3 @@ async def health_check(db: DatabaseService = Depends(get_db_service)) -> Dict[st
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         return {"status": "unhealthy", "database": "disconnected", "error": str(e)}
-

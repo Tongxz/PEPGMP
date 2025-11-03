@@ -2,12 +2,11 @@
 
 import os
 import tempfile
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import yaml
 
-from src.domain.entities.camera import Camera, CameraStatus, CameraType
+from src.domain.entities.camera import Camera, CameraStatus
 from src.domain.repositories.camera_repository import ICameraRepository
 from src.domain.services.camera_service import CameraService
 
@@ -213,7 +212,9 @@ class TestCameraServiceUpdate:
         assert result["camera"]["location"] == "新位置"
 
         # 验证仓储中已更新
-        updated_camera = await camera_service.camera_repository.find_by_id("test_cam_update")
+        updated_camera = await camera_service.camera_repository.find_by_id(
+            "test_cam_update"
+        )
         assert updated_camera.name == "更新后的名称"
         assert updated_camera.location == "新位置"
 
@@ -268,7 +269,9 @@ class TestCameraServiceUpdate:
         assert result["status"] == "success"
 
         # 验证状态已更新
-        updated_camera = await camera_service.camera_repository.find_by_id("test_cam_status")
+        updated_camera = await camera_service.camera_repository.find_by_id(
+            "test_cam_status"
+        )
         assert updated_camera.status == CameraStatus.INACTIVE
 
     async def test_update_camera_add_to_yaml_if_not_exists(self, camera_service):
@@ -317,7 +320,9 @@ class TestCameraServiceDelete:
         assert result["status"] == "success"
 
         # 验证仓储中已删除
-        deleted_camera = await camera_service.camera_repository.find_by_id("test_cam_delete")
+        deleted_camera = await camera_service.camera_repository.find_by_id(
+            "test_cam_delete"
+        )
         assert deleted_camera is None
 
         # 验证YAML中已删除
@@ -450,7 +455,9 @@ class TestCameraServiceEdgeCases:
         assert result["ok"] is True
 
         # 验证默认值
-        saved_camera = await camera_service.camera_repository.find_by_id("test_cam_default")
+        saved_camera = await camera_service.camera_repository.find_by_id(
+            "test_cam_default"
+        )
         assert saved_camera.location == "unknown"
         assert saved_camera.resolution == (1920, 1080)
         assert saved_camera.fps == 25
@@ -474,7 +481,9 @@ class TestCameraServiceEdgeCases:
         assert result["status"] == "success"
 
         # 验证只有name更新，其他字段保持不变
-        updated_camera = await camera_service.camera_repository.find_by_id("test_cam_partial")
+        updated_camera = await camera_service.camera_repository.find_by_id(
+            "test_cam_partial"
+        )
         assert updated_camera.name == "新名称"
         assert updated_camera.location == "原始位置"
 
@@ -512,10 +521,14 @@ class TestCameraServiceEdgeCases:
 
         assert result["status"] == "success"
 
-        updated_camera = await camera_service.camera_repository.find_by_id("test_cam_res_update")
+        updated_camera = await camera_service.camera_repository.find_by_id(
+            "test_cam_res_update"
+        )
         assert updated_camera.resolution == (1280, 720)
 
-    async def test_read_yaml_config_invalid_cameras_type(self, mock_repository, temp_yaml_file):
+    async def test_read_yaml_config_invalid_cameras_type(
+        self, mock_repository, temp_yaml_file
+    ):
         """测试读取YAML配置时cameras字段不是列表的情况."""
         # 写入无效格式的YAML（cameras不是列表）
         with open(temp_yaml_file, "w", encoding="utf-8") as f:
@@ -550,10 +563,12 @@ class TestCameraServiceEdgeCases:
         # 先读取当前YAML
         with open(camera_service.cameras_yaml_path, "r", encoding="utf-8") as f:
             yaml_data = yaml.safe_load(f)
-        
+
         # 添加重复ID
-        yaml_data["cameras"].append({"id": "test_cam_dup", "name": "重复", "source": "rtsp://dup.com/stream"})
-        
+        yaml_data["cameras"].append(
+            {"id": "test_cam_dup", "name": "重复", "source": "rtsp://dup.com/stream"}
+        )
+
         with open(camera_service.cameras_yaml_path, "w", encoding="utf-8") as f:
             yaml.safe_dump(yaml_data, f)
 
@@ -562,7 +577,7 @@ class TestCameraServiceEdgeCases:
         # 但由于我们已经在数据库中创建了，所以会先检查数据库，数据库检查会失败
         # 但我们需要测试YAML检查逻辑，所以需要先从数据库中删除
         await camera_service.camera_repository.delete_by_id("test_cam_dup")
-        
+
         # 现在YAML中有但数据库中无，创建应该失败
         with pytest.raises(ValueError, match="摄像头ID在配置文件中已存在"):
             await camera_service.create_camera(camera_data)
@@ -578,10 +593,10 @@ class TestCameraServiceEdgeCases:
 
         # 模拟仓储异常
         original_save = camera_service.camera_repository.save
-        
+
         async def mock_save_error(camera):
             raise RuntimeError("仓储保存失败")
-        
+
         camera_service.camera_repository.save = mock_save_error
 
         try:
@@ -602,15 +617,17 @@ class TestCameraServiceEdgeCases:
 
         # 模拟仓储异常
         original_save = camera_service.camera_repository.save
-        
+
         async def mock_save_error(camera):
             raise RuntimeError("仓储保存失败")
-        
+
         camera_service.camera_repository.save = mock_save_error
 
         try:
             with pytest.raises(RuntimeError, match="仓储保存失败"):
-                await camera_service.update_camera("test_cam_update_ex", {"name": "新名称"})
+                await camera_service.update_camera(
+                    "test_cam_update_ex", {"name": "新名称"}
+                )
         finally:
             camera_service.camera_repository.save = original_save
 
@@ -626,10 +643,10 @@ class TestCameraServiceEdgeCases:
 
         # 模拟仓储异常
         original_delete = camera_service.camera_repository.delete_by_id
-        
+
         async def mock_delete_error(camera_id):
             raise RuntimeError("仓储删除失败")
-        
+
         camera_service.camera_repository.delete_by_id = mock_delete_error
 
         try:
@@ -638,10 +655,11 @@ class TestCameraServiceEdgeCases:
         finally:
             camera_service.camera_repository.delete_by_id = original_delete
 
-    async def test_update_camera_without_save_attr(self, mock_repository, temp_yaml_file):
+    async def test_update_camera_without_save_attr(
+        self, mock_repository, temp_yaml_file
+    ):
         """测试更新摄像头时仓储不支持save方法."""
-        from unittest.mock import Mock
-        
+
         # 创建一个没有save方法的mock仓储
         class MockRepoWithoutSave(MockCameraRepository):
             def __init__(self):
@@ -649,30 +667,35 @@ class TestCameraServiceEdgeCases:
                 # 移除save方法
                 if hasattr(self, "save"):
                     self.__dict__.pop("save", None)
-        
+
         no_save_repo = MockRepoWithoutSave()
         service = CameraService(no_save_repo, temp_yaml_file)
-        
+
         # 创建摄像头（需要在mock中手动添加save方法，因为create需要）
         # 需要绑定方法到实例
-        no_save_repo.save = lambda camera: MockCameraRepository.save(no_save_repo, camera)
+        no_save_repo.save = lambda camera: MockCameraRepository.save(
+            no_save_repo, camera
+        )
         camera_data = {
             "id": "test_cam_no_save",
             "name": "测试摄像头",
             "source": "rtsp://example.com/stream",
         }
         await service.create_camera(camera_data)
-        
+
         # 再次移除save方法
         if hasattr(no_save_repo, "save"):
             delattr(no_save_repo, "save")
-        
+
         # 更新应该仍然成功（跳过数据库保存，但会更新YAML）
         result = await service.update_camera("test_cam_no_save", {"name": "新名称"})
         assert result["status"] == "success"
 
-    async def test_delete_camera_without_delete_attr(self, mock_repository, temp_yaml_file):
+    async def test_delete_camera_without_delete_attr(
+        self, mock_repository, temp_yaml_file
+    ):
         """测试删除摄像头时仓储不支持delete_by_id方法."""
+
         # 创建一个没有delete_by_id方法的mock仓储
         class MockRepoWithoutDelete(MockCameraRepository):
             def __init__(self):
@@ -680,10 +703,10 @@ class TestCameraServiceEdgeCases:
                 # 移除delete_by_id方法
                 if hasattr(self, "delete_by_id"):
                     self.__dict__.pop("delete_by_id", None)
-        
+
         no_delete_repo = MockRepoWithoutDelete()
         service = CameraService(no_delete_repo, temp_yaml_file)
-        
+
         # 创建摄像头
         camera_data = {
             "id": "test_cam_no_delete",
@@ -691,8 +714,7 @@ class TestCameraServiceEdgeCases:
             "source": "rtsp://example.com/stream",
         }
         await service.create_camera(camera_data)
-        
+
         # 删除应该仍然成功（跳过数据库删除，但会从YAML删除）
         result = await service.delete_camera("test_cam_no_delete")
         assert result["status"] == "success"
-

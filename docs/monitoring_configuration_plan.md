@@ -62,7 +62,7 @@ async def health_check() -> Dict[str, Any]:
         "domain_services": "ok",
         "camera_data_consistency": "ok",  # 新增
     }
-    
+
     # 检查CameraService数据一致性
     try:
         consistency_check = await check_camera_data_consistency()
@@ -72,7 +72,7 @@ async def health_check() -> Dict[str, Any]:
     except Exception as e:
         checks["camera_data_consistency"] = "error"
         checks["consistency_error"] = str(e)
-    
+
     return {
         "status": "healthy" if all(v == "ok" for v in checks.values()) else "degraded",
         "timestamp": datetime.now().isoformat(),
@@ -86,46 +86,46 @@ async def health_check() -> Dict[str, Any]:
 async def check_camera_data_consistency() -> Dict[str, Any]:
     """检查CameraService数据一致性."""
     issues = []
-    
+
     try:
         # 获取CameraService实例
         camera_service = await get_camera_service()
         if not camera_service:
             return {"consistent": True, "issues": []}
-        
+
         # 从数据库获取所有摄像头
         db_cameras = await camera_service.camera_repository.find_all()
         db_camera_ids = {cam.id for cam in db_cameras}
-        
+
         # 从YAML获取所有摄像头
         yaml_config = camera_service._read_yaml_config()
         yaml_cameras = yaml_config.get("cameras", [])
         yaml_camera_ids = {cam.get("id") for cam in yaml_cameras if cam.get("id")}
-        
+
         # 检查不一致
         only_in_db = db_camera_ids - yaml_camera_ids
         only_in_yaml = yaml_camera_ids - db_camera_ids
-        
+
         if only_in_db:
             issues.append(f"数据库中存在但YAML中不存在: {only_in_db}")
-        
+
         if only_in_yaml:
             issues.append(f"YAML中存在但数据库中不存在: {only_in_yaml}")
-        
+
         # 检查字段一致性（对于同时存在的摄像头）
         common_ids = db_camera_ids & yaml_camera_ids
         for camera_id in common_ids:
             db_camera = next((c for c in db_cameras if c.id == camera_id), None)
             yaml_camera = next((c for c in yaml_cameras if c.get("id") == camera_id), None)
-            
+
             if db_camera and yaml_camera:
                 # 检查关键字段是否一致
                 if db_camera.name != yaml_camera.get("name"):
                     issues.append(f"摄像头 {camera_id} name不一致: DB={db_camera.name}, YAML={yaml_camera.get('name')}")
-                
+
                 if db_camera.metadata.get("source") != yaml_camera.get("source"):
                     issues.append(f"摄像头 {camera_id} source不一致")
-        
+
         return {
             "consistent": len(issues) == 0,
             "issues": issues,
@@ -159,7 +159,7 @@ async def periodic_consistency_check():
                 await send_alert(f"CameraService数据不一致: {result['issues']}")
         except Exception as e:
             logger.error(f"定期一致性检查异常: {e}")
-        
+
         # 每小时检查一次
         await asyncio.sleep(3600)
 ```
@@ -173,10 +173,10 @@ async def periodic_consistency_check():
 async def get_metrics() -> Dict[str, Any]:
     """获取监控指标."""
     # ... 现有代码 ...
-    
+
     # 添加数据一致性指标
     consistency_check = await check_camera_data_consistency()
-    
+
     metrics = {
         # ... 现有指标 ...
         "data_consistency": {
@@ -185,7 +185,7 @@ async def get_metrics() -> Dict[str, Any]:
             "last_check": datetime.now().isoformat(),
         },
     }
-    
+
     return metrics
 ```
 
@@ -203,21 +203,21 @@ groups:
         annotations:
           summary: "API错误率过高"
           description: "错误率超过5%，当前值: {{ $value }}"
-      
+
       - alert: LowSuccessRate
         expr: api_success_rate < 0.95
         for: 5m
         annotations:
           summary: "API成功率过低"
           description: "成功率低于95%，当前值: {{ $value }}"
-      
+
       - alert: HighResponseTime
         expr: increase(api_p95_response_time) > 0.5
         for: 10m
         annotations:
           summary: "API响应时间异常增加"
           description: "P95响应时间增加超过50%"
-      
+
       - alert: DataInconsistency
         expr: camera_data_consistency == 0
         for: 1m
@@ -276,6 +276,6 @@ groups:
 
 ---
 
-**状态**: ⏳ **待实施**  
-**优先级**: 高  
+**状态**: ⏳ **待实施**
+**优先级**: 高
 **下一步**: 开始实施第一步：增强健康检查端点

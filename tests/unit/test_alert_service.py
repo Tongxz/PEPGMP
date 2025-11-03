@@ -1,6 +1,5 @@
 """AlertService单元测试."""
 
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -186,10 +185,10 @@ class TestAlertService:
         """测试获取告警历史时的异常处理."""
         # 模拟仓储异常
         original_find_all = alert_service.alert_repository.find_all
-        
+
         async def mock_find_all_error(*args, **kwargs):
             raise RuntimeError("查询失败")
-        
+
         alert_service.alert_repository.find_all = mock_find_all_error
 
         try:
@@ -197,4 +196,3 @@ class TestAlertService:
                 await alert_service.get_alert_history()
         finally:
             alert_service.alert_repository.find_all = original_find_all
-

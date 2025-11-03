@@ -19,6 +19,10 @@ volumes:
     driver: local
   app_output:
     driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
 
 # Docker Secrets（可选，推荐用于敏感信息）
 secrets:
@@ -119,8 +123,8 @@ services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile.prod.new
-    image: pyt-api:latest
+      dockerfile: Dockerfile.prod
+    image: pyt-backend:latest
     container_name: pyt-api-prod
     # 从.env.production加载环境变量
     env_file:
@@ -237,9 +241,3 @@ services:
     depends_on:
       - prometheus
     restart: unless-stopped
-
-volumes:
-  prometheus_data:
-    driver: local
-  grafana_data:
-    driver: local

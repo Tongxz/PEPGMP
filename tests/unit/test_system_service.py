@@ -1,6 +1,5 @@
 """SystemService单元测试."""
 
-import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -34,6 +33,7 @@ class TestSystemService:
 
                                 def cpu_count_side_effect(logical=True):
                                     return 8 if logical else 4
+
                                 mock_cpu_count.side_effect = cpu_count_side_effect
 
                                 mock_cpu_freq_result = MagicMock()
@@ -83,17 +83,16 @@ class TestSystemService:
     @pytest.mark.asyncio
     async def test_get_system_service_singleton(self):
         """测试SystemService单例模式."""
-        from src.domain.services.system_service import get_system_service
-        
         # 重置单例
         import src.domain.services.system_service
+        from src.domain.services.system_service import get_system_service
+
         src.domain.services.system_service._system_service_instance = None
-        
+
         # 第一次获取
         service1 = get_system_service()
         assert service1 is not None
-        
+
         # 第二次获取应该是同一个实例
         service2 = get_system_service()
         assert service2 is service1
-

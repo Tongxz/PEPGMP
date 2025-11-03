@@ -69,4 +69,3 @@ echo "  2. 或直接执行: source /tmp/rollout_start.sh"
 echo "  3. 然后重启后端服务"
 echo ""
 echo -e "${YELLOW}提示: 建议先在测试环境验证后再在生产环境使用${NC}"
-

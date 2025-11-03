@@ -1,11 +1,11 @@
-import time
 import json
-import statistics
 import threading
-from typing import Callable, Dict, List, Tuple
+import time
+from typing import Dict, List, Tuple
 
 try:
     import httpx  # type: ignore
+
     _USE_HTTPX = True
 except Exception:
     _USE_HTTPX = False
@@ -89,7 +89,10 @@ def main() -> None:
     base = "http://127.0.0.1:8000"
     targets = [
         ("summary", f"{base}/api/v1/statistics/summary?minutes=60&limit=1000"),
-        ("violations", f"{base}/api/v1/records/violations?camera_id=cam0&limit=5&offset=0"),
+        (
+            "violations",
+            f"{base}/api/v1/records/violations?camera_id=cam0&limit=5&offset=0",
+        ),
         ("camera_stats", f"{base}/api/v1/records/statistics/cam0?period=7d"),
     ]
 
@@ -102,6 +105,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
-

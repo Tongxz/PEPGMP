@@ -49,7 +49,7 @@ async def redis_stats_listener():
             redis_port = int(os.getenv("REDIS_PORT", "6379"))
             redis_db = int(os.getenv("REDIS_DB", "0"))
             redis_password = os.getenv("REDIS_PASSWORD", None)  # 默认None
-            
+
             r = redis.Redis(
                 host=redis_host,
                 port=redis_port,
@@ -119,11 +119,11 @@ export REDIS_URL="redis://:pyt_dev_redis@localhost:6379/0"
 python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-**优点**: 
+**优点**:
 - 简单快速
 - 无需修改代码
 
-**缺点**: 
+**缺点**:
 - 需要记住设置环境变量
 - 与其他服务的配置方式不一致
 
@@ -138,7 +138,7 @@ async def redis_stats_listener():
         try:
             # 优先使用REDIS_URL，然后回退到单独的环境变量
             redis_url = os.getenv("REDIS_URL")
-            
+
             if redis_url:
                 # 从URL解析连接参数
                 from urllib.parse import urlparse
@@ -154,7 +154,7 @@ async def redis_stats_listener():
                 redis_port = int(os.getenv("REDIS_PORT", "6379"))
                 redis_db = int(os.getenv("REDIS_DB", "0"))
                 redis_password = os.getenv("REDIS_PASSWORD", None)
-            
+
             r = redis.Redis(
                 host=redis_host,
                 port=redis_port,
@@ -166,12 +166,12 @@ async def redis_stats_listener():
             # ... 其余代码不变
 ```
 
-**优点**: 
+**优点**:
 - 与其他服务保持一致（都使用REDIS_URL）
 - 同时支持REDIS_URL和单独的环境变量
 - 更灵活
 
-**缺点**: 
+**缺点**:
 - 需要修改代码
 
 ### 方案3: 禁用redis_listener（临时方案）
@@ -180,10 +180,10 @@ async def redis_stats_listener():
 
 注释掉`start_redis_listener()`调用。
 
-**优点**: 
+**优点**:
 - 快速解决错误日志
 
-**缺点**: 
+**缺点**:
 - 失去实时统计功能
 - 不是真正的解决方案
 
@@ -246,6 +246,5 @@ export REDIS_PASSWORD=pyt_dev_redis
 
 ---
 
-**状态**: 问题已分析，待实施修复  
+**状态**: 问题已分析，待实施修复
 **下一步**: 实施方案2（修改redis_listener支持REDIS_URL）
-

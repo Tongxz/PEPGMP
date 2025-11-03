@@ -6,12 +6,11 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Query
+
 from src.api.utils.rollout import should_use_domain
 
 try:
-    from src.services.detection_service_domain import (
-        get_detection_service_domain,
-    )
+    from src.services.detection_service_domain import get_detection_service_domain
 except Exception:
     get_detection_service_domain = None  # type: ignore
 

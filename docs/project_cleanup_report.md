@@ -137,32 +137,32 @@ archive/
 
 ### 1. docker-compose.dev-db.yml
 
-**状态**：保留  
-**原因**：可能用于开发环境的数据库隔离测试  
+**状态**：保留
+**原因**：可能用于开发环境的数据库隔离测试
 **建议**：检查是否与`docker-compose.yml`重复，如重复可删除
 
 ### 2. docker-compose.prod.mlops.yml
 
-**状态**：保留  
-**原因**：MLOps功能可能在某些场景需要  
+**状态**：保留
+**原因**：MLOps功能可能在某些场景需要
 **建议**：如果不使用MLOps功能，可以归档
 
 ### 3. requirements.prod.txt
 
-**状态**：保留  
-**原因**：可能与`requirements.txt`有差异  
+**状态**：保留
+**原因**：可能与`requirements.txt`有差异
 **建议**：对比两个文件，如果一致可删除
 
 ### 4. requirements.supervisor.txt
 
-**状态**：保留  
-**原因**：如果使用Supervisor进程管理需要  
+**状态**：保留
+**原因**：如果使用Supervisor进程管理需要
 **建议**：如果不使用Supervisor，可以删除
 
 ### 5. Dockerfile.prod.old
 
-**状态**：临时保留  
-**原因**：作为旧版本备份  
+**状态**：临时保留
+**原因**：作为旧版本备份
 **建议**：验证新版本无问题后删除（30天后）
 
 ## 📝 建议的后续操作
@@ -173,7 +173,7 @@ archive/
    ```bash
    # 开发环境
    ./scripts/start_dev.sh
-   
+
    # 生产环境
    export ENVIRONMENT=production
    ./scripts/start_prod.sh
@@ -188,7 +188,7 @@ archive/
    ```bash
    # 开发镜像
    docker build -f Dockerfile.dev -t test-dev .
-   
+
    # 生产镜像
    docker build -f Dockerfile.prod -t test-prod .
    ```
@@ -198,14 +198,14 @@ archive/
    git status
    git add .
    git commit -m "chore: 清理冗余部署文件和旧版本配置
-   
+
    - 删除docker_backup/和docker_exports/目录
    - 归档旧的deployment/目录到archive/
    - 更新Dockerfile.prod为新版本
    - 整理根目录测试脚本到tools/
    - 移除重复的requirements和配置文件
    - 优化项目结构
-   
+
    预计释放空间: ~500MB-2GB
    所有关键功能验证通过"
    ```
@@ -345,8 +345,7 @@ tar -xzf project_backup_YYYYMMDD.tar.gz
 
 ---
 
-**状态**: ✅ 已完成  
-**执行时间**: 2025-11-03  
-**执行者**: 自动化清理脚本  
+**状态**: ✅ 已完成
+**执行时间**: 2025-11-03
+**执行者**: 自动化清理脚本
 **验证状态**: ✅ 通过
-

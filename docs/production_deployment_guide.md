@@ -1,432 +1,610 @@
 # 生产环境部署指南
 
-## 概述
+## 📋 概述
 
-当前的配置管理改进**完全支持生产环境部署**，但需要针对生产环境进行一些额外的配置和优化。
+本指南详细说明如何将项目从 macOS 开发环境部署到 Ubuntu 生产环境。
 
-## 生产环境适用性评估
-
-### ✅ 已支持的特性
-
-1. **配置管理** ✅
-   - 使用.env文件
-   - 支持多环境配置（.env.production）
-   - 环境变量优先级
-   - 配置验证
-
-2. **安全性** ✅
-   - 密码不暴露在命令行
-   - 敏感信息不提交到Git
-   - 支持密钥管理服务集成
-
-3. **可扩展性** ✅
-   - 支持Docker部署
-   - 支持多workers
-   - 支持负载均衡
-
-### ⚠️ 需要改进的部分
-
-1. **Docker配置** ⚠️
-   - Dockerfile.prod需要支持.env文件
-   - docker-compose需要适配新的配置系统
-   - 需要secrets管理
-
-2. **启动脚本** ⚠️
-   - 需要生产环境启动脚本
-   - 需要支持Gunicorn
-   - 需要健康检查
-
-3. **监控和日志** ⚠️
-   - 需要集成日志聚合
-   - 需要性能监控
-   - 需要告警系统
-
-## 生产环境部署改进方案
-
-### 1. Dockerfile.prod改进
-
-**问题**:
-- ❌ 当前Dockerfile.prod未使用.env文件
-- ❌ 使用硬编码的启动命令
-- ❌ 使用uvicorn而非Gunicorn
-
-**改进方案**: 创建新的Dockerfile.prod
-
-### 2. docker-compose.yml改进
-
-**问题**:
-- ❌ 当前docker-compose.yml主要用于开发
-- ❌ 未使用Docker secrets
-- ❌ 未使用健康检查
-
-**改进方案**: 创建docker-compose.prod.yml
-
-### 3. 生产环境配置
-
-**创建文件**:
-- `.env.production.example` - 生产配置模板
-- `scripts/start_prod.sh` - 生产启动脚本
-- `scripts/deploy_prod.sh` - 部署脚本
-
-## 生产环境文件结构
+### 部署架构
 
 ```
-project/
-├── .env.example                    # 开发配置模板
-├── .env                            # 开发配置（不提交）
-├── .env.production.example         # 生产配置模板
-├── .env.production                 # 生产配置（不提交）
-├── Dockerfile.dev                  # 开发环境镜像
-├── Dockerfile.prod                 # 生产环境镜像（改进）
-├── docker-compose.yml              # 开发环境编排
-├── docker-compose.prod.yml         # 生产环境编排（新建）
-├── scripts/
-│   ├── start_dev.sh               # 开发启动
-│   ├── start_prod.sh              # 生产启动（新建）
-│   └── deploy_prod.sh             # 部署脚本（新建）
-└── docs/
-    └── production_deployment_guide.md  # 本文档
+┌─────────────────────────────────────────────────────────────┐
+│                    开发环境 (macOS)                          │
+│                                                              │
+│  1. 构建Docker镜像                                           │
+│  2. 推送到私有Registry (192.168.30.83:5433)                 │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+                       │ 网络传输
+                       │
+┌──────────────────────▼──────────────────────────────────────┐
+│               私有Docker Registry                            │
+│           http://192.168.30.83:5433                         │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+                       │ 拉取镜像
+                       │
+┌──────────────────────▼──────────────────────────────────────┐
+│                生产环境 (Ubuntu)                             │
+│                                                              │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐    │
+│  │  API服务     │  │  PostgreSQL  │  │    Redis     │    │
+│  │  (Docker)    │  │  (Docker)    │  │  (Docker)    │    │
+│  └──────────────┘  └──────────────┘  └──────────────┘    │
+│                                                              │
+│  可选服务:                                                   │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐    │
+│  │   MLflow     │  │  Prometheus  │  │   Grafana    │    │
+│  └──────────────┘  └──────────────┘  └──────────────┘    │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## 部署架构
+## 🚀 快速开始（推荐）
 
-### 开发环境
-
-```
-Developer Machine
-├── .env (本地配置)
-├── venv (虚拟环境)
-└── ./scripts/start_dev.sh
-    └── uvicorn with --reload
-```
-
-### 生产环境
-
-```
-Production Server
-├── Docker Container
-│   ├── .env.production (挂载为secrets)
-│   ├── Gunicorn
-│   │   └── Uvicorn Workers (4+)
-│   └── 健康检查
-├── Nginx (反向代理)
-├── PostgreSQL (独立容器/服务)
-├── Redis (独立容器/服务)
-└── 监控系统
-    ├── Prometheus
-    ├── Grafana
-    └── ELK Stack
-```
-
-## 部署流程
-
-### 第一步：准备生产配置
+### 方式1: 一键部署（最简单）✨
 
 ```bash
-# 1. 创建生产配置
-cp .env.production.example .env.production
+# 1. 生成生产环境配置
+bash scripts/generate_production_config.sh
 
-# 2. 编辑生产配置
-nano .env.production
+# 2. 一键部署（构建 -> 推送 -> 部署）
+bash scripts/quick_deploy.sh <生产服务器IP> [SSH用户名]
 
-# 3. 设置强密码
-# DATABASE_PASSWORD=<strong-password>
-# REDIS_PASSWORD=<strong-password>
-# ADMIN_PASSWORD=<strong-password>
-# SECRET_KEY=<64-char-random-key>
+# 示例
+bash scripts/quick_deploy.sh 192.168.1.100 ubuntu
+```
 
-# 4. 限制文件权限
+**就这么简单！** 脚本会自动完成：
+- ✅ 构建Docker镜像
+- ✅ 推送到私有Registry
+- ✅ 部署到生产服务器
+- ✅ 健康检查
+
+---
+
+## 📝 详细部署步骤
+
+如果需要分步骤执行或自定义部署流程，请参考以下详细说明。
+
+### 前置要求
+
+#### 开发环境 (macOS)
+- ✅ Docker Desktop已安装
+- ✅ SSH密钥配置（可选，推荐）
+- ✅ 可访问私有Registry (192.168.30.83:5433)
+- ✅ 可SSH连接到生产服务器
+
+#### 生产环境 (Ubuntu)
+- ✅ Ubuntu 20.04 LTS 或更高版本
+- ✅ 至少 4GB RAM
+- ✅ 至少 20GB 磁盘空间
+- ✅ root或sudo权限
+- ✅ 开放8000端口（API）
+
+### 步骤1: 准备配置文件
+
+#### 方法A: 自动生成（推荐）
+
+```bash
+# 自动生成带强随机密码的配置文件
+bash scripts/generate_production_config.sh
+```
+
+脚本会：
+- 生成 `.env.production` 文件
+- 自动生成强随机密码
+- 创建 `.env.production.credentials` 凭证文件
+- 设置正确的文件权限
+
+#### 方法B: 手动创建
+
+```bash
+# 从示例创建
+cat > .env.production << 'EOF'
+ENVIRONMENT=production
+API_PORT=8000
+LOG_LEVEL=INFO
+
+DATABASE_URL=postgresql://pyt_prod:CHANGE_ME@database:5432/pyt_production
+DATABASE_PASSWORD=CHANGE_ME_STRONG_PASSWORD
+REDIS_PASSWORD=CHANGE_ME_STRONG_PASSWORD
+SECRET_KEY=CHANGE_ME_SECRET_KEY
+JWT_SECRET_KEY=CHANGE_ME_JWT_SECRET
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=CHANGE_ME_ADMIN_PASSWORD
+
+CORS_ORIGINS=*
+USE_DOMAIN_SERVICE=true
+REPOSITORY_TYPE=postgresql
+ROLLOUT_PERCENT=100
+WATCHFILES_FORCE_POLLING=1
+EOF
+
+# 设置权限
 chmod 600 .env.production
+
+# 修改密码
+vim .env.production
 ```
 
-### 第二步：构建生产镜像
-
+**生成强密码命令**：
 ```bash
-# 使用改进的Dockerfile.prod
-docker build -f Dockerfile.prod -t pyt-api:latest .
+# Python方法
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+
+# OpenSSL方法
+openssl rand -base64 32
 ```
 
-### 第三步：部署
+### 步骤2: 配置Docker信任私有Registry
 
-**使用Docker Compose**:
-```bash
-docker-compose -f docker-compose.prod.yml up -d
-```
+#### macOS (Docker Desktop)
 
-**使用Kubernetes**:
-```bash
-kubectl apply -f k8s/
-```
+1. 打开 Docker Desktop
+2. 进入 **Preferences** → **Docker Engine**
+3. 添加配置：
 
-### 第四步：验证
-
-```bash
-# 健康检查
-curl https://your-domain.com/api/v1/monitoring/health
-
-# 性能测试
-ab -n 1000 -c 10 https://your-domain.com/api/v1/monitoring/health
-```
-
-## 安全最佳实践
-
-### 1. 密钥管理
-
-**不推荐** ❌:
-```bash
-# 直接在.env.production中存储密码
-DATABASE_PASSWORD=plain_text_password
-```
-
-**推荐** ✅:
-
-**选项1: Docker Secrets**
-```bash
-# 创建secrets
-echo "strong_password" | docker secret create db_password -
-
-# 在docker-compose中引用
-secrets:
-  - db_password
-```
-
-**选项2: 环境变量（从外部注入）**
-```bash
-# 从密钥管理服务获取
-export DATABASE_PASSWORD=$(aws secretsmanager get-secret-value --secret-id prod/db/password --query SecretString --output text)
-```
-
-**选项3: 密钥管理服务**
-- AWS Secrets Manager
-- HashiCorp Vault
-- Azure Key Vault
-- Google Secret Manager
-
-### 2. 网络安全
-
-```yaml
-# docker-compose.prod.yml
-networks:
-  frontend:
-    driver: bridge
-  backend:
-    driver: bridge
-    internal: true  # 内网，不暴露到外部
-```
-
-### 3. 容器安全
-
-```dockerfile
-# 使用非root用户
-RUN useradd -m -u 1000 appuser
-USER appuser
-```
-
-### 4. HTTPS
-
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name your-domain.com;
-    
-    ssl_certificate /etc/nginx/ssl/cert.pem;
-    ssl_certificate_key /etc/nginx/ssl/key.pem;
-    
-    location / {
-        proxy_pass http://api:8000;
-    }
+```json
+{
+  "insecure-registries": ["192.168.30.83:5433"]
 }
 ```
 
-## 性能优化
+4. 点击 **Apply & Restart**
 
-### 1. Gunicorn配置
+#### Ubuntu生产服务器（自动配置）
+
+部署脚本会自动配置，无需手动操作。
+
+### 步骤3: 构建Docker镜像
 
 ```bash
-# 生产环境使用Gunicorn + Uvicorn Workers
-gunicorn src.api.app:app \
-    --workers 4 \
-    --worker-class uvicorn.workers.UvicornWorker \
-    --bind 0.0.0.0:8000 \
-    --timeout 120 \
-    --keepalive 5 \
-    --max-requests 1000 \
-    --max-requests-jitter 50 \
-    --access-logfile /app/logs/access.log \
-    --error-logfile /app/logs/error.log
+# 构建生产镜像
+docker build -f Dockerfile.prod -t pyt-backend:latest .
+
+# 验证镜像
+docker images pyt-backend:latest
 ```
 
-### 2. Workers数量
+### 步骤4: 推送镜像到私有Registry
 
-```python
-# 推荐公式
-workers = (2 * CPU_CORES) + 1
+```bash
+# 推送到Registry
+bash scripts/push_to_registry.sh
+
+# 或指定标签和版本
+bash scripts/push_to_registry.sh latest v1.0.0
+```
+
+**验证推送成功**：
+```bash
+# 查看Registry中的镜像
+curl http://192.168.30.83:5433/v2/_catalog
+curl http://192.168.30.83:5433/v2/pyt-backend/tags/list
+```
+
+### 步骤5: 部署到生产服务器
+
+```bash
+# 从Registry部署
+bash scripts/deploy_from_registry.sh <生产服务器IP> [SSH用户名] [镜像标签]
 
 # 示例
-# 4核CPU: workers = 9
-# 8核CPU: workers = 17
+bash scripts/deploy_from_registry.sh 192.168.1.100 ubuntu latest
 ```
 
-### 3. 数据库连接池
-
-```python
-# src/config/env_config.py
-@property
-def database_pool_size(self) -> int:
-    """数据库连接池大小."""
-    return int(os.getenv("DATABASE_POOL_SIZE", "20"))
-
-@property
-def database_max_overflow(self) -> int:
-    """数据库连接池溢出."""
-    return int(os.getenv("DATABASE_MAX_OVERFLOW", "10"))
-```
-
-### 4. Redis连接池
-
-```python
-@property
-def redis_pool_size(self) -> int:
-    """Redis连接池大小."""
-    return int(os.getenv("REDIS_POOL_SIZE", "10"))
-```
-
-## 监控和日志
-
-### 1. 日志聚合
-
-**使用ELK Stack**:
-```yaml
-# docker-compose.prod.yml
-services:
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
-    
-  logstash:
-    image: docker.elastic.co/logstash/logstash:8.11.0
-    
-  kibana:
-    image: docker.elastic.co/kibana/kibana:8.11.0
-```
-
-### 2. 性能监控
-
-**使用Prometheus + Grafana**:
-```yaml
-services:
-  prometheus:
-    image: prom/prometheus:latest
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-      
-  grafana:
-    image: grafana/grafana:latest
-```
-
-### 3. APM（应用性能监控）
-
-**选项**:
-- New Relic
-- Datadog
-- Sentry
-- Elastic APM
-
-## 高可用性
-
-### 1. 负载均衡
-
-```yaml
-# docker-compose.prod.yml
-services:
-  api:
-    deploy:
-      replicas: 3
-      
-  nginx:
-    image: nginx:alpine
-    depends_on:
-      - api
-```
-
-### 2. 数据库主从复制
-
-```yaml
-services:
-  postgres-master:
-    image: postgres:16-alpine
-    
-  postgres-replica:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_MASTER_HOST: postgres-master
-```
-
-### 3. Redis哨兵模式
-
-```yaml
-services:
-  redis-master:
-    image: redis:7-alpine
-    
-  redis-sentinel:
-    image: redis:7-alpine
-    command: redis-sentinel /etc/redis/sentinel.conf
-```
-
-## 备份策略
-
-### 1. 数据库备份
+### 步骤6: 验证部署
 
 ```bash
-# 每日备份脚本
-#!/bin/bash
-docker exec postgres-master pg_dump -U user dbname > backup_$(date +%Y%m%d).sql
+# SSH到生产服务器
+ssh ubuntu@192.168.1.100
 
-# 保留最近30天
-find /backups -name "*.sql" -mtime +30 -delete
+# 检查容器状态
+docker ps
+
+# 查看日志
+docker-compose -f /opt/pyt/docker-compose.yml logs -f
+
+# 测试API
+curl http://localhost:8000/api/v1/monitoring/health
+curl http://localhost:8000/api/v1/system/info
 ```
 
-### 2. 配置备份
+## 🛠️ 部署脚本说明
+
+项目提供了多个部署脚本，适应不同场景：
+
+| 脚本 | 用途 | 使用场景 |
+|------|------|----------|
+| `quick_deploy.sh` | 一键完整部署 | **最常用**，构建+推送+部署 |
+| `push_to_registry.sh` | 推送镜像到Registry | 只更新镜像 |
+| `deploy_from_registry.sh` | 从Registry部署 | 部署或回滚 |
+| `deploy_to_production.sh` | 传统部署（tar传输） | 无Registry时使用 |
+| `generate_production_config.sh` | 生成配置文件 | 首次部署前 |
+
+### quick_deploy.sh - 一键部署 ✨
+
+**最推荐的方式**，自动完成全流程：
 
 ```bash
+bash scripts/quick_deploy.sh <服务器IP> [SSH用户]
+
+# 示例
+bash scripts/quick_deploy.sh 192.168.1.100 ubuntu
+```
+
+**执行流程**：
+1. ✅ 构建Docker镜像
+2. ✅ 推送到Registry
+3. ✅ 部署到生产服务器
+4. ✅ 健康检查
+5. ✅ 记录部署历史
+
+### push_to_registry.sh - 推送镜像
+
+仅推送镜像到Registry，不部署：
+
+```bash
+# 推送latest标签
+bash scripts/push_to_registry.sh
+
+# 推送指定标签和版本
+bash scripts/push_to_registry.sh v1.0.0 20251103_120000
+```
+
+### deploy_from_registry.sh - 从Registry部署
+
+从Registry拉取镜像并部署：
+
+```bash
+# 部署latest版本
+bash scripts/deploy_from_registry.sh 192.168.1.100 ubuntu latest
+
+# 部署特定版本
+bash scripts/deploy_from_registry.sh 192.168.1.100 ubuntu v1.0.0
+```
+
+### generate_production_config.sh - 生成配置
+
+生成带强随机密码的生产环境配置：
+
+```bash
+bash scripts/generate_production_config.sh
+```
+
+生成的文件：
+- `.env.production` - 生产环境变量
+- `.env.production.credentials` - 凭证信息（使用后应删除）
+
+## 🔄 更新和回滚
+
+### 更新到新版本
+
+#### 方法1: 快速更新
+
+```bash
+# 一键更新
+bash scripts/quick_deploy.sh <服务器IP>
+```
+
+#### 方法2: 分步更新
+
+```bash
+# 1. 构建新镜像
+docker build -f Dockerfile.prod -t pyt-backend:latest .
+
+# 2. 推送到Registry
+bash scripts/push_to_registry.sh latest v1.1.0
+
+# 3. 在生产服务器上更新
+ssh ubuntu@<服务器IP>
+cd /opt/pyt
+docker-compose pull
+docker-compose up -d
+```
+
+### 回滚到之前版本
+
+```bash
+# 查看可用版本
+curl http://192.168.30.83:5433/v2/pyt-backend/tags/list
+
+# 回滚到特定版本
+bash scripts/deploy_from_registry.sh <服务器IP> ubuntu v1.0.0
+```
+
+### 零停机更新（可选）
+
+```bash
+# 在生产服务器上
+cd /opt/pyt
+
+# 拉取新镜像
+docker-compose pull
+
+# 滚动更新（逐个重启容器）
+docker-compose up -d --no-deps --build api
+
+# 验证
+curl http://localhost:8000/api/v1/monitoring/health
+```
+
+## 🔍 故障排查
+
+### 问题1: Registry连接失败
+
+**症状**：
+```
+Error: Cannot connect to registry
+```
+
+**解决方案**：
+```bash
+# 1. 检查Registry可访问性
+curl http://192.168.30.83:5433/v2/_catalog
+
+# 2. 检查Docker配置
+# macOS: Docker Desktop -> Preferences -> Docker Engine
+# Ubuntu: /etc/docker/daemon.json
+
+# 3. 配置示例
+{
+  "insecure-registries": ["192.168.30.83:5433"]
+}
+
+# 4. 重启Docker
+# macOS: Docker Desktop -> Restart
+# Ubuntu: sudo systemctl restart docker
+```
+
+### 问题2: SSH连接失败
+
+**症状**：
+```
+Permission denied (publickey)
+```
+
+**解决方案**：
+```bash
+# 方法1: 使用SSH密钥（推荐）
+ssh-copy-id ubuntu@<服务器IP>
+
+# 方法2: 脚本会提示输入密码
+# 直接运行，按提示输入
+
+# 方法3: 临时指定密钥
+ssh -i ~/.ssh/your_key ubuntu@<服务器IP>
+```
+
+### 问题3: 容器启动失败
+
+**症状**：
+```
+Container exited with code 1
+```
+
+**解决方案**：
+```bash
+# 1. 查看日志
+ssh ubuntu@<服务器IP>
+cd /opt/pyt
+docker-compose logs api
+
+# 2. 检查环境变量
+cat .env
+
+# 3. 检查配置文件
+ls -la config/
+
+# 4. 手动启动查看详细错误
+docker-compose up api
+```
+
+### 问题4: 数据库连接失败
+
+**症状**：
+```
+Connection to database failed
+```
+
+**解决方案**：
+```bash
+# 1. 检查数据库容器
+docker ps | grep postgres
+
+# 2. 检查数据库日志
+docker-compose logs database
+
+# 3. 测试连接
+docker exec pyt-postgres-prod pg_isready -U pyt_prod
+
+# 4. 检查密码配置
+grep DATABASE_PASSWORD .env
+```
+
+### 问题5: 健康检查失败
+
+**症状**：
+```
+Health check failed
+```
+
+**解决方案**：
+```bash
+# 1. 手动测试健康检查
+curl -v http://localhost:8000/api/v1/monitoring/health
+
+# 2. 检查API日志
+docker-compose logs api
+
+# 3. 检查依赖服务
+docker-compose ps
+
+# 4. 重启服务
+docker-compose restart api
+```
+
+## 📊 监控和维护
+
+### 日志管理
+
+```bash
+# 查看实时日志
+ssh ubuntu@<服务器IP>
+cd /opt/pyt
+docker-compose logs -f
+
+# 查看特定服务日志
+docker-compose logs -f api
+docker-compose logs -f database
+docker-compose logs -f redis
+
+# 查看最近100行
+docker-compose logs --tail=100 api
+
+# 导出日志
+docker-compose logs api > api_logs_$(date +%Y%m%d).log
+```
+
+### 资源监控
+
+```bash
+# 查看容器资源使用
+docker stats
+
+# 查看磁盘使用
+df -h
+
+# 查看Docker磁盘使用
+docker system df
+
+# 清理未使用的资源
+docker system prune -a
+```
+
+### 数据备份
+
+```bash
+# 备份PostgreSQL
+docker exec pyt-postgres-prod pg_dump -U pyt_prod pyt_production > backup_$(date +%Y%m%d).sql
+
+# 备份Redis
+docker exec pyt-redis-prod redis-cli --rdb /data/backup.rdb
+
 # 备份配置文件
-tar -czf config_backup_$(date +%Y%m%d).tar.gz \
-    .env.production \
-    config/*.yaml \
-    docker-compose.prod.yml
+tar czf config_backup_$(date +%Y%m%d).tar.gz /opt/pyt/config /opt/pyt/.env
+
+# 定期备份脚本（crontab）
+0 2 * * * /opt/pyt/scripts/backup.sh
 ```
 
-## 故障恢复
-
-### 1. 健康检查
-
-```yaml
-healthcheck:
-  test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/monitoring/health"]
-  interval: 30s
-  timeout: 10s
-  retries: 3
-  start_period: 40s
-```
-
-### 2. 自动重启
-
-```yaml
-restart: unless-stopped
-```
-
-### 3. 滚动更新
+### 安全更新
 
 ```bash
-# 无停机更新
-docker-compose -f docker-compose.prod.yml up -d --no-deps --build api
+# 更新系统包
+sudo apt update && sudo apt upgrade -y
+
+# 更新Docker
+sudo apt install docker-ce docker-ce-cli containerd.io
+
+# 更新docker-compose
+sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
 ```
 
-## CI/CD集成
+## 🔐 安全最佳实践
 
-### GitHub Actions示例
+### 1. 保护敏感文件
+
+```bash
+# 设置正确的文件权限
+chmod 600 .env.production
+chmod 600 /opt/pyt/.env
+chmod 700 /opt/pyt/config
+
+# 不要提交到Git
+git status  # 确保 .env.production 被忽略
+```
+
+### 2. 使用强密码
+
+```bash
+# 定期更新密码（每90天）
+bash scripts/generate_production_config.sh
+
+# 使用密码管理器保存
+# 推荐: 1Password, Bitwarden, LastPass
+```
+
+### 3. 限制网络访问
+
+```bash
+# 配置防火墙
+sudo ufw enable
+sudo ufw allow 22/tcp    # SSH
+sudo ufw allow 8000/tcp  # API
+sudo ufw status
+```
+
+### 4. 定期安全审计
+
+```bash
+# 检查容器安全
+docker scan pyt-backend:latest
+
+# 检查漏洞
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image pyt-backend:latest
+
+# 检查配置
+docker inspect pyt-api-prod
+```
+
+## 📈 性能优化
+
+### 调整资源限制
+
+编辑 `docker-compose.prod.full.yml`:
 
 ```yaml
+api:
+  deploy:
+    resources:
+      limits:
+        cpus: '8.0'      # 增加CPU
+        memory: 8G        # 增加内存
+      reservations:
+        cpus: '4.0'
+        memory: 4G
+```
+
+### 扩展副本数
+
+```bash
+# 启动多个API实例
+cd /opt/pyt
+docker-compose up -d --scale api=3
+
+# 配合Nginx负载均衡
+```
+
+### 数据库优化
+
+```bash
+# 调整PostgreSQL配置
+docker exec -it pyt-postgres-prod bash
+psql -U pyt_prod -d pyt_production
+
+# 常用优化查询
+SHOW shared_buffers;
+SHOW work_mem;
+SHOW maintenance_work_mem;
+```
+
+## 🎯 高级主题
+
+### CI/CD集成
+
+```yaml
+# .github/workflows/deploy.yml
 name: Deploy to Production
 
 on:
@@ -437,118 +615,124 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      
-      - name: Build Docker image
-        run: docker build -f Dockerfile.prod -t pyt-api:${{ github.sha }} .
-      
-      - name: Push to registry
+      - uses: actions/checkout@v3
+
+      - name: Build and Push
         run: |
-          docker tag pyt-api:${{ github.sha }} registry.example.com/pyt-api:latest
-          docker push registry.example.com/pyt-api:latest
-      
+          docker build -f Dockerfile.prod -t pyt-backend:latest .
+          bash scripts/push_to_registry.sh
+
       - name: Deploy
         run: |
-          ssh user@prod-server "cd /app && docker-compose -f docker-compose.prod.yml pull && docker-compose -f docker-compose.prod.yml up -d"
+          bash scripts/deploy_from_registry.sh ${{ secrets.PRODUCTION_HOST }} ubuntu
 ```
 
-## 成本优化
+### 蓝绿部署
 
-### 1. 资源限制
+```bash
+# 准备蓝环境
+docker-compose -f docker-compose.blue.yml up -d
 
-```yaml
-services:
-  api:
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 2G
-        reservations:
-          cpus: '1.0'
-          memory: 1G
+# 测试蓝环境
+curl http://localhost:8001/api/v1/monitoring/health
+
+# 切换流量（更新Nginx配置）
+sudo nginx -s reload
+
+# 停止绿环境
+docker-compose -f docker-compose.green.yml down
 ```
 
-### 2. 镜像优化
+### 多环境部署
 
-```dockerfile
-# 使用多阶段构建
-FROM python:3.10-slim AS builder
-# 构建依赖
+```bash
+# 测试环境
+bash scripts/deploy_from_registry.sh test.example.com ubuntu latest
 
-FROM python:3.10-slim
-# 复制构建产物
-COPY --from=builder /app /app
+# 预生产环境
+bash scripts/deploy_from_registry.sh staging.example.com ubuntu latest
+
+# 生产环境
+bash scripts/deploy_from_registry.sh prod.example.com ubuntu v1.0.0
 ```
 
-### 3. 缓存优化
+## 📚 相关文档
 
-```yaml
-services:
-  redis:
-    command: >
-      redis-server
-      --maxmemory 256mb
-      --maxmemory-policy allkeys-lru
+- [Docker Compose使用指南](./docker_compose_usage_guide.md)
+- [Docker快速命令参考](./docker_quick_reference.md)
+- [配置快速开始](./configuration_quick_start.md)
+- [API文档](./API_文档.md)
+
+## 💡 常见问题
+
+### Q: 如何选择部署方式？
+
+**A**: 推荐使用私有Registry方式：
+- ✅ **有Registry**: 使用 `quick_deploy.sh`（推荐）
+- ❌ **无Registry**: 使用 `deploy_to_production.sh`
+
+### Q: 部署需要多长时间？
+
+**A**:
+- 首次部署: 约10-15分钟
+- 后续更新: 约3-5分钟
+- 一键部署: 约5-8分钟
+
+### Q: 如何验证部署成功？
+
+**A**:
+```bash
+# 1. 检查容器
+docker ps
+
+# 2. 测试API
+curl http://localhost:8000/api/v1/monitoring/health
+
+# 3. 查看日志
+docker-compose logs api
 ```
 
-## 检查清单
+### Q: 支持哪些操作系统？
 
-### 部署前
+**A**:
+- **开发环境**: macOS, Linux, Windows (WSL2)
+- **生产环境**: Ubuntu 20.04+, CentOS 7+, Debian 10+
 
-- [ ] 创建.env.production配置
-- [ ] 设置强密码
-- [ ] 配置SSL证书
-- [ ] 设置防火墙规则
-- [ ] 配置备份策略
-- [ ] 设置监控告警
+### Q: 如何获取帮助？
 
-### 部署时
+**A**:
+```bash
+# 查看脚本帮助
+bash scripts/quick_deploy.sh --help
 
-- [ ] 构建生产镜像
-- [ ] 运行集成测试
-- [ ] 验证配置
-- [ ] 执行数据库迁移
-- [ ] 部署到生产环境
-- [ ] 验证健康检查
+# 查看日志
+docker-compose logs -f
 
-### 部署后
-
-- [ ] 验证所有API端点
-- [ ] 检查日志
-- [ ] 监控性能指标
-- [ ] 配置告警规则
-- [ ] 文档更新
-- [ ] 团队通知
-
-## 总结
-
-### ✅ 当前方案的优势
-
-1. **配置管理** - 使用.env文件，支持多环境
-2. **安全性** - 密码不暴露，支持secrets管理
-3. **可扩展性** - 支持Docker、Kubernetes
-4. **标准化** - 符合12-Factor App原则
-
-### 🔧 需要的改进
-
-1. **Docker文件** - 需要适配新的配置系统
-2. **部署脚本** - 需要生产环境脚本
-3. **监控集成** - 需要完整的监控方案
-4. **文档完善** - 需要详细的部署文档
-
-### 📋 下一步行动
-
-1. 创建改进的Dockerfile.prod
-2. 创建docker-compose.prod.yml
-3. 创建生产启动脚本
-4. 创建部署脚本
-5. 配置监控和日志
-6. 编写运维文档
+# 联系团队
+```
 
 ---
 
-**状态**: 生产环境部署方案  
-**优先级**: 高  
-**影响**: 确保生产环境安全、稳定、高性能
+## 📝 总结
 
+本指南提供了完整的生产环境部署方案：
+
+| 步骤 | 命令 | 耗时 |
+|------|------|------|
+| 1. 生成配置 | `generate_production_config.sh` | 1分钟 |
+| 2. 一键部署 | `quick_deploy.sh <IP>` | 5-8分钟 |
+| 3. 验证部署 | 自动执行 | 1分钟 |
+
+**推荐流程**：
+```bash
+bash scripts/generate_production_config.sh
+bash scripts/quick_deploy.sh 192.168.1.100 ubuntu
+```
+
+**就这么简单！** 🎉
+
+---
+
+**更新日期**: 2025-11-03
+**版本**: 1.0
+**作者**: AI Assistant

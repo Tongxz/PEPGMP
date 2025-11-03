@@ -196,7 +196,7 @@ async def start_camera(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.warning(f"领域服务失败，回退: {e}")
-    
+
     # 旧实现（回退）
     ...
 ```
@@ -276,7 +276,6 @@ async def start_camera(
 
 ---
 
-**状态**: ✅ **集成完成**  
-**完成日期**: 2025-10-31  
+**状态**: ✅ **集成完成**
+**完成日期**: 2025-10-31
 **下一步**: 测试验证和灰度发布
-
