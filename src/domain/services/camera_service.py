@@ -121,37 +121,11 @@ class CameraService:
                 if key in camera_data:
                     camera.metadata[key] = camera_data[key]
 
-            # 保存到数据库（如果仓储支持）
-            if hasattr(self.camera_repository, "save"):
-                await self.camera_repository.save(camera)
+            # 保存到数据库（主要数据源）
+            await self.camera_repository.save(camera)
 
-            # 保存到YAML配置文件
-            if self.cameras_yaml_path:
-                config_data = self._read_yaml_config()
-                cameras = config_data.get("cameras", [])
-
-                # 检查YAML中是否已存在
-                if any(c.get("id") == camera_id for c in cameras):
-                    raise ValueError(f"摄像头ID在配置文件中已存在: {camera_id}")
-
-                # 转换为YAML格式（提取metadata中的字段到顶层）
-                camera_dict = camera.to_dict()
-                if "source" in camera.metadata:
-                    camera_dict["source"] = camera.metadata["source"]
-                for key in [
-                    "regions_file",
-                    "profile",
-                    "device",
-                    "imgsz",
-                    "auto_tune",
-                    "auto_start",
-                    "env",
-                ]:
-                    if key in camera.metadata:
-                        camera_dict[key] = camera.metadata[key]
-                cameras.append(camera_dict)
-                config_data["cameras"] = cameras
-                self._write_yaml_config(config_data)
+            # 注意: YAML写入已移除，数据库是单一数据源
+            # 如需备份，使用导出工具: scripts/export_cameras_to_yaml.py
 
             logger.info(f"摄像头创建成功: {camera_id}")
             return {"ok": True, "camera": camera.to_dict()}
@@ -217,59 +191,11 @@ class CameraService:
                 if key in updates:
                     camera.metadata[key] = updates[key]
 
-            # 更新到数据库（如果仓储支持）
-            if hasattr(self.camera_repository, "save"):
-                await self.camera_repository.save(camera)
+            # 更新到数据库（主要数据源）
+            await self.camera_repository.save(camera)
 
-            # 更新YAML配置文件
-            if self.cameras_yaml_path:
-                config_data = self._read_yaml_config()
-                cameras = config_data.get("cameras", [])
-
-                # 查找并更新
-                camera_found = False
-                for i, cam in enumerate(cameras):
-                    if cam.get("id") == camera_id:
-                        camera_dict = camera.to_dict()
-                        # 将metadata中的字段提取到顶层（YAML格式）
-                        if "source" in camera.metadata:
-                            camera_dict["source"] = camera.metadata["source"]
-                        for key in [
-                            "regions_file",
-                            "profile",
-                            "device",
-                            "imgsz",
-                            "auto_tune",
-                            "auto_start",
-                            "env",
-                        ]:
-                            if key in camera.metadata:
-                                camera_dict[key] = camera.metadata[key]
-                        cameras[i] = camera_dict
-                        camera_found = True
-                        break
-
-                if not camera_found:
-                    # 如果YAML中不存在，添加
-                    camera_dict = camera.to_dict()
-                    # 将metadata中的字段提取到顶层（YAML格式）
-                    if "source" in camera.metadata:
-                        camera_dict["source"] = camera.metadata["source"]
-                    for key in [
-                        "regions_file",
-                        "profile",
-                        "device",
-                        "imgsz",
-                        "auto_tune",
-                        "auto_start",
-                        "env",
-                    ]:
-                        if key in camera.metadata:
-                            camera_dict[key] = camera.metadata[key]
-                    cameras.append(camera_dict)
-
-                config_data["cameras"] = cameras
-                self._write_yaml_config(config_data)
+            # 注意: YAML写入已移除，数据库是单一数据源
+            # 如需备份，使用导出工具: scripts/export_cameras_to_yaml.py
 
             logger.info(f"摄像头更新成功: {camera_id}")
             return {"status": "success", "camera": camera.to_dict()}
@@ -298,19 +224,11 @@ class CameraService:
             if not camera:
                 raise ValueError(f"摄像头不存在: {camera_id}")
 
-            # 从数据库删除（如果仓储支持）
-            if hasattr(self.camera_repository, "delete_by_id"):
-                await self.camera_repository.delete_by_id(camera_id)
+            # 从数据库删除（主要数据源）
+            await self.camera_repository.delete_by_id(camera_id)
 
-            # 从YAML配置文件删除
-            if self.cameras_yaml_path:
-                config_data = self._read_yaml_config()
-                cameras = config_data.get("cameras", [])
-
-                # 查找并删除
-                cameras = [c for c in cameras if c.get("id") != camera_id]
-                config_data["cameras"] = cameras
-                self._write_yaml_config(config_data)
+            # 注意: YAML写入已移除，数据库是单一数据源
+            # 如需备份，使用导出工具: scripts/export_cameras_to_yaml.py
 
             logger.info(f"摄像头删除成功: {camera_id}")
             return {"status": "success"}

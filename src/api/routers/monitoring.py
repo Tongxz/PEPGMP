@@ -125,6 +125,9 @@ async def health_check() -> Dict[str, Any]:
             "domain_services": "ok",
         }
 
+        # 注意: camera_data_consistency检查已移除
+        # 相机配置现在只存储在数据库中（单一数据源）
+
         # 检查数据库连接
         try:
             import os
@@ -168,29 +171,11 @@ async def health_check() -> Dict[str, Any]:
             checks["redis"] = "error"
             checks["redis_error"] = str(e)
 
-        # 检查CameraService数据一致性
-        try:
-            consistency_check = await check_camera_data_consistency()
-            if consistency_check.get("consistent", True):
-                checks["camera_data_consistency"] = "ok"
-            else:
-                checks["camera_data_consistency"] = "inconsistent"
-                checks["consistency_issues"] = consistency_check.get("issues", [])
-                checks["consistency_details"] = {
-                    "db_count": consistency_check.get("db_count", 0),
-                    "yaml_count": consistency_check.get("yaml_count", 0),
-                }
-        except Exception as e:
-            logger.warning(f"数据一致性检查异常: {e}")
-            checks["camera_data_consistency"] = "error"
-            checks["consistency_error"] = str(e)
-
         # 判断整体状态
         all_ok = all(
             v == "ok"
             for k, v in checks.items()
-            if k
-            not in ["consistency_issues", "consistency_details", "consistency_error"]
+            if k not in ["database_error", "redis_error"]
         )
 
         health_status = {

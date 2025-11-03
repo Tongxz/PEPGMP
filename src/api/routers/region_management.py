@@ -1,11 +1,42 @@
+import logging
 from typing import Any, Dict
 from typing import List
 from typing import List as _List
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from src.api.utils.rollout import should_use_domain
 
 # This would be in a service file
 from src.services.region_service import RegionService, get_region_service
+
+logger = logging.getLogger(__name__)
+
+try:
+    from src.domain.services.region_service import RegionDomainService
+    from src.infrastructure.repositories.postgresql_region_repository import (
+        PostgreSQLRegionRepository,
+    )
+    from src.services.database_service import get_db_service
+
+    async def get_region_domain_service() -> Optional[RegionDomainService]:
+        """获取区域领域服务实例."""
+        try:
+            # 使用PostgreSQL仓储
+            db_service = await get_db_service()
+            if not db_service.pool:
+                logger.warning("数据库连接池未初始化，无法创建RegionDomainService")
+                return None
+            region_repo = PostgreSQLRegionRepository(db_service.pool)
+            return RegionDomainService(region_repo)
+        except Exception as e:
+            logger.warning(f"创建RegionDomainService失败: {e}")
+            return None
+
+except Exception:
+    get_region_domain_service = None  # type: ignore
+    RegionDomainService = None  # type: ignore
 
 router = APIRouter()
 # 兼容旧前端的路由（/api/regions）
@@ -13,20 +44,55 @@ compat_router = APIRouter()
 
 
 @router.get("/regions", summary="获取所有区域信息")
-def get_all_regions(
+async def get_all_regions(
+    active_only: bool = Query(False, description="是否只返回活跃区域"),
+    force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
     region_service: RegionService = Depends(get_region_service),
 ) -> List[Dict[str, Any]]:
+    """获取所有区域信息."""
+    # 灰度：按配置或强制参数决定是否走领域分支
+    try:
+        if should_use_domain(force_domain) and get_region_domain_service is not None:
+            region_domain_service = await get_region_domain_service()
+            if region_domain_service:
+                regions = await region_domain_service.get_all_regions(
+                    active_only=active_only
+                )
+                return regions
+    except Exception as e:
+        logger.warning(f"领域服务获取区域列表失败，回退到旧实现: {e}")
+
+    # 旧实现（回退到JSON文件）
     return region_service.get_all_regions()
 
 
 @router.post("/regions", summary="创建新区域")
-def create_region(
+async def create_region(
     region_data: Dict[str, Any],
+    camera_id: Optional[str] = Query(None, description="关联的相机ID（可选）"),
+    force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
     region_service: RegionService = Depends(get_region_service),
 ) -> Dict[str, Any]:
+    """创建新区域."""
+    # 灰度：写操作需要更谨慎，使用should_use_domain进行灰度控制
+    try:
+        if should_use_domain(force_domain) and get_region_domain_service is not None:
+            region_domain_service = await get_region_domain_service()
+            if region_domain_service:
+                result = await region_domain_service.create_region(
+                    region_data, camera_id
+                )
+                return result
+    except ValueError as e:
+        # 业务逻辑错误（如ID已存在），直接抛出HTTP异常
+        raise HTTPException(status_code=409, detail=str(e))
+    except Exception as e:
+        logger.warning(f"领域服务创建区域失败，回退到旧实现: {e}")
+
+    # 旧实现（回退到JSON文件）
     try:
         region_id = region_service.create_region(region_data)
-        # 持久化
+        # 持久化到JSON文件（向后兼容）
         try:
             region_service.save_to_file()
         except Exception:
@@ -37,10 +103,12 @@ def create_region(
 
 
 @router.post("/regions/meta", summary="更新区域元信息（画布/背景/铺放/参考）")
-def update_regions_meta(
+async def update_regions_meta(
     payload: Dict[str, Any],
+    force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
     region_service: RegionService = Depends(get_region_service),
 ) -> Dict[str, Any]:
+    """更新区域元信息."""
     try:
         meta = payload or {}
         cs = meta.get("canvas_size") or {}
@@ -65,7 +133,20 @@ def update_regions_meta(
             "ref_size": str(ref) if ref else None,
         }
 
-        # 设置并保存
+        # 灰度：尝试使用数据库存储meta
+        try:
+            if (
+                should_use_domain(force_domain)
+                and get_region_domain_service is not None
+            ):
+                region_domain_service = await get_region_domain_service()
+                if region_domain_service:
+                    await region_domain_service.save_meta(normalized)
+                    return {"status": "success", "meta": normalized}
+        except Exception as e:
+            logger.warning(f"领域服务保存meta失败，回退到旧实现: {e}")
+
+        # 旧实现（回退到JSON文件和内存）
         try:
             region_service.region_manager.meta = normalized
         except Exception:
@@ -85,11 +166,28 @@ def update_regions_meta(
 
 
 @router.put("/regions/{region_id}", summary="更新区域信息")
-def update_region(
+async def update_region(
     region_id: str,
     region_data: Dict[str, Any],
+    force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
     region_service: RegionService = Depends(get_region_service),
 ) -> Dict[str, Any]:
+    """更新区域信息."""
+    # 灰度：写操作需要更谨慎
+    try:
+        if should_use_domain(force_domain) and get_region_domain_service is not None:
+            region_domain_service = await get_region_domain_service()
+            if region_domain_service:
+                result = await region_domain_service.update_region(
+                    region_id, region_data
+                )
+                return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.warning(f"领域服务更新区域失败，回退到旧实现: {e}")
+
+    # 旧实现（回退到JSON文件）
     try:
         region_service.update_region(region_id, region_data)
         try:
@@ -102,9 +200,25 @@ def update_region(
 
 
 @router.delete("/regions/{region_id}", summary="删除区域")
-def delete_region(
-    region_id: str, region_service: RegionService = Depends(get_region_service)
+async def delete_region(
+    region_id: str,
+    force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
+    region_service: RegionService = Depends(get_region_service),
 ) -> Dict[str, Any]:
+    """删除区域."""
+    # 灰度：写操作需要更谨慎
+    try:
+        if should_use_domain(force_domain) and get_region_domain_service is not None:
+            region_domain_service = await get_region_domain_service()
+            if region_domain_service:
+                result = await region_domain_service.delete_region(region_id)
+                return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.warning(f"领域服务删除区域失败，回退到旧实现: {e}")
+
+    # 旧实现（回退到JSON文件）
     try:
         region_service.delete_region(region_id)
         try:

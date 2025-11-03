@@ -29,18 +29,37 @@ except Exception:
 try:
     from src.domain.services.camera_control_service import CameraControlService
     from src.domain.services.camera_service import CameraService
+    from src.infrastructure.repositories.postgresql_camera_repository import (
+        PostgreSQLCameraRepository,
+    )
+    from src.services.database_service import get_db_service
 
     async def get_camera_service() -> CameraService | None:
         """获取摄像头服务实例."""
         try:
+            # 使用PostgreSQL仓储
+            db_service = await get_db_service()
+            if not db_service.pool:
+                logger.warning("数据库连接池未初始化，使用内存仓储作为回退")
+                if DefaultCameraRepository is None:
+                    return None
+                camera_repo = DefaultCameraRepository()
+            else:
+                camera_repo = PostgreSQLCameraRepository(db_service.pool)
+            # YAML路径仅用于初始化时导入（可选）
+            cameras_yaml_path = (
+                _cameras_path()
+                if os.getenv("ENABLE_YAML_FALLBACK", "false").lower() == "true"
+                else None
+            )
+            return CameraService(camera_repo, cameras_yaml_path)
+        except Exception as e:
+            logger.warning(f"创建CameraService失败: {e}，使用内存仓储作为回退")
             if DefaultCameraRepository is None:
                 return None
-            # 使用默认的摄像头仓储（内存存储）
             camera_repo = DefaultCameraRepository()
             cameras_yaml_path = _cameras_path()
             return CameraService(camera_repo, cameras_yaml_path)
-        except Exception:
-            return None
 
     async def get_camera_control_service() -> CameraControlService | None:
         """获取摄像头控制服务实例."""
@@ -114,14 +133,23 @@ async def list_cameras(
     """
     # 灰度：按配置或强制参数决定是否走领域分支
     try:
-        if should_use_domain(force_domain) and get_detection_service_domain is not None:
-            domain_service = get_detection_service_domain()
-            cameras = await domain_service.get_cameras(active_only=active_only)
-            return {"cameras": cameras}
+        if should_use_domain(force_domain) and get_camera_service is not None:
+            camera_service = await get_camera_service()  # type: ignore
+            if camera_service:
+                cameras = await camera_service.camera_repository.find_all()
+                if active_only:
+                    cameras = [c for c in cameras if c.is_active]
+                # 转换为字典格式
+                cameras_dict = [c.to_dict() for c in cameras]
+                # 提取metadata中的source等字段到顶层（兼容API格式）
+                for cam_dict in cameras_dict:
+                    if "source" in cam_dict.get("metadata", {}):
+                        cam_dict["source"] = cam_dict["metadata"]["source"]
+                return {"cameras": cameras_dict}
     except Exception as e:
-        logger.warning(f"领域服务获取摄像头列表失败，回退到YAML配置: {e}")
+        logger.warning(f"领域服务获取摄像头列表失败，回退到旧实现: {e}")
 
-    # 旧实现（回退）
+    # 旧实现（回退到YAML，用于兼容）
     data = _read_yaml(_cameras_path())
     return {"cameras": data.get("cameras", [])}
 
