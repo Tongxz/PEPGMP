@@ -96,6 +96,32 @@ def create_argument_parser():
     parser.add_argument("--gpu-optimize", action="store_true", help="启用GPU加速优化")
     parser.add_argument("--batch-size", type=int, help="批处理大小（自动检测最优值）")
 
+    # 检测保存策略参数 (智能保存)
+    parser.add_argument(
+        "--save-strategy",
+        choices=["all", "violations_only", "interval", "smart"],
+        default="smart",
+        help="保存策略: all=保存所有, violations_only=仅保存违规, interval=按间隔, smart=智能保存（默认）",
+    )
+    parser.add_argument(
+        "--save-interval",
+        type=int,
+        default=30,
+        help="保存间隔（帧数），用于 all/interval 策略 (默认: 30)",
+    )
+    parser.add_argument(
+        "--violation-threshold",
+        type=float,
+        default=0.5,
+        help="违规严重程度阈值（0.0-1.0），低于此值的违规不保存 (默认: 0.5)",
+    )
+    parser.add_argument(
+        "--normal-sample-interval",
+        type=int,
+        default=300,
+        help="正常样本采样间隔（帧数），用于 smart 策略 (默认: 300)",
+    )
+
     # 自适应相关参数
     parser.add_argument(
         "--profile",
@@ -501,7 +527,65 @@ def _run_detection_loop(args, logger, pipeline, device):
                 )
                 hour_stats["hairnet_violations"] += hairnet_violations
 
-                if db_service and process_count % save_interval == 0:
+                # ===== 智能保存决策 (使用应用服务) =====
+                # 使用应用服务处理检测结果（智能保存）
+                if (
+                    db_service
+                    and hasattr(args, "detection_app_service")
+                    and args.detection_app_service
+                ):
+                    try:
+                        # 使用应用服务进行智能保存
+                        app_result = asyncio.run(
+                            args.detection_app_service.process_realtime_stream(
+                                camera_id=camera_id,
+                                frame=frame,
+                                frame_count=frame_count,
+                            )
+                        )
+
+                        # 记录保存状态（只在保存时记录，避免日志过多）
+                        if app_result.get("saved_to_db"):
+                            save_reason = app_result.get("save_reason", "unknown")
+                            logger.debug(
+                                f"✓ 帧 {frame_count}: 已保存 ({save_reason}), "
+                                f"违规={app_result['result']['has_violations']}, "
+                                f"严重程度={app_result['result']['violation_severity']:.2f}"
+                            )
+                    except Exception as e:
+                        logger.warning(f"智能保存失败: {e}，回退到原有逻辑")
+                        # 回退到原有的保存逻辑
+                        if process_count % save_interval == 0:
+                            try:
+                                elapsed = time.time() - start_time
+                                avg_fps = process_count / elapsed if elapsed > 0 else 0
+                                record_id = asyncio.run(
+                                    db_service.save_detection_record(
+                                        camera_id=camera_id,
+                                        frame_number=frame_count,
+                                        result=result,
+                                        fps=avg_fps,
+                                    )
+                                )
+                                for hairnet_result in result.hairnet_results:
+                                    if not hairnet_result.get("has_hairnet", True):
+                                        asyncio.run(
+                                            db_service.save_violation_event(
+                                                detection_id=record_id,
+                                                camera_id=camera_id,
+                                                violation_type="no_hairnet",
+                                                track_id=hairnet_result.get("track_id"),
+                                                confidence=hairnet_result.get(
+                                                    "confidence", 0.0
+                                                ),
+                                                bbox=hairnet_result.get("bbox"),
+                                            )
+                                        )
+                                logger.debug(f"已保存检测记录（回退逻辑）: {record_id}")
+                            except Exception as save_error:
+                                logger.error(f"保存检测记录失败（回退逻辑）: {save_error}")
+                # 如果没有应用服务，使用原有的保存逻辑
+                elif db_service and process_count % save_interval == 0:
                     try:
                         elapsed = time.time() - start_time
                         avg_fps = process_count / elapsed if elapsed > 0 else 0
@@ -527,9 +611,9 @@ def _run_detection_loop(args, logger, pipeline, device):
                                         bbox=hairnet_result.get("bbox"),
                                     )
                                 )
-                        logger.debug(f"已保存检测记录: {record_id}")
+                        logger.debug(f"已保存检测记录（传统逻辑）: {record_id}")
                     except Exception as e:
-                        logger.error(f"保存检测记录失败: {e}")
+                        logger.error(f"保存检测记录失败（传统逻辑）: {e}")
 
                 now = datetime.now()
                 new_hour = now.replace(minute=0, second=0, microsecond=0)
@@ -771,7 +855,50 @@ def run_detection(args, logger):
             cascade_config=cascade_cfg,
         )
 
-        logger.info("检测管线初始化完成，开始处理...")
+        logger.info("检测管线初始化完成")
+
+        # 创建应用服务（用于智能保存）
+        try:
+            from src.application.detection_application_service import (
+                DetectionApplicationService,
+                SavePolicy,
+                SaveStrategy,
+            )
+            from src.services.detection_service_domain import (
+                get_detection_service_domain,
+            )
+
+            # 从命令行参数创建保存策略
+            save_strategy = SaveStrategy[args.save_strategy.upper()]
+            save_policy = SavePolicy(
+                strategy=save_strategy,
+                save_interval=args.save_interval,
+                normal_sample_interval=args.normal_sample_interval,
+                save_normal_summary=True,
+                violation_severity_threshold=args.violation_threshold,
+            )
+
+            # 获取领域服务
+            domain_service = get_detection_service_domain()
+
+            # 创建应用服务
+            detection_app_service = DetectionApplicationService(
+                detection_pipeline=pipeline,
+                detection_domain_service=domain_service,
+                save_policy=save_policy,
+            )
+
+            # 将应用服务添加到args中，供_run_detection_loop使用
+            args.detection_app_service = detection_app_service
+
+            logger.info(
+                f"✓ 智能保存策略已启用: {save_strategy.value}, "
+                f"违规阈值={args.violation_threshold}, "
+                f"采样间隔={args.normal_sample_interval}"
+            )
+        except Exception as e:
+            logger.warning(f"应用服务初始化失败: {e}，将使用传统保存逻辑")
+            args.detection_app_service = None
 
         # 实现视频处理循环
         _run_detection_loop(args, logger, pipeline, device)

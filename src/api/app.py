@@ -18,6 +18,40 @@ project_root = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
+# 加载环境配置文件
+try:
+    from dotenv import load_dotenv
+
+    # 按优先级加载配置文件
+    env_file = os.getenv("ENV_FILE")  # 允许通过环境变量指定配置文件
+    if env_file:
+        load_dotenv(env_file, override=True)
+        logging.getLogger(__name__).info(f"已加载指定配置文件: {env_file}")
+    else:
+        # 默认加载.env文件
+        default_env = os.path.join(project_root, ".env")
+        if os.path.exists(default_env):
+            load_dotenv(default_env)
+            logging.getLogger(__name__).info(f"已加载默认配置文件: {default_env}")
+
+        # 加载环境特定配置
+        environment = os.getenv("ENVIRONMENT", "development")
+        env_specific = os.path.join(project_root, f".env.{environment}")
+        if os.path.exists(env_specific):
+            load_dotenv(env_specific, override=True)
+            logging.getLogger(__name__).info(f"已加载环境特定配置: {env_specific}")
+
+        # 加载测试环境配置（如果存在）
+        test_env = os.path.join(project_root, ".env.test")
+        if os.path.exists(test_env) and os.getenv("ENVIRONMENT", "").lower() in (
+            "test",
+            "testing",
+        ):
+            load_dotenv(test_env, override=True)
+            logging.getLogger(__name__).info(f"已加载测试环境配置: {test_env}")
+except ImportError:
+    logging.getLogger(__name__).warning("python-dotenv未安装，无法从.env文件加载配置")
+
 try:
     from src.api.middleware.error_middleware import setup_error_middleware
     from src.api.middleware.metrics_middleware import MetricsMiddleware
@@ -27,6 +61,7 @@ try:
         alerts,
         cameras,
         comprehensive,
+        config,
         download,
         error_monitoring,
         events,
@@ -54,6 +89,7 @@ except ImportError:
         alerts,
         cameras,
         comprehensive,
+        config,
         download,
         error_monitoring,
         events,
@@ -248,6 +284,8 @@ app.include_router(alerts.router, prefix="/api/v1", tags=["Alerts"])
 app.include_router(security.router, prefix="/api/v1", tags=["Security Management"])
 app.include_router(records.router, tags=["Records"])
 app.include_router(video_stream.router, prefix="/api/v1", tags=["Video Stream"])
+# 配置管理路由
+app.include_router(config.router, prefix="/api/v1/config", tags=["Config"])
 
 
 @app.get("/", include_in_schema=False)

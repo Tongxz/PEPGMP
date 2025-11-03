@@ -55,25 +55,55 @@ if ! python -c "import dotenv" 2>/dev/null; then
     fi
 fi
 
-# 检查Docker服务
+# 检查并启动Docker服务
 echo ""
 echo "检查依赖服务..."
 if command -v docker &> /dev/null; then
+    # 检查Docker是否正在运行
+    if ! docker info > /dev/null 2>&1; then
+        echo "⚠️  Docker未运行，请启动Docker Desktop"
+        echo "   等待Docker启动..."
+        sleep 5
+        if ! docker info > /dev/null 2>&1; then
+            echo "❌ Docker仍未就绪，请手动启动Docker Desktop后重试"
+            exit 1
+        fi
+    fi
+
+    # 检查并启动PostgreSQL
     if ! docker ps | grep -q pyt-postgres-dev; then
-        echo "⚠️  PostgreSQL服务未运行"
-        echo "   启动命令: docker-compose up -d database"
+        echo "⚠️  PostgreSQL服务未运行，正在启动..."
+        docker-compose up -d database 2>&1 | grep -v "the attribute.*version.*is obsolete" || true
+        echo "   等待PostgreSQL启动..."
+        sleep 8
+        if docker ps | grep -q pyt-postgres-dev; then
+            echo "✅ PostgreSQL服务已启动"
+        else
+            echo "❌ PostgreSQL启动失败"
+            exit 1
+        fi
     else
         echo "✅ PostgreSQL服务运行中"
     fi
 
+    # 检查并启动Redis
     if ! docker ps | grep -q pyt-redis-dev; then
-        echo "⚠️  Redis服务未运行"
-        echo "   启动命令: docker-compose up -d redis"
+        echo "⚠️  Redis服务未运行，正在启动..."
+        docker-compose up -d redis 2>&1 | grep -v "the attribute.*version.*is obsolete" || true
+        echo "   等待Redis启动..."
+        sleep 3
+        if docker ps | grep -q pyt-redis-dev; then
+            echo "✅ Redis服务已启动"
+        else
+            echo "❌ Redis启动失败"
+            exit 1
+        fi
     else
         echo "✅ Redis服务运行中"
     fi
 else
     echo "⚠️  Docker未安装或未运行"
+    echo "   请安装Docker Desktop或使用其他方式提供数据库服务"
 fi
 
 # 验证配置
