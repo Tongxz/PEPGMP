@@ -22,26 +22,406 @@
 
 ## 🚀 快速上手
 
-我们提供基于 Docker Compose 的一键启动方式，让您在5分钟内将整个系统运行起来。
+本项目提供两种部署方式：**开发环境**和**生产环境**。您可以根据需求选择合适的方式。
 
-**前提条件**: 已安装 [Docker](https://www.docker.com/) 和 [Docker Compose](https://docs.docker.com/compose/)。
+### 前提条件
+
+- **必需**:
+  - Python 3.10+
+  - [Docker Desktop](https://www.docker.com/) (用于运行PostgreSQL和Redis)
+  - Git
+
+- **推荐**:
+  - Node.js 20+ (前端开发)
+
+---
+
+## 🛠️ 开发环境启动
+
+开发环境适合日常开发、调试和测试。启动脚本会自动处理所有依赖服务的启动。
+
+### 1. 克隆项目并准备环境
 
 ```bash
-# 1. 克隆项目
+# 克隆项目
 git clone <your-project-repository-url>
 cd <project-directory>
 
-# 2. 复制并配置您的生产环境变量
-# (请务必修改.env.prod中的密码和密钥)
-cp config/production.env.example .env.prod
-
-# 3. 一键启动所有服务 (包括API后端, 数据库, Redis等)
-docker-compose -f docker-compose.prod.yml up -d
+# 创建并激活虚拟环境（如果还没有）
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 ```
 
+### 2. 配置开发环境
+
+```bash
+# 从模板创建.env文件（如果不存在）
+cp .env.example .env
+
+# 编辑.env文件，设置开发环境配置
+# 重要：确保 ENVIRONMENT=development
+nano .env  # 或使用您喜欢的编辑器
+```
+
+**关键配置项** (`.env`):
+```bash
+# 环境设置
+ENVIRONMENT=development  # ⚠️ 必须设置为development
+LOG_LEVEL=DEBUG
+
+# 数据库配置（开发环境使用Docker容器）
+DATABASE_URL=postgresql://pyt_dev:pyt_dev_password@localhost:5432/pyt_development
+
+# Redis配置（开发环境使用Docker容器）
+REDIS_URL=redis://:pyt_dev_redis@localhost:6379/0
+
+# API配置
+API_PORT=8000
+```
+
+### 3. 启动开发服务
+
+```bash
+# 使用开发启动脚本（推荐）
+bash scripts/start_dev.sh
+```
+
+**启动脚本会自动：**
+- ✅ 检查并激活虚拟环境
+- ✅ 检查并安装依赖（如python-dotenv）
+- ✅ 自动启动Docker容器（PostgreSQL、Redis）
+- ✅ 验证配置文件
+- ✅ 启动后端API服务
+
+**手动启动方式**（如果不想使用启动脚本）：
+
+```bash
+# 1. 启动Docker服务
+docker-compose up -d database redis
+
+# 2. 等待服务就绪（约10秒）
+sleep 10
+
+# 3. 启动后端
+source venv/bin/activate
+python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### 4. 启动前端（可选）
+
+```bash
+# 进入前端目录
+cd frontend
+
+# 安装依赖（首次运行）
+npm install
+
+# 启动前端开发服务器
+npm run dev
+```
+
+### 5. 访问服务
+
 服务启动后，您可以访问：
-- **前端界面**: `http://localhost:8080`
+- **前端界面**: `http://localhost:5173`
+- **后端API**: `http://localhost:8000`
 - **API 文档**: `http://localhost:8000/docs`
+- **健康检查**: `http://localhost:8000/health`
+
+---
+
+## 🚀 生产环境启动
+
+生产环境使用Gunicorn多进程模式，适合正式部署。
+
+### 1. 准备生产环境
+
+```bash
+# 克隆项目
+git clone <your-project-repository-url>
+cd <project-directory>
+
+# 创建并激活虚拟环境
+python -m venv venv
+source venv/bin/activate
+```
+
+### 2. 配置生产环境
+
+```bash
+# 从模板创建生产环境配置
+cp .env.production.example .env.production
+
+# 编辑生产配置（⚠️ 必须修改密码和密钥）
+nano .env.production  # 或使用您喜欢的编辑器
+
+# 设置安全权限
+chmod 600 .env.production
+```
+
+**关键配置项** (`.env.production`):
+```bash
+# 环境设置
+ENVIRONMENT=production  # ⚠️ 必须设置为production
+LOG_LEVEL=INFO
+
+# 数据库配置（生产环境）
+DATABASE_URL=postgresql://pyt_prod:STRONG_PASSWORD@production-db:5432/pyt_production
+
+# Redis配置（生产环境）
+REDIS_URL=redis://:STRONG_PASSWORD@production-redis:6379/0
+
+# API配置
+API_PORT=8000
+GUNICORN_WORKERS=4
+GUNICORN_TIMEOUT=120
+
+# 安全配置（⚠️ 必须修改为强随机值）
+SECRET_KEY=your-strong-secret-key-64-chars-long
+JWT_SECRET_KEY=your-jwt-secret-key
+ADMIN_PASSWORD=your-strong-admin-password
+```
+
+**⚠️ 重要安全提示**：
+- 生产环境密码必须使用强随机密码（至少32字符）
+- 使用 `scripts/generate_production_secrets.py` 生成安全密钥
+- 不要将 `.env.production` 提交到Git
+- 设置文件权限为 `600`（仅所有者可读写）
+
+### 3. 生成生产密钥（推荐）
+
+```bash
+# 使用脚本生成强随机密码和密钥
+python scripts/generate_production_secrets.py
+
+# 输出将包含所有必需的配置项，复制到.env.production
+```
+
+### 4. 启动生产服务
+
+```bash
+# 使用生产启动脚本（推荐）
+bash scripts/start_prod.sh
+```
+
+**启动脚本会：**
+- ✅ 检查 `.env.production` 文件是否存在
+- ✅ 验证文件权限（建议600）
+- ✅ 设置 `ENVIRONMENT=production`
+- ✅ 加载生产环境配置
+- ✅ 验证配置完整性
+- ✅ 检查依赖服务（数据库、Redis）连通性
+- ✅ 使用Gunicorn启动多进程服务
+
+**手动启动方式**：
+
+```bash
+# 1. 设置环境变量
+export ENVIRONMENT=production
+source .env.production
+
+# 2. 验证配置
+python scripts/validate_config.py
+
+# 3. 启动服务（使用Gunicorn）
+gunicorn src.api.app:app \
+    --workers 4 \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --bind 0.0.0.0:8000 \
+    --timeout 120 \
+    --access-logfile logs/access.log \
+    --error-logfile logs/error.log
+```
+
+### 5. 验证服务
+
+```bash
+# 健康检查
+curl http://localhost:8000/health
+
+# 查看日志
+tail -f logs/access.log
+tail -f logs/error.log
+```
+
+---
+
+## 📋 配置文件说明
+
+### 开发环境配置文件
+
+| 文件 | 用途 | 是否提交到Git |
+|------|------|--------------|
+| `.env` | 开发环境实际配置（包含密码） | ❌ 不提交 |
+| `.env.example` | 开发环境配置模板 | ✅ 提交 |
+
+**配置示例** (`.env`):
+```bash
+ENVIRONMENT=development
+DATABASE_URL=postgresql://pyt_dev:pyt_dev_password@localhost:5432/pyt_development
+REDIS_URL=redis://:pyt_dev_redis@localhost:6379/0
+```
+
+### 生产环境配置文件
+
+| 文件 | 用途 | 是否提交到Git |
+|------|------|--------------|
+| `.env.production` | 生产环境实际配置（包含密码） | ❌ 不提交 |
+| `.env.production.example` | 生产环境配置模板 | ✅ 提交 |
+
+**配置示例** (`.env.production`):
+```bash
+ENVIRONMENT=production
+DATABASE_URL=postgresql://pyt_prod:STRONG_PASSWORD@prod-db:5432/pyt_production
+REDIS_URL=redis://:STRONG_PASSWORD@prod-redis:6379/0
+```
+
+### ⚠️ 重要注意事项
+
+1. **环境变量优先级**：
+   - 如果设置了 `ENVIRONMENT=production`，系统会自动加载 `.env.production`
+   - 如果设置了 `ENVIRONMENT=development`，系统只加载 `.env`
+   - **建议**：在 `.env` 中显式设置 `ENVIRONMENT=development`，避免意外加载生产配置
+
+2. **Docker主机名 vs localhost**：
+   - 开发环境（本地运行）：使用 `localhost`
+   - 生产环境（Docker容器内）：使用容器服务名（如 `database`、`redis`）
+   - **示例**：
+     ```bash
+     # 开发环境
+     DATABASE_URL=postgresql://user:pass@localhost:5432/db
+
+     # 生产环境（Docker内部）
+     DATABASE_URL=postgresql://user:pass@database:5432/db
+     ```
+
+3. **配置文件加载顺序**：
+   ```
+   1. .env (默认)
+   2. .env.{ENVIRONMENT} (如果ENVIRONMENT设置了)
+   3. .env.local (本地覆盖，不提交)
+   ```
+
+4. **备份文件清理**：
+   - 所有 `.env.bak.*` 文件都是备份，可以安全删除
+   - 有Git历史记录，不需要本地备份
+
+---
+
+## 🐳 Docker服务管理
+
+### 开发环境Docker服务
+
+启动脚本会自动管理Docker服务，您也可以手动操作：
+
+```bash
+# 启动数据库和Redis
+docker-compose up -d database redis
+
+# 查看服务状态
+docker ps | grep -E "postgres|redis"
+
+# 查看日志
+docker-compose logs -f database
+docker-compose logs -f redis
+
+# 停止服务
+docker-compose down
+```
+
+### 生产环境Docker服务
+
+生产环境通常部署在独立的服务器上，使用专门的Docker Compose配置：
+
+```bash
+# 使用生产配置启动
+docker-compose -f docker-compose.prod.yml up -d
+
+# 查看状态
+docker-compose -f docker-compose.prod.yml ps
+```
+
+---
+
+## 🔧 常用脚本
+
+### 开发脚本
+
+```bash
+# 启动开发环境
+bash scripts/start_dev.sh
+
+# 设置开发环境（首次运行）
+bash scripts/setup_dev.sh
+
+# 验证配置
+python scripts/validate_config.py
+```
+
+### 生产脚本
+
+```bash
+# 启动生产服务
+bash scripts/start_prod.sh
+
+# 部署到生产环境
+bash scripts/deploy_prod.sh
+
+# 生成生产密钥
+python scripts/generate_production_secrets.py
+
+# 检查部署就绪状态
+bash scripts/check_deployment_readiness.sh
+```
+
+### 数据迁移脚本
+
+```bash
+# 从YAML迁移相机配置到数据库
+python scripts/migrate_cameras_from_yaml.py
+
+# 从JSON迁移区域配置到数据库
+python scripts/migrate_regions_from_json.py
+
+# 导出相机配置到YAML（备份）
+python scripts/export_cameras_to_yaml.py
+
+# 导出区域配置到JSON（备份）
+python scripts/export_regions_to_json.py
+```
+
+---
+
+## 🆘 故障排除
+
+### 问题1: 数据库连接失败
+
+**错误**: `Error 8 connecting to database:5432`
+
+**解决方案**:
+1. 检查Docker是否运行: `docker ps`
+2. 检查容器状态: `docker-compose ps`
+3. 检查 `.env` 文件中的 `DATABASE_URL` 是否正确
+   - 开发环境应使用 `localhost`
+   - 生产环境（Docker内）应使用 `database`
+
+### 问题2: 配置文件未加载
+
+**错误**: 服务使用旧的配置或Docker内部主机名
+
+**解决方案**:
+1. 确认 `.env` 文件中 `ENVIRONMENT=development`
+2. 检查是否有 `.env.production` 覆盖了 `.env`
+3. 重启服务以确保配置重新加载
+
+### 问题3: Redis连接失败
+
+**错误**: `Error 8 connecting to redis:6379`
+
+**解决方案**:
+1. 检查Redis容器是否运行: `docker ps | grep redis`
+2. 检查 `.env` 文件中的 `REDIS_URL` 是否正确
+3. 开发环境应使用 `localhost:6379`
 
 ---
 
@@ -57,13 +437,17 @@ docker-compose -f docker-compose.prod.yml up -d
 
 - **[➡️ 重构完成报告 (docs/REFACTORING_COMPLETE_CHECKLIST.md)](./docs/REFACTORING_COMPLETE_CHECKLIST.md)**: 完整的重构工作检查清单，包括38个API端点重构、配置迁移等。
 
+### 配置和部署文档
+
+- **[➡️ 配置管理指南](docs/configuration_quick_start.md)**: 详细的配置管理说明和快速开始指南
+- **[➡️ 生产部署指南](docs/production_deployment_guide.md)**: 生产环境部署的详细指南
+- **[➡️ 生产密钥指南](docs/production_secrets_guide.md)**: 如何安全地生成和管理生产环境密钥
+
 ### 其他文档
 
 - **[➡️ 贡献者指南 (CONTRIBUTING.md)](./CONTRIBUTING.md)**: 如果您希望为项目贡献代码，请从这里开始。它详细说明了开发环境搭建、代码规范和Git工作流。
 
 - **[➡️ API文档 (docs/API_文档.md)](./docs/API_文档.md)**: 完整的API接口文档和使用示例。
-
-- **[➡️ 生产部署指南 (docs/production_deployment_guide.md)](./docs/production_deployment_guide.md)**: 生产环境部署的详细指南。
 
 ## 🛠️ 技术栈
 
