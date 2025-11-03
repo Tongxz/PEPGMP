@@ -12,6 +12,7 @@ from typing import Any, Dict
 
 # In a real application, this would come from a shared Redis client utility
 import redis.asyncio as redis
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +28,24 @@ async def redis_stats_listener():
     """Lisens to the 'hbd:stats' channel and updates the in-memory cache."""
     while True:
         try:
-            # In a real app, use a connection pool from a shared client
-            # 直接从环境变量中解析Redis连接参数
-            redis_host = os.getenv("REDIS_HOST", "localhost")
-            redis_port = int(os.getenv("REDIS_PORT", "6379"))
-            redis_db = int(os.getenv("REDIS_DB", "0"))
-            redis_password = os.getenv("REDIS_PASSWORD", None)
+            # 优先使用REDIS_URL，然后回退到单独的环境变量
+            redis_url = os.getenv("REDIS_URL")
+            
+            if redis_url:
+                # 从URL解析连接参数
+                from urllib.parse import urlparse
+                parsed = urlparse(redis_url)
+                redis_host = parsed.hostname or "localhost"
+                redis_port = parsed.port or 6379
+                redis_password = parsed.password
+                # 从路径中解析db编号
+                redis_db = int(parsed.path.lstrip('/')) if parsed.path and parsed.path != '/' else 0
+            else:
+                # 回退到单独的环境变量
+                redis_host = os.getenv("REDIS_HOST", "localhost")
+                redis_port = int(os.getenv("REDIS_PORT", "6379"))
+                redis_db = int(os.getenv("REDIS_DB", "0"))
+                redis_password = os.getenv("REDIS_PASSWORD", None)
 
             r = redis.Redis(
                 host=redis_host,
@@ -71,7 +84,7 @@ async def redis_stats_listener():
                             logger.warning(
                                 f"Could not parse message data: {message['data']}. Error: {e}"
                             )
-        except redis.exceptions.ConnectionError as e:
+        except RedisConnectionError as e:
             logger.error(f"Redis connection failed: {e}. Retrying in 5 seconds...")
             CAMERA_STATS_CACHE.clear()  # Clear cache on disconnect
             await asyncio.sleep(5)

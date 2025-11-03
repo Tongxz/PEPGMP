@@ -10,12 +10,14 @@ from typing import Any, Dict, List, Optional
 
 from src.domain.entities.detected_object import DetectedObject
 from src.domain.entities.detection_record import DetectionRecord
+from src.domain.entities.camera import Camera, CameraStatus, CameraType
 from src.domain.events.detection_events import (
     DetectionCreatedEvent,
     ViolationDetectedEvent,
 )
 from src.domain.repositories.camera_repository import ICameraRepository
 from src.domain.repositories.detection_repository import IDetectionRepository
+from src.infrastructure.repositories.repository_factory import RepositoryFactory
 from src.domain.services.detection_service import DetectionService
 from src.domain.services.violation_service import ViolationService
 from src.domain.value_objects.bounding_box import BoundingBox
@@ -165,7 +167,8 @@ class DetectionServiceDomain:
             else:
                 # 获取最近1小时的记录
                 end_time = datetime.now()
-                start_time = datetime.now().replace(hour=end_time.hour - 1)
+                from datetime import timedelta
+                start_time = end_time - timedelta(hours=1)
                 records = await self.detection_repository.find_by_time_range(
                     start_time, end_time, None, limit=1000
                 )
@@ -247,7 +250,8 @@ class DetectionServiceDomain:
 
             # 2. 获取最近的检测记录
             end_time = datetime.now()
-            start_time = datetime.now().replace(hour=end_time.hour - 24)  # 最近24小时
+            from datetime import timedelta
+            start_time = end_time - timedelta(hours=24)  # 最近24小时
             records = await self.detection_repository.find_by_time_range(
                 start_time, end_time, camera_id, limit=1000
             )
@@ -267,17 +271,22 @@ class DetectionServiceDomain:
 
             # 4. 分析摄像头性能
             if records:
-                processing_times = [r.processing_time for r in records]
-                camera_stats["performance"] = {
-                    "avg_processing_time": sum(processing_times)
-                    / len(processing_times),
-                    "max_processing_time": max(processing_times),
-                    "min_processing_time": min(processing_times),
-                    "fps_estimate": 1.0
-                    / (sum(processing_times) / len(processing_times))
-                    if processing_times
-                    else 0,
-                }
+                processing_times = [r.processing_time for r in records if r.processing_time > 0]
+                if processing_times:
+                    avg_processing_time = sum(processing_times) / len(processing_times)
+                    camera_stats["performance"] = {
+                        "avg_processing_time": avg_processing_time,
+                        "max_processing_time": max(processing_times),
+                        "min_processing_time": min(processing_times),
+                        "fps_estimate": 1.0 / avg_processing_time if avg_processing_time > 0 else 0,
+                    }
+                else:
+                    camera_stats["performance"] = {
+                        "avg_processing_time": 0.0,
+                        "max_processing_time": 0.0,
+                        "min_processing_time": 0.0,
+                        "fps_estimate": 0.0,
+                    }
 
             # 5. 检测摄像头异常
             anomalies = self.detection_service.detect_anomalies(records)
@@ -358,9 +367,738 @@ class DetectionServiceDomain:
             logger.error(f"获取领域统计信息失败: {e}")
             raise
 
+    async def get_violation_details(
+        self,
+        camera_id: Optional[str] = None,
+        status: Optional[str] = None,
+        violation_type: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        """
+        获取违规明细（对仓储暴露的违规查询进行封装）。
+
+        若当前仓储不支持违规查询，抛出异常交由上层回退。
+        """
+        try:
+            repo = self.detection_repository
+            if hasattr(repo, "get_violations") and callable(getattr(repo, "get_violations")):
+                return await getattr(repo, "get_violations")(
+                    camera_id=camera_id,
+                    status=status,
+                    violation_type=violation_type,
+                    limit=limit,
+                    offset=offset,
+                )
+            raise NotImplementedError("当前仓储未实现违规明细查询")
+        except Exception as e:
+            logger.error(f"获取违规明细失败: {e}")
+            raise
+
+    async def get_detection_records_by_camera(
+        self,
+        camera_id: str,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        """
+        根据摄像头ID获取检测记录列表
+
+        Args:
+            camera_id: 摄像头ID
+            limit: 返回记录数量
+            offset: 偏移量
+
+        Returns:
+            Dict[str, Any]: 包含检测记录列表和总数等信息
+        """
+        try:
+            # 从仓储获取检测记录
+            records = await self.detection_repository.find_by_camera_id(
+                camera_id, limit=limit, offset=offset
+            )
+
+            # 转换为字典格式（兼容旧API响应结构）
+            formatted_records = []
+            for record in records:
+                formatted_records.append({
+                    "id": record.id,
+                    "camera_id": record.camera_id,
+                    "timestamp": record.timestamp.iso_string,
+                    "frame_number": record.frame_id or 0,
+                    "person_count": record.person_count,
+                    "hairnet_violations": record.metadata.get("hairnet_violations", 0),
+                    "handwash_events": record.metadata.get("handwash_events", 0),
+                    "sanitize_events": record.metadata.get("sanitize_events", 0),
+                    "fps": record.metadata.get("fps", 0.0),
+                    "processing_time": record.processing_time,
+                })
+
+            # 获取总数（用于分页）
+            total = await self.detection_repository.count_by_camera_id(camera_id)
+
+            return {
+                "records": formatted_records,
+                "total": total,
+                "camera_id": camera_id,
+                "limit": limit,
+                "offset": offset,
+            }
+
+        except Exception as e:
+            logger.error(f"获取检测记录失败: {e}")
+            raise
+
+    async def get_violation_by_id(self, violation_id: int) -> Optional[Dict[str, Any]]:
+        """
+        根据违规ID获取违规详情
+
+        Args:
+            violation_id: 违规ID
+
+        Returns:
+            Optional[Dict[str, Any]]: 违规详情，如果不存在则返回None
+        """
+        try:
+            repo = self.detection_repository
+            # 检查仓储是否支持违规查询
+            if hasattr(repo, "get_violation_by_id") and callable(getattr(repo, "get_violation_by_id")):
+                return await getattr(repo, "get_violation_by_id")(violation_id)
+            # 如果不支持，尝试通过get_violations查询
+            if hasattr(repo, "get_violations") and callable(getattr(repo, "get_violations")):
+                # 查询所有违规记录，然后过滤
+                violations_data = await getattr(repo, "get_violations")(
+                    limit=1000, offset=0
+                )
+                violations = violations_data.get("violations", [])
+                violation = next((v for v in violations if v.get("id") == violation_id), None)
+                return violation
+            raise NotImplementedError("当前仓储未实现违规查询")
+        except Exception as e:
+            logger.error(f"获取违规详情失败: {e}")
+            raise
+
+    async def get_daily_statistics(
+        self, days: int = 7, camera_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        按天统计事件趋势
+
+        Args:
+            days: 要查询的最近天数
+            camera_id: 摄像头ID（可选）
+
+        Returns:
+            List[Dict[str, Any]]: 每日统计信息列表
+        """
+        try:
+            from datetime import timedelta
+            from collections import defaultdict
+
+            # 计算时间范围
+            end_time = datetime.now()
+            start_time = end_time - timedelta(days=days)
+
+            # 获取检测记录
+            records = await self.detection_repository.find_by_time_range(
+                start_time, end_time, camera_id, limit=10000
+            )
+
+            # 按天分组统计
+            from collections import defaultdict
+            per_day: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
+            total_day: Dict[str, int] = defaultdict(int)
+
+            for record in records:
+                # 获取日期字符串
+                # timestamp 是 Timestamp 对象，转换为 datetime
+                record_date = record.timestamp.value
+                date_str = record_date.date().isoformat()
+
+                # 统计对象类型
+                for obj in record.objects:
+                    class_name = obj.class_name
+                    per_day[date_str][class_name] += 1
+
+                total_day[date_str] += 1
+
+            # 组装输出（按日期升序）
+            today = end_time.date()
+            out: List[Dict[str, Any]] = []
+            for i in range(days - 1, -1, -1):
+                date_str = (today - timedelta(days=i)).isoformat()
+                out.append({
+                    "date": date_str,
+                    "total_events": total_day.get(date_str, 0),
+                    "counts_by_type": dict(per_day.get(date_str, {})),
+                })
+
+            return out
+
+        except Exception as e:
+            logger.error(f"获取按天统计失败: {e}")
+            raise
+
+    async def get_event_history(
+        self,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        event_type: Optional[str] = None,
+        camera_id: Optional[str] = None,
+        limit: int = 100,
+    ) -> Dict[str, Any]:
+        """
+        查询事件列表，支持时间范围和多种过滤条件
+
+        Args:
+            start_time: 开始时间
+            end_time: 结束时间
+            event_type: 事件类型
+            camera_id: 摄像头ID
+            limit: 返回数量限制
+
+        Returns:
+            Dict[str, Any]: 包含事件列表的字典
+        """
+        try:
+            from datetime import timedelta
+
+            # 默认查询最近24小时
+            if not end_time:
+                end_time = datetime.now()
+            if not start_time:
+                start_time = end_time - timedelta(hours=24)
+
+            # 获取检测记录
+            records = await self.detection_repository.find_by_time_range(
+                start_time, end_time, camera_id, limit=limit * 2  # 获取更多记录以便过滤
+            )
+
+            # 转换为事件列表
+            events = []
+            for record in records:
+                # 摄像头过滤
+                if camera_id and record.camera_id != camera_id:
+                    continue
+
+                # 从检测记录生成事件
+                for obj in record.objects:
+                    # 事件类型过滤
+                    if event_type and obj.class_name != event_type:
+                        continue
+
+                    events.append({
+                        "id": f"{record.id}_{obj.track_id or ''}",
+                        "timestamp": record.timestamp.iso_string,
+                        "type": obj.class_name,
+                        "camera_id": record.camera_id,
+                        "confidence": obj.confidence.value,
+                        "track_id": obj.track_id,
+                        "region": record.region_id,
+                        "metadata": obj.metadata,
+                    })
+
+                    if len(events) >= limit:
+                        break
+
+                if len(events) >= limit:
+                    break
+
+            return {"events": events, "total": len(events)}
+
+        except Exception as e:
+            logger.error(f"获取事件列表失败: {e}")
+            raise
+
+    async def get_recent_history(
+        self,
+        minutes: int = 60,
+        limit: int = 100,
+        camera_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        获取近期事件历史
+
+        Args:
+            minutes: 要查询的最近分钟数
+            limit: 返回事件的最大数量
+            camera_id: 摄像头ID（可选）
+
+        Returns:
+            List[Dict[str, Any]]: 事件详细信息列表
+        """
+        try:
+            from datetime import timedelta
+
+            # 计算时间范围
+            end_time = datetime.now()
+            start_time = end_time - timedelta(minutes=minutes)
+
+            # 获取检测记录
+            records = await self.detection_repository.find_by_time_range(
+                start_time, end_time, camera_id, limit=limit * 2
+            )
+
+            # 转换为事件列表（按时间倒序）
+            events = []
+            for record in sorted(records, key=lambda r: r.timestamp.value, reverse=True):
+                for obj in record.objects:
+                    events.append({
+                        "id": f"{record.id}_{obj.track_id or ''}",
+                        "timestamp": record.timestamp.iso_string,
+                        "type": obj.class_name,
+                        "camera_id": record.camera_id,
+                        "confidence": obj.confidence.value,
+                        "track_id": obj.track_id,
+                        "region": record.region_id,
+                        "metadata": obj.metadata,
+                    })
+
+                    if len(events) >= limit:
+                        break
+
+                if len(events) >= limit:
+                    break
+
+            return events
+
+        except Exception as e:
+            logger.error(f"获取近期历史失败: {e}")
+            raise
+
+    async def get_recent_events(
+        self,
+        limit: int = 100,
+        minutes: int = 60,
+        event_type: Optional[str] = None,
+        camera_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        获取最近的事件列表（适配 /api/v1/events/recent 端点）
+
+        Args:
+            limit: 返回事件的最大数量
+            minutes: 要查询的最近分钟数
+            event_type: 事件类型过滤（可选）
+            camera_id: 摄像头ID过滤（可选）
+
+        Returns:
+            List[Dict[str, Any]]: 事件列表，格式兼容旧实现
+        """
+        try:
+            from datetime import timedelta
+
+            # 计算时间范围
+            end_time = datetime.now()
+            start_time = end_time - timedelta(minutes=minutes)
+
+            # 获取检测记录
+            records = await self.detection_repository.find_by_time_range(
+                start_time, end_time, camera_id, limit=limit * 2
+            )
+
+            # 转换为事件列表（按时间倒序，兼容旧格式）
+            events = []
+            for record in sorted(records, key=lambda r: r.timestamp.value, reverse=True):
+                # 摄像头过滤
+                if camera_id and record.camera_id != camera_id:
+                    continue
+
+                for obj in record.objects:
+                    # 事件类型过滤
+                    if event_type and obj.class_name != event_type:
+                        continue
+
+                    # 转换为旧API格式（兼容events_record.jsonl格式）
+                    events.append({
+                        "ts": record.timestamp.value.timestamp(),
+                        "type": obj.class_name,
+                        "camera_id": record.camera_id,
+                        "track_id": obj.track_id,
+                        "evidence": {
+                            "confidence": obj.confidence.value,
+                            "region": record.region_id,
+                            "bbox": [
+                                obj.bbox.x1, obj.bbox.y1,
+                                obj.bbox.x2, obj.bbox.y2
+                            ] if obj.bbox else None,
+                            **obj.metadata,
+                        },
+                    })
+
+                    if len(events) >= limit:
+                        break
+
+                if len(events) >= limit:
+                    break
+
+            return events
+
+        except Exception as e:
+            logger.error(f"获取最近事件失败: {e}")
+            raise
+
+    async def get_realtime_statistics(self) -> Dict[str, Any]:
+        """
+        获取实时统计信息（基于领域服务数据）
+
+        Returns:
+            Dict[str, Any]: 实时统计数据
+        """
+        try:
+            from datetime import timedelta
+
+            # 获取最近1小时的记录
+            end_time = datetime.now()
+            start_time = end_time - timedelta(hours=1)
+
+            # 获取检测记录
+            records = await self.detection_repository.find_by_time_range(
+                start_time, end_time, None, limit=1000
+            )
+
+            # 计算实时统计
+            total_detections = len(records)
+            violation_count = 0
+            handwashing_detections = 0
+            disinfection_detections = 0
+            hairnet_detections = 0
+
+            # 统计各类检测
+            for record in records:
+                # 统计违规
+                violations = record.metadata.get("violations", [])
+                if violations:
+                    violation_count += len(violations)
+
+                # 统计各类检测事件
+                for obj in record.objects:
+                    if obj.class_name.lower() in ["handwash", "handwashing"]:
+                        handwashing_detections += 1
+                    elif obj.class_name.lower() in ["sanitize", "disinfection"]:
+                        disinfection_detections += 1
+                    elif obj.class_name.lower() in ["hairnet", "person"]:
+                        hairnet_detections += 1
+
+            # 计算平均处理时间
+            if records:
+                avg_processing_time = sum(r.processing_time for r in records) / len(records)
+            else:
+                avg_processing_time = 0.0
+
+            # 获取活跃摄像头数
+            active_cameras = await self.camera_repository.find_active()
+            active_regions = set()
+            for camera in active_cameras:
+                if camera.region_id:
+                    active_regions.add(camera.region_id)
+
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "system_status": "active",
+                "detection_stats": {
+                    "total_detections_today": total_detections,
+                    "handwashing_detections": handwashing_detections,
+                    "disinfection_detections": disinfection_detections,
+                    "hairnet_detections": hairnet_detections,
+                    "violation_count": violation_count,
+                },
+                "region_stats": {
+                    "active_regions": len(active_regions),
+                    "monitored_areas": list(active_regions),
+                },
+                "performance_metrics": {
+                    "average_processing_time": avg_processing_time,
+                    "detection_accuracy": sum(r.average_confidence for r in records) / len(records) if records else 0.0,
+                    "system_uptime": "N/A",  # 需要从系统层面获取
+                },
+                "alerts": {
+                    "active_alerts": 0,  # 需要从告警系统获取
+                    "recent_violations": [],
+                },
+            }
+
+        except Exception as e:
+            logger.error(f"获取实时统计失败: {e}")
+            raise
+
+    async def get_cameras(
+        self, active_only: bool = False
+    ) -> List[Dict[str, Any]]:
+        """
+        获取摄像头列表
+
+        Args:
+            active_only: 是否只返回活跃摄像头
+
+        Returns:
+            List[Dict[str, Any]]: 摄像头列表
+        """
+        try:
+            if active_only:
+                cameras = await self.camera_repository.find_active()
+            else:
+                cameras = await self.camera_repository.find_all()
+
+            # 转换为字典格式（兼容旧API响应结构）
+            formatted_cameras = []
+            for camera in cameras:
+                formatted_cameras.append({
+                    "id": camera.id,
+                    "name": camera.name,
+                    "source": camera.metadata.get("source", ""),
+                    "status": camera.status.value,
+                    "location": camera.location,
+                    "resolution": f"{camera.resolution[0]}x{camera.resolution[1]}" if camera.resolution else "1920x1080",
+                    "fps": camera.fps or 25,
+                    "region_id": camera.region_id,
+                    "is_active": camera.is_active,
+                    **camera.metadata,  # 包含其他元数据
+                })
+
+            return formatted_cameras
+
+        except Exception as e:
+            logger.error(f"获取摄像头列表失败: {e}")
+            raise
+
+    async def get_camera_stats_detailed(self, camera_id: str) -> Dict[str, Any]:
+        """
+        获取摄像头详细统计信息（整合get_camera_analytics和实时数据）
+
+        Args:
+            camera_id: 摄像头ID
+
+        Returns:
+            Dict[str, Any]: 摄像头统计信息
+        """
+        try:
+            # 使用已有的get_camera_analytics方法
+            analytics = await self.get_camera_analytics(camera_id)
+
+            # 从analytics中提取数据（get_camera_analytics返回的结构）
+            camera_info = analytics.get("camera_info", {})
+            stats_data = {
+                "total_frames": 0,
+                "processed_frames": analytics.get("total_objects_detected", 0),
+                "detected_persons": analytics.get("person_count", 0),
+                "detected_hairnets": analytics.get("total_hairnet_violations", 0),
+                "detected_handwash": analytics.get("total_handwash_events", 0),
+                "avg_fps": 0.0,
+                "avg_detection_time": 0.0,
+                "last_detection_time": None,
+            }
+
+            # 如果performance信息存在，更新相关字段
+            if "performance" in analytics:
+                perf = analytics["performance"]
+                stats_data["avg_fps"] = perf.get("fps_estimate", 0.0)
+                stats_data["avg_detection_time"] = perf.get("avg_processing_time", 0.0)
+
+            # 转换为旧API响应结构
+            stats_response = {
+                "camera_id": camera_id,
+                "running": camera_info.get("is_active", True),
+                "pid": 0,
+                "log_file": "",
+                "stats": stats_data,
+            }
+
+            return stats_response
+
+        except Exception as e:
+            logger.error(f"获取摄像头统计失败: {e}")
+            raise
+
+    async def get_all_cameras_summary(
+        self,
+        period: str = "7d",
+    ) -> Dict[str, Any]:
+        """
+        获取所有摄像头的统计摘要
+
+        Args:
+            period: 时间段（1d, 7d, 30d）
+
+        Returns:
+            Dict[str, Any]: 所有摄像头的统计摘要
+        """
+        try:
+            from datetime import timedelta
+
+            # 计算时间范围
+            end_time = datetime.now()
+            if period == "1d":
+                start_time = end_time - timedelta(days=1)
+            elif period == "7d":
+                start_time = end_time - timedelta(days=7)
+            elif period == "30d":
+                start_time = end_time - timedelta(days=30)
+            else:
+                start_time = end_time - timedelta(days=7)
+
+            # 获取所有摄像头
+            cameras = await self.camera_repository.find_all()
+            camera_ids = [c.id for c in cameras]
+
+            # 查询每个摄像头的统计
+            summary = {}
+            total_stats = {
+                "total_frames": 0,
+                "total_persons": 0,
+                "total_hairnet_violations": 0,
+                "total_handwash_events": 0,
+                "total_sanitize_events": 0,
+                "avg_fps": 0.0,
+                "avg_processing_time": 0.0,
+            }
+
+            for camera_id in camera_ids:
+                try:
+                    analytics = await self.get_camera_analytics(camera_id)
+                    # 转换为旧API响应结构
+                    stats = {
+                        "total_frames": analytics.get("total_objects_detected", 0),
+                        "total_persons": analytics.get("person_count", 0),
+                        "total_hairnet_violations": analytics.get("total_hairnet_violations", 0),
+                        "total_handwash_events": analytics.get("total_handwash_events", 0),
+                        "total_sanitize_events": analytics.get("total_sanitize_events", 0),
+                        "avg_fps": analytics.get("performance", {}).get("fps_estimate", 0.0),
+                        "avg_processing_time": analytics.get("performance", {}).get("avg_processing_time", 0.0),
+                    }
+                    summary[camera_id] = stats
+
+                    # 累加到总计
+                    total_stats["total_frames"] += stats["total_frames"]
+                    total_stats["total_persons"] += stats["total_persons"]
+                    total_stats["total_hairnet_violations"] += stats["total_hairnet_violations"]
+                    total_stats["total_handwash_events"] += stats["total_handwash_events"]
+                    total_stats["total_sanitize_events"] += stats["total_sanitize_events"]
+                    # FPS和processing_time取平均值（如果有数据）
+                    if len(camera_ids) > 0:
+                        total_stats["avg_fps"] = (total_stats["avg_fps"] + stats["avg_fps"]) / len(camera_ids)
+                        total_stats["avg_processing_time"] = (total_stats["avg_processing_time"] + stats["avg_processing_time"]) / len(camera_ids)
+
+                except Exception as e:
+                    logger.warning(f"获取摄像头统计失败 {camera_id}: {e}")
+                    summary[camera_id] = {
+                        "total_frames": 0,
+                        "total_persons": 0,
+                        "total_hairnet_violations": 0,
+                        "total_handwash_events": 0,
+                        "total_sanitize_events": 0,
+                        "avg_fps": 0.0,
+                        "avg_processing_time": 0.0,
+                    }
+
+            return {
+                "period": period,
+                "start_time": start_time.isoformat(),
+                "end_time": end_time.isoformat(),
+                "cameras": summary,
+                "total": total_stats,
+            }
+
+        except Exception as e:
+            logger.error(f"获取所有摄像头统计摘要失败: {e}")
+            raise
+
+    async def update_violation_status(
+        self,
+        violation_id: int,
+        status: str,
+        notes: Optional[str] = None,
+        handled_by: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        更新违规状态（写操作，需要谨慎处理）
+
+        Args:
+            violation_id: 违规ID
+            status: 新状态（pending, confirmed, false_positive, resolved）
+            notes: 备注信息（可选）
+            handled_by: 处理人（可选）
+
+        Returns:
+            Dict[str, Any]: 操作结果
+        """
+        try:
+            # 验证状态值
+            valid_statuses = ["pending", "confirmed", "false_positive", "resolved"]
+            if status not in valid_statuses:
+                raise ValueError(f"无效的状态值，必须是: {', '.join(valid_statuses)}")
+
+            # 检查仓储是否支持违规状态更新
+            repo = self.detection_repository
+            if hasattr(repo, "update_violation_status") and callable(getattr(repo, "update_violation_status")):
+                # 如果仓储支持直接更新
+                success = await getattr(repo, "update_violation_status")(
+                    violation_id, status, notes, handled_by
+                )
+                if success:
+                    logger.info(f"违规状态已更新: {violation_id} -> {status}")
+                    return {"ok": True, "violation_id": violation_id, "status": status}
+                else:
+                    raise ValueError(f"违规记录不存在或更新失败: {violation_id}")
+            else:
+                # 如果不支持，需要通过DatabaseService更新
+                # 这需要注入DatabaseService，但为了保持架构清晰，我们暂时抛出异常让上层回退
+                # 未来可以考虑创建一个专门的ViolationRepository接口
+                raise NotImplementedError("当前仓储未实现违规状态更新，请通过force_domain=false使用旧实现")
+
+        except Exception as e:
+            logger.error(f"更新违规状态失败: {e}")
+            raise
+
 
 # 全局服务实例（单例模式）
 _detection_service_domain_instance: Optional[DetectionServiceDomain] = None
+
+
+class DefaultCameraRepository(ICameraRepository):
+    """简化的摄像头仓储默认实现（内存），用于试点灰度阶段。"""
+
+    def __init__(self):
+        self._store: Dict[str, Camera] = {}
+
+    async def save(self, camera: Camera) -> str:
+        self._store[camera.id] = camera
+        return camera.id
+
+    async def find_by_id(self, camera_id: str) -> Optional[Camera]:
+        if camera_id in self._store:
+            return self._store[camera_id]
+        # 创建一个最小可用的占位摄像头，避免调用方失败
+        cam = Camera(
+            id=camera_id,
+            name=camera_id,
+            location="unknown",
+            status=CameraStatus.ACTIVE,
+            camera_type=CameraType.FIXED,
+            resolution=(1920, 1080),
+            fps=25,
+            region_id=None,
+        )
+        # 不缓存占位，按需返回
+        return cam
+
+    async def find_by_region_id(self, region_id: str) -> List[Camera]:
+        return [c for c in self._store.values() if c.region_id == region_id]
+
+    async def find_all(self) -> List[Camera]:
+        return list(self._store.values())
+
+    async def find_active(self) -> List[Camera]:
+        return [c for c in self._store.values() if c.is_active]
+
+    async def count(self) -> int:
+        return len(self._store)
+
+    async def delete_by_id(self, camera_id: str) -> bool:
+        return self._store.pop(camera_id, None) is not None
+
+    async def exists(self, camera_id: str) -> bool:
+        return camera_id in self._store
 
 
 def get_detection_service_domain() -> DetectionServiceDomain:
@@ -373,18 +1111,14 @@ def get_detection_service_domain() -> DetectionServiceDomain:
     global _detection_service_domain_instance
 
     if _detection_service_domain_instance is None:
-        # 这里需要注入实际的仓储实现
-        # 示例：使用依赖注入容器
-        from src.di.container import get_container
-
-        container = get_container()
-
-        detection_repo = container.get(IDetectionRepository)
-        camera_repo = container.get(ICameraRepository)
+        # 直接通过工厂创建检测记录仓储；摄像头仓储采用默认内存实现
+        detection_repo = RepositoryFactory.create_repository_from_env()
+        camera_repo = DefaultCameraRepository()
 
         _detection_service_domain_instance = DetectionServiceDomain(
-            detection_repository=detection_repo, camera_repository=camera_repo
+            detection_repository=detection_repo,
+            camera_repository=camera_repo,
         )
-        logger.info("领域模型检测服务单例已创建")
+        logger.info("领域模型检测服务单例已创建 (工厂+默认摄像头仓储)")
 
     return _detection_service_domain_instance

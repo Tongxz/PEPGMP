@@ -101,9 +101,14 @@ async def login(request: LoginRequest, http_request: Request):
         client_ip = http_request.client.host if http_request.client else "unknown"
         user_agent = http_request.headers.get("user-agent", "unknown")
 
-        # 这里应该验证用户名和密码
-        # 简化实现，实际项目中需要查询数据库
-        if request.username == "admin" and request.password == "admin123":
+        # 验证用户名和密码
+        # 从环境变量获取管理员凭证（生产环境应使用数据库）
+        import os
+        admin_username = os.getenv("ADMIN_USERNAME", "admin")
+        admin_password = os.getenv("ADMIN_PASSWORD", "admin123")
+        
+        # 安全提示：生产环境应使用密码哈希和数据库查询
+        if request.username == admin_username and request.password == admin_password:
             # 创建用户数据
             user_data = {
                 "user_id": "admin_001",

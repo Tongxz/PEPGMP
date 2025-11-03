@@ -4,11 +4,16 @@
 """
 
 import logging
-from typing import Any, Dict, List, Type
+from typing import Any, Dict, List, Optional, Type
 
 from src.interfaces.tracking.tracker_interface import ITracker
 
-from .byte_tracker_strategy import ByteTrackerStrategy
+try:
+    from .byte_tracker_strategy import ByteTrackerStrategy
+except ImportError:
+    # ByteTrackerStrategy 已被归档，设置为 None
+    ByteTrackerStrategy = None
+
 from .simple_tracker_strategy import SimpleTrackerStrategy
 
 logger = logging.getLogger(__name__)
@@ -18,10 +23,13 @@ class TrackerFactory:
     """跟踪器工厂"""
 
     # 注册的跟踪器策略
-    _strategies: Dict[str, Type[ITracker]] = {
-        "byte_tracker": ByteTrackerStrategy,
+    _strategies: Dict[str, Optional[Type[ITracker]]] = {
         "simple_tracker": SimpleTrackerStrategy,
     }
+    
+    # 如果 ByteTrackerStrategy 可用，注册它
+    if ByteTrackerStrategy is not None:
+        _strategies["byte_tracker"] = ByteTrackerStrategy
 
     @classmethod
     def create_tracker(cls, tracker_type: str, **kwargs) -> ITracker:
@@ -43,8 +51,11 @@ class TrackerFactory:
             available_types = list(cls._strategies.keys())
             raise ValueError(f"不支持的跟踪器类型: {tracker_type}. 可用类型: {available_types}")
 
+        strategy_class = cls._strategies[tracker_type]
+        if strategy_class is None:
+            raise ValueError(f"跟踪器类型 {tracker_type} 不可用（已被归档）")
+
         try:
-            strategy_class = cls._strategies[tracker_type]
             tracker = strategy_class(**kwargs)
 
             logger.info(f"创建跟踪器成功: {tracker_type}")

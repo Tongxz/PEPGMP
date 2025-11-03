@@ -202,6 +202,20 @@ class RepositoryFactory:
 
         return cls.create_repository(repository_type, **repository_config)
 
+    @classmethod
+    def create_repository_from_env(cls) -> IDetectionRepository:
+        """根据环境变量创建仓储实例。
+
+        环境变量：
+        - REPOSITORY_TYPE: postgresql|redis（默认: postgresql）
+        - 其余连接/配置参数按需扩展
+        """
+        import os
+
+        repo_type = os.getenv("REPOSITORY_TYPE", "postgresql").lower()
+        # 可按需扩展参数（此处使用默认构造，配置集中到代码/配置文件）
+        return cls.create_repository(repo_type)
+
 
 def create_repository_from_config(config: Dict[str, Any]) -> IDetectionRepository:
     """

@@ -4,6 +4,7 @@
 """
 
 import logging
+import os
 
 from src.container.service_container import container
 from src.interfaces.detection.detector_interface import IDetector
@@ -11,6 +12,7 @@ from src.interfaces.repositories.detection_repository_interface import (
     IDetectionRepository,
 )
 from src.interfaces.tracking.tracker_interface import ITracker
+from src.infrastructure.repositories.repository_factory import RepositoryFactory
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +20,8 @@ logger = logging.getLogger(__name__)
 def configure_services():
     """配置所有服务"""
     logger.info("开始配置服务...")
+    use_domain_service = os.getenv("USE_DOMAIN_SERVICE", "false").lower() == "true"
+    logger.info(f"USE_DOMAIN_SERVICE={use_domain_service}")
 
     try:
         # 注册检测器服务
@@ -126,11 +130,12 @@ def _configure_tracker_services():
 def _configure_repository_services():
     """配置仓储服务"""
     try:
-        from src.database.dao import DetectionDAO
-
-        # 注册检测记录仓储
-        container.register_singleton(IDetectionRepository, DetectionDAO)
-        logger.info("检测记录仓储服务已注册")
+        # 通过工厂按配置创建仓储实现（postgresql|redis|hybrid）
+        repo = RepositoryFactory.create_repository_from_env()
+        container.register_instance(IDetectionRepository, repo)
+        logger.info(
+            f"检测记录仓储服务已注册: {repo.__class__.__name__}"
+        )
 
     except ImportError as e:
         logger.warning(f"仓储服务导入失败: {e}")
@@ -224,7 +229,23 @@ def _configure_repository_services():
 
 def _configure_other_services():
     """配置其他服务"""
-    # 这里可以配置其他服务，如日志服务、配置服务等
+    # 领域服务开关
+    use_domain_service = os.getenv("USE_DOMAIN_SERVICE", "false").lower() == "true"
+    if use_domain_service:
+        try:
+            from src.services.detection_service_domain import (
+                DetectionServiceDomain,
+                get_detection_service_domain,
+            )
+
+            domain_service = get_detection_service_domain()
+            # 以类型为key注册实例，供API注入获取
+            container.register_instance(DetectionServiceDomain, domain_service)
+            logger.info("领域检测服务已启用并注册")
+        except Exception as e:
+            logger.error(f"注册领域检测服务失败: {e}")
+    else:
+        logger.info("领域检测服务未启用（USE_DOMAIN_SERVICE=false）")
 
 
 def _log_registered_services():

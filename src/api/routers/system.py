@@ -1,11 +1,22 @@
 """系统信息API路由."""
 
+import logging
 import os
 import platform
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
+
+from src.api.utils.rollout import should_use_domain
+
+logger = logging.getLogger(__name__)
+
+# 尝试导入系统服务（可选）
+try:
+    from src.domain.services.system_service import get_system_service
+except ImportError:
+    get_system_service = None  # type: ignore
 
 # 可选依赖
 try:
@@ -65,8 +76,27 @@ def load_yaml_config(file_path: str) -> Optional[Dict[str, Any]]:
 
 
 @router.get("/system/info", summary="获取系统信息")
-async def get_system_info() -> Dict[str, Any]:
-    """获取系统基本信息."""
+async def get_system_info(
+    force_domain: Optional[bool] = Query(None, description="测试用途，强制走领域分支"),
+) -> Dict[str, Any]:
+    """获取系统基本信息.
+
+    Args:
+        force_domain: 测试用途，强制走领域分支
+
+    Returns:
+        包含系统信息的字典
+    """
+    # 灰度：按配置或强制参数决定是否走领域分支
+    try:
+        if should_use_domain(force_domain) and get_system_service is not None:
+            system_service = get_system_service()
+            result = await system_service.get_system_info()
+            return result
+    except Exception as e:
+        logger.warning(f"系统服务获取信息失败，回退到旧实现: {e}")
+
+    # 旧实现（回退）
     try:
         # 系统基本信息
         system_info = {

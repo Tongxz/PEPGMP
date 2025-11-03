@@ -1,0 +1,378 @@
+{
+  "roots": [
+    "src.api.app",
+    "src.api.dependencies",
+    "src.api.middleware.error_middleware",
+    "src.api.middleware.security_middleware",
+    "src.api.redis_listener",
+    "src.api.routers",
+    "src.api.routers.websocket",
+    "src.api.utils.rollout",
+    "src.config.model_config",
+    "src.config.unified_params",
+    "src.container.service_config",
+    "src.container.service_container",
+    "src.core.behavior",
+    "src.core.data_manager",
+    "src.core.enhanced_hand_detector",
+    "src.core.fast_detection_pipeline",
+    "src.core.motion_analyzer",
+    "src.core.optimized_detection_pipeline",
+    "src.core.region",
+    "src.core.tracker",
+    "src.database.connection",
+    "src.database.dao",
+    "src.database.init_db",
+    "src.deployment.docker_manager",
+    "src.detection.detector",
+    "src.detection.hairnet_detection_factory",
+    "src.detection.hairnet_detector",
+    "src.detection.motion_analyzer",
+    "src.detection.pose_detector",
+    "src.detection.yolo_hairnet_detector",
+    "src.domain.entities.camera",
+    "src.domain.entities.detected_object",
+    "src.domain.entities.detection_record",
+    "src.domain.events.detection_events",
+    "src.domain.services.detection_service",
+    "src.domain.services.violation_service",
+    "src.domain.value_objects.bounding_box",
+    "src.domain.value_objects.confidence",
+    "src.domain.value_objects.timestamp",
+    "src.infrastructure.repositories.hybrid_detection_repository",
+    "src.infrastructure.repositories.postgresql_detection_repository",
+    "src.infrastructure.repositories.redis_detection_repository",
+    "src.infrastructure.repositories.repository_factory",
+    "src.interfaces.detection.detector_interface",
+    "src.interfaces.repositories.detection_repository_interface",
+    "src.interfaces.tracking.tracker_interface",
+    "src.monitoring.advanced_monitoring",
+    "src.services",
+    "src.services.database_service",
+    "src.services.detection_service",
+    "src.services.detection_service_di",
+    "src.services.detection_service_domain",
+    "src.services.process_engine",
+    "src.services.region_service",
+    "src.services.scheduler",
+    "src.services.video_stream_manager",
+    "src.services.websocket_service",
+    "src.strategies.detection.detector_factory",
+    "src.strategies.detection.mediapipe_strategy",
+    "src.strategies.detection.yolo_strategy",
+    "src.strategies.tracking.simple_tracker_strategy",
+    "src.strategies.tracking.tracker_factory",
+    "src.utils.adaptive_optimizer",
+    "src.utils.error_monitor",
+    "src.utils.hardware_probe",
+    "src.utils.logger",
+    "src.utils.math_utils",
+    "src.utils.visualization",
+    "src.workflow.workflow_engine"
+  ],
+  "total_modules": 145,
+  "reachable": 74,
+  "unused_count": 75,
+  "unused_modules": [
+    {
+      "module": "src.__init__",
+      "path": "src/__init__.py"
+    },
+    {
+      "module": "src.api.__init__",
+      "path": "src/api/__init__.py"
+    },
+    {
+      "module": "src.api.routers.alerts",
+      "path": "src/api/routers/alerts.py"
+    },
+    {
+      "module": "src.api.routers.cameras",
+      "path": "src/api/routers/cameras.py"
+    },
+    {
+      "module": "src.api.routers.comprehensive",
+      "path": "src/api/routers/comprehensive.py"
+    },
+    {
+      "module": "src.api.routers.download",
+      "path": "src/api/routers/download.py"
+    },
+    {
+      "module": "src.api.routers.error_monitoring",
+      "path": "src/api/routers/error_monitoring.py"
+    },
+    {
+      "module": "src.api.routers.events",
+      "path": "src/api/routers/events.py"
+    },
+    {
+      "module": "src.api.routers.metrics",
+      "path": "src/api/routers/metrics.py"
+    },
+    {
+      "module": "src.api.routers.mlops",
+      "path": "src/api/routers/mlops.py"
+    },
+    {
+      "module": "src.api.routers.records",
+      "path": "src/api/routers/records.py"
+    },
+    {
+      "module": "src.api.routers.region_management",
+      "path": "src/api/routers/region_management.py"
+    },
+    {
+      "module": "src.api.routers.security",
+      "path": "src/api/routers/security.py"
+    },
+    {
+      "module": "src.api.routers.statistics",
+      "path": "src/api/routers/statistics.py"
+    },
+    {
+      "module": "src.api.routers.system",
+      "path": "src/api/routers/system.py"
+    },
+    {
+      "module": "src.api.routers.video_stream",
+      "path": "src/api/routers/video_stream.py"
+    },
+    {
+      "module": "src.architecture.architecture_analyzer",
+      "path": "src/architecture/architecture_analyzer.py"
+    },
+    {
+      "module": "src.architecture.dependency_injection",
+      "path": "src/architecture/dependency_injection.py"
+    },
+    {
+      "module": "src.architecture.event_system",
+      "path": "src/architecture/event_system.py"
+    },
+    {
+      "module": "src.architecture.plugin_system",
+      "path": "src/architecture/plugin_system.py"
+    },
+    {
+      "module": "src.config.__init__",
+      "path": "src/config/__init__.py"
+    },
+    {
+      "module": "src.config.camera_config",
+      "path": "src/config/camera_config.py"
+    },
+    {
+      "module": "src.config.settings",
+      "path": "src/config/settings.py"
+    },
+    {
+      "module": "src.container.__init__",
+      "path": "src/container/__init__.py"
+    },
+    {
+      "module": "src.core.__init__",
+      "path": "src/core/__init__.py"
+    },
+    {
+      "module": "src.core.accelerated_detection_pipeline",
+      "path": "src/core/accelerated_detection_pipeline.py"
+    },
+    {
+      "module": "src.core.performance_optimizer",
+      "path": "src/core/performance_optimizer.py"
+    },
+    {
+      "module": "src.core.personalization_engine",
+      "path": "src/core/personalization_engine.py"
+    },
+    {
+      "module": "src.core.quality_assessor",
+      "path": "src/core/quality_assessor.py"
+    },
+    {
+      "module": "src.core.rule_engine",
+      "path": "src/core/rule_engine.py"
+    },
+    {
+      "module": "src.core.schemas",
+      "path": "src/core/schemas.py"
+    },
+    {
+      "module": "src.detection.__init__",
+      "path": "src/detection/__init__.py"
+    },
+    {
+      "module": "src.detection.adaptive_frame_processor",
+      "path": "src/detection/adaptive_frame_processor.py"
+    },
+    {
+      "module": "src.detection.deep_behavior_recognizer",
+      "path": "src/detection/deep_behavior_recognizer.py"
+    },
+    {
+      "module": "src.detection.dynamic_skip_manager",
+      "path": "src/detection/dynamic_skip_manager.py"
+    },
+    {
+      "module": "src.detection.enhanced_hand_detector",
+      "path": "src/detection/enhanced_hand_detector.py"
+    },
+    {
+      "module": "src.detection.enhanced_motion_analyzer",
+      "path": "src/detection/enhanced_motion_analyzer.py"
+    },
+    {
+      "module": "src.detection.integration_example",
+      "path": "src/detection/integration_example.py"
+    },
+    {
+      "module": "src.detection.intelligent_detection_system",
+      "path": "src/detection/intelligent_detection_system.py"
+    },
+    {
+      "module": "src.detection.performance_monitor",
+      "path": "src/detection/performance_monitor.py"
+    },
+    {
+      "module": "src.domain.__init__",
+      "path": "src/domain/__init__.py"
+    },
+    {
+      "module": "src.domain.entities.__init__",
+      "path": "src/domain/entities/__init__.py"
+    },
+    {
+      "module": "src.domain.events.__init__",
+      "path": "src/domain/events/__init__.py"
+    },
+    {
+      "module": "src.domain.repositories.__init__",
+      "path": "src/domain/repositories/__init__.py"
+    },
+    {
+      "module": "src.domain.services.__init__",
+      "path": "src/domain/services/__init__.py"
+    },
+    {
+      "module": "src.domain.value_objects.__init__",
+      "path": "src/domain/value_objects/__init__.py"
+    },
+    {
+      "module": "src.infrastructure.__init__",
+      "path": "src/infrastructure/__init__.py"
+    },
+    {
+      "module": "src.infrastructure.repositories.__init__",
+      "path": "src/infrastructure/repositories/__init__.py"
+    },
+    {
+      "module": "src.interfaces.__init__",
+      "path": "src/interfaces/__init__.py"
+    },
+    {
+      "module": "src.interfaces.detection.__init__",
+      "path": "src/interfaces/detection/__init__.py"
+    },
+    {
+      "module": "src.interfaces.repositories.__init__",
+      "path": "src/interfaces/repositories/__init__.py"
+    },
+    {
+      "module": "src.interfaces.tracking.__init__",
+      "path": "src/interfaces/tracking/__init__.py"
+    },
+    {
+      "module": "src.mlops.dvc_integration",
+      "path": "src/mlops/dvc_integration.py"
+    },
+    {
+      "module": "src.mlops.integration_example",
+      "path": "src/mlops/integration_example.py"
+    },
+    {
+      "module": "src.mlops.mlflow_integration",
+      "path": "src/mlops/mlflow_integration.py"
+    },
+    {
+      "module": "src.monitoring.structured_logging",
+      "path": "src/monitoring/structured_logging.py"
+    },
+    {
+      "module": "src.optimization.tensorrt_optimizer",
+      "path": "src/optimization/tensorrt_optimizer.py"
+    },
+    {
+      "module": "src.security.security_manager",
+      "path": "src/security/security_manager.py"
+    },
+    {
+      "module": "src.services.capture_service",
+      "path": "src/services/capture_service.py"
+    },
+    {
+      "module": "src.services.detection_service_repository",
+      "path": "src/services/detection_service_repository.py"
+    },
+    {
+      "module": "src.services.detection_service_strategy",
+      "path": "src/services/detection_service_strategy.py"
+    },
+    {
+      "module": "src.services.realtime_video_detection",
+      "path": "src/services/realtime_video_detection.py"
+    },
+    {
+      "module": "src.services.retention",
+      "path": "src/services/retention.py"
+    },
+    {
+      "module": "src.services.video_service",
+      "path": "src/services/video_service.py"
+    },
+    {
+      "module": "src.strategies.detection.__init__",
+      "path": "src/strategies/detection/__init__.py"
+    },
+    {
+      "module": "src.strategies.tracking.__init__",
+      "path": "src/strategies/tracking/__init__.py"
+    },
+    {
+      "module": "src.strategies.tracking.byte_tracker_strategy",
+      "path": "src/strategies/tracking/byte_tracker_strategy.py"
+    },
+    {
+      "module": "src.utils.__init__",
+      "path": "src/utils/__init__.py"
+    },
+    {
+      "module": "src.utils.data_collector",
+      "path": "src/utils/data_collector.py"
+    },
+    {
+      "module": "src.utils.error_handler",
+      "path": "src/utils/error_handler.py"
+    },
+    {
+      "module": "src.utils.file_utils",
+      "path": "src/utils/file_utils.py"
+    },
+    {
+      "module": "src.utils.gpu_acceleration",
+      "path": "src/utils/gpu_acceleration.py"
+    },
+    {
+      "module": "src.utils.image_utils",
+      "path": "src/utils/image_utils.py"
+    },
+    {
+      "module": "src.utils.model_optimizer",
+      "path": "src/utils/model_optimizer.py"
+    },
+    {
+      "module": "src.utils.video_utils",
+      "path": "src/utils/video_utils.py"
+    }
+  ]
+}

@@ -20,6 +20,7 @@ project_root = os.path.dirname(
 
 try:
     from src.api.middleware.error_middleware import setup_error_middleware
+    from src.api.middleware.metrics_middleware import MetricsMiddleware
     from src.api.middleware.security_middleware import setup_security_middleware
     from src.api.redis_listener import shutdown_redis_listener, start_redis_listener
     from src.api.routers import (
@@ -31,6 +32,7 @@ try:
         events,
         metrics,
         mlops,
+        monitoring,
         records,
         region_management,
         security,
@@ -46,6 +48,7 @@ except ImportError:
     # Add project root to Python path
     sys.path.append(project_root)
     from src.api.middleware.error_middleware import setup_error_middleware
+    from src.api.middleware.metrics_middleware import MetricsMiddleware
     from src.api.middleware.security_middleware import setup_security_middleware
     from src.api.redis_listener import shutdown_redis_listener, start_redis_listener
     from src.api.routers import (
@@ -57,6 +60,7 @@ except ImportError:
         events,
         metrics,
         mlops,
+        monitoring,
         records,
         region_management,
         security,
@@ -71,6 +75,13 @@ except ImportError:
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# 触发依赖注入容器的服务配置（包括 USE_DOMAIN_SERVICE 开关与仓储绑定）
+try:
+    import src.container.service_config  # noqa: F401
+    logger.info("依赖注入服务配置已加载")
+except Exception as e:
+    logger.warning(f"依赖注入服务配置加载失败（不影响启动）: {e}")
 
 
 @asynccontextmanager
@@ -199,6 +210,9 @@ app.add_middleware(
 # 设置错误处理中间件
 setup_error_middleware(app)
 
+# 设置指标监控中间件
+app.add_middleware(MetricsMiddleware)
+
 # 设置安全中间件
 setup_security_middleware(app)
 
@@ -227,6 +241,7 @@ app.include_router(statistics.router, prefix="/api/v1", tags=["Statistics"])
 app.include_router(download.router, prefix="/api/v1/download", tags=["Download"])
 app.include_router(events.router, tags=["Events"])
 app.include_router(metrics.router, tags=["Metrics"])
+app.include_router(monitoring.router, prefix="/api/v1", tags=["Monitoring"])
 app.include_router(cameras.router, prefix="/api/v1", tags=["Cameras"])
 app.include_router(system.router, prefix="/api/v1", tags=["System"])
 app.include_router(error_monitoring.router, prefix="/api/v1", tags=["Error Monitoring"])

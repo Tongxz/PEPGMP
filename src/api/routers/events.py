@@ -1,12 +1,22 @@
 from __future__ import annotations
 
+import logging
 import os
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Query
+from src.api.utils.rollout import should_use_domain
+
+try:
+    from src.services.detection_service_domain import (
+        get_detection_service_domain,
+    )
+except Exception:
+    get_detection_service_domain = None  # type: ignore
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _read_events(lines: int = 2000) -> List[Dict[str, Any]]:
@@ -51,13 +61,29 @@ def _read_events(lines: int = 2000) -> List[Dict[str, Any]]:
 
 
 @router.get("/api/v1/events/recent")
-def recent_events(
+async def recent_events(
     limit: int = Query(100, ge=1, le=1000),
     minutes: int = Query(60, ge=1, le=24 * 60),
     etype: Optional[str] = Query(None, description="过滤事件类型，如 NO_HAIRNET_AT_SINK"),
     camera_id: Optional[str] = Query(None, description="过滤摄像头 ID，如 cam0"),
+    force_domain: Optional[bool] = Query(None, description="测试用途，强制走领域分支"),
 ) -> List[Dict[str, Any]]:
-    """返回最近的事件列表（从 logs/events_record.jsonl 读取）"""
+    """返回最近的事件列表（从 logs/events_record.jsonl 读取或从领域服务）"""
+    # 灰度：按配置或强制参数决定是否走领域分支
+    try:
+        if should_use_domain(force_domain) and get_detection_service_domain is not None:
+            domain_service = get_detection_service_domain()
+            result = await domain_service.get_recent_events(
+                limit=limit,
+                minutes=minutes,
+                event_type=etype,
+                camera_id=camera_id,
+            )
+            return result
+    except Exception as e:
+        logger.warning(f"领域服务获取最近事件失败，回退到日志读取: {e}")
+
+    # 旧实现（回退）
     rows = _read_events(lines=2000)
     since_ts = (datetime.utcnow() - timedelta(minutes=minutes)).timestamp()
     out: List[Dict[str, Any]] = []

@@ -7,28 +7,55 @@ import json
 import logging
 import os
 from datetime import datetime, timedelta
+import os
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Query
+from src.api.utils.rollout import should_use_domain
 
 from src.services.region_service import RegionService, get_region_service
+try:
+    from src.services.detection_service_domain import (
+        get_detection_service_domain,
+    )
+except Exception:
+    get_detection_service_domain = None  # type: ignore
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
 @router.get("/statistics/realtime", summary="实时统计接口")
-def get_realtime_statistics(
+async def get_realtime_statistics(
     region_service: RegionService = Depends(get_region_service),
+    force_domain: Optional[bool] = Query(None, description="测试用途，强制走领域分支"),
 ) -> Dict[str, Any]:
     """获取实时统计信息.
 
     Args:
         region_service: 区域服务依赖项.
+        force_domain: 测试用途，强制走领域分支
 
     Returns:
         实时统计数据，包括当前检测状态、违规统计等.
     """
+    # 灰度：按配置或强制参数决定是否走领域分支
+    try:
+        if should_use_domain(force_domain) and get_detection_service_domain is not None:
+            domain_service = get_detection_service_domain()
+            result = await domain_service.get_realtime_statistics()
+            # 如果区域服务可用，尝试补充区域信息
+            if region_service:
+                try:
+                    # 可以尝试从区域服务获取额外信息（保持兼容）
+                    pass
+                except Exception as e:
+                    logger.warning(f"获取区域统计失败: {e}")
+            return result
+    except Exception as e:
+        logger.warning(f"领域服务获取实时统计失败，回退到默认实现: {e}")
+
+    # 旧实现（回退）
     try:
         # 获取当前时间
         current_time = datetime.now()
@@ -118,10 +145,11 @@ def _read_recent_events(max_lines: int = 5000) -> List[Dict[str, Any]]:  # noqa:
 
 
 @router.get("/statistics/summary", summary="事件统计汇总")
-def get_statistics_summary(
+async def get_statistics_summary(
     minutes: int = Query(60, ge=1, le=24 * 60),
     limit: int = Query(1000, ge=1, le=10000),
     camera_id: Optional[str] = Query(None, description="按摄像头过滤（可选）"),
+    force_domain: Optional[bool] = Query(None, description="测试用途，强制走领域分支"),
 ) -> Dict[str, Any]:
     """返回最近 N 分钟内的事件统计与分布.
 
@@ -135,6 +163,26 @@ def get_statistics_summary(
     Returns:
         一个包含统计信息的字典.
     """
+    # 若开启领域服务，则优先使用领域服务统计
+    try:
+        if should_use_domain(force_domain) and get_detection_service_domain is not None:
+            domain_service = get_detection_service_domain()
+            end_time = datetime.utcnow()
+            start_time = end_time - timedelta(minutes=minutes)
+            analytics = await domain_service.get_detection_analytics(
+                camera_id=camera_id, start_time=start_time, end_time=end_time
+            )
+            stats = analytics.get("detection_statistics", {})
+            # 适配原响应结构
+            return {
+                "window_minutes": minutes,
+                "total_events": int(stats.get("total_records", 0)),
+                "counts_by_type": stats.get("object_distribution", {}),
+                "samples": [],
+            }
+    except Exception as e:
+        logger.warning(f"领域服务统计失败，回退到日志统计: {e}")
+
     rows = _read_recent_events(max_lines=max(limit * 2, 2000))
     since_ts = (datetime.utcnow() - timedelta(minutes=minutes)).timestamp()
     total = 0
@@ -166,9 +214,10 @@ def get_statistics_summary(
 
 
 @router.get("/statistics/daily", summary="按天统计事件趋势")
-def get_statistics_daily(
+async def get_statistics_daily(
     days: int = Query(7, ge=1, le=90),
     camera_id: Optional[str] = Query(None, description="按摄像头过滤（可选）"),
+    force_domain: Optional[bool] = Query(None, description="测试用途，强制走领域分支"),
 ) -> List[Dict[str, Any]]:
     """返回最近 N 天内的每日事件统计.
 
@@ -177,10 +226,23 @@ def get_statistics_daily(
     Args:
         days: 要查询的最近天数.
         camera_id: (可选) 要筛选的摄像头ID.
+        force_domain: 测试用途，强制走领域分支
 
     Returns:
         一个包含每日统计信息的列表.
     """
+    # 灰度：按配置或强制参数决定是否走领域分支
+    try:
+        if should_use_domain(force_domain) and get_detection_service_domain is not None:
+            domain_service = get_detection_service_domain()
+            result = await domain_service.get_daily_statistics(
+                days=days, camera_id=camera_id
+            )
+            return result
+    except Exception as e:
+        logger.warning(f"领域服务按天统计失败，回退到日志统计: {e}")
+
+    # 旧实现（回退）
     rows = _read_recent_events(max_lines=200000)
 
     # 构建最近 N 天日期集合（UTC）
@@ -220,12 +282,13 @@ def get_statistics_daily(
 
 
 @router.get("/statistics/events", summary="事件列表查询")
-def get_statistics_events(
+async def get_statistics_events(
     start_time: Optional[str] = Query(None, description="开始时间 (ISO格式)"),
     end_time: Optional[str] = Query(None, description="结束时间 (ISO格式)"),
     event_type: Optional[str] = Query(None, description="事件类型过滤"),
     camera_id: Optional[str] = Query(None, description="摄像头ID过滤"),
     limit: int = Query(100, ge=1, le=1000, description="返回数量限制"),
+    force_domain: Optional[bool] = Query(None, description="测试用途，强制走领域分支"),
 ) -> Dict[str, Any]:
     """查询事件列表，支持时间范围和多种过滤条件.
 
@@ -235,10 +298,45 @@ def get_statistics_events(
         event_type: 事件类型
         camera_id: 摄像头ID
         limit: 返回数量限制
+        force_domain: 测试用途，强制走领域分支
 
     Returns:
         包含事件列表的字典
     """
+    # 灰度：按配置或强制参数决定是否走领域分支
+    try:
+        if should_use_domain(force_domain) and get_detection_service_domain is not None:
+            domain_service = get_detection_service_domain()
+            
+            # 解析时间范围
+            from datetime import datetime as dt
+            start_dt = None
+            end_dt = None
+            
+            if start_time:
+                try:
+                    start_dt = dt.fromisoformat(start_time.replace('Z', '+00:00'))
+                except Exception:
+                    pass
+            
+            if end_time:
+                try:
+                    end_dt = dt.fromisoformat(end_time.replace('Z', '+00:00'))
+                except Exception:
+                    pass
+            
+            result = await domain_service.get_event_history(
+                start_time=start_dt,
+                end_time=end_dt,
+                event_type=event_type,
+                camera_id=camera_id,
+                limit=limit,
+            )
+            return result
+    except Exception as e:
+        logger.warning(f"领域服务事件列表查询失败，回退到日志查询: {e}")
+
+    # 旧实现（回退）
     from datetime import datetime as dt
 
     # 解析时间范围
@@ -299,10 +397,11 @@ def get_statistics_events(
 
 
 @router.get("/statistics/history", summary="近期事件历史")
-def get_statistics_history(
+async def get_statistics_history(
     minutes: int = Query(60, ge=1, le=24 * 60),
     limit: int = Query(100, ge=1, le=1000),
     camera_id: Optional[str] = Query(None, description="按摄像头过滤（可选）"),
+    force_domain: Optional[bool] = Query(None, description="测试用途，强制走领域分支"),
 ) -> List[Dict[str, Any]]:
     """返回近期事件列表，按时间倒序.
 
@@ -310,10 +409,34 @@ def get_statistics_history(
         minutes: 要查询的最近分钟数.
         limit: 返回事件的最大数量.
         camera_id: (可选) 要筛选的摄像头ID.
+        force_domain: 测试用途，强制走领域分支
 
     Returns:
         一个包含事件详细信息的列表.
     """
+    # 灰度：按配置或强制参数决定是否走领域分支
+    try:
+        if should_use_domain(force_domain) and get_detection_service_domain is not None:
+            domain_service = get_detection_service_domain()
+            result = await domain_service.get_recent_history(
+                minutes=minutes, limit=limit, camera_id=camera_id
+            )
+            # 转换为旧格式
+            formatted_result = []
+            for event in result:
+                formatted_result.append({
+                    "ts": event.get("timestamp"),
+                    "camera_id": event.get("camera_id"),
+                    "type": event.get("type"),
+                    "track_id": event.get("track_id"),
+                    "region": event.get("region"),
+                    "detail": event.get("metadata", {}),
+                })
+            return formatted_result
+    except Exception as e:
+        logger.warning(f"领域服务近期历史查询失败，回退到日志查询: {e}")
+
+    # 旧实现（回退）
     rows = _read_recent_events(max_lines=max(limit * 5, 2000))
     since_ts = (datetime.utcnow() - timedelta(minutes=minutes)).timestamp()
     out: List[Dict[str, Any]] = []

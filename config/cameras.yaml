@@ -1,6 +1,6 @@
 cameras:
 - id: cam0
-  name: USB0
+  name: 灰度测试更新
   source: '0'
   regions_file: config/regions.json
   profile: accurate
@@ -21,7 +21,20 @@ cameras:
   auto_start: false
   env:
     REDIS_HOST: 127.0.0.1
-    REDIS_PORT: "6379"
-    REDIS_DB: "0"
+    REDIS_PORT: '6379'
+    REDIS_DB: '0'
     REDIS_PASSWORD: pyt_dev_redis
-    VIDEO_STREAM_USE_REDIS: "1"
+    VIDEO_STREAM_USE_REDIS: '1'
+- id: test_camera_integration
+  name: 更新后的摄像头名称
+  location: unknown
+  status: active
+  camera_type: fixed
+  resolution:
+  - 1920
+  - 1080
+  fps: 25
+  region_id: null
+  metadata: {}
+  created_at: '2025-11-03T01:40:03.311425+00:00'
+  updated_at: '2025-11-03T01:40:03.311430+00:00'

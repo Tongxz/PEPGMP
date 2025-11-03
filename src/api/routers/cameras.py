@@ -10,11 +10,52 @@ from typing import Any, Dict, List
 
 import cv2
 import yaml
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, HTTPException, Path, Query
 from fastapi.responses import Response
 
 from src.api.redis_listener import CAMERA_STATS_CACHE
+from src.api.utils.rollout import should_use_domain
 from src.services.scheduler import get_scheduler
+
+try:
+    from src.services.detection_service_domain import (
+        get_detection_service_domain,
+        DefaultCameraRepository,
+    )
+except Exception:
+    get_detection_service_domain = None  # type: ignore
+    DefaultCameraRepository = None  # type: ignore
+
+try:
+    from src.domain.services.camera_service import CameraService
+    from src.domain.services.camera_control_service import CameraControlService
+
+    async def get_camera_service() -> CameraService | None:
+        """获取摄像头服务实例."""
+        try:
+            if DefaultCameraRepository is None:
+                return None
+            # 使用默认的摄像头仓储（内存存储）
+            camera_repo = DefaultCameraRepository()
+            cameras_yaml_path = _cameras_path()
+            return CameraService(camera_repo, cameras_yaml_path)
+        except Exception:
+            return None
+
+    async def get_camera_control_service() -> CameraControlService | None:
+        """获取摄像头控制服务实例."""
+        try:
+            camera_service = await get_camera_service()
+            if camera_service is None:
+                return None
+            scheduler = get_scheduler()
+            return CameraControlService(camera_service, scheduler)
+        except Exception:
+            return None
+
+except Exception:
+    get_camera_service = None  # type: ignore
+    get_camera_control_service = None  # type: ignore
 
 router = APIRouter()
 # 为本模块创建 logger，避免未定义引用导致 500
@@ -58,26 +99,61 @@ def _write_yaml(path: str, data: Dict[str, Any]) -> None:
 
 
 @router.get("/cameras")
-def list_cameras() -> Dict[str, Any]:
+async def list_cameras(
+    active_only: bool = Query(False, description="是否只返回活跃摄像头"),
+    force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
+) -> Dict[str, Any]:
     """获取所有已配置的摄像头列表.
+
+    Args:
+        active_only: 是否只返回活跃摄像头
+        force_domain: 测试用途，强制走领域分支
 
     Returns:
         一个包含所有摄像头配置列表的字典.
     """
+    # 灰度：按配置或强制参数决定是否走领域分支
+    try:
+        if should_use_domain(force_domain) and get_detection_service_domain is not None:
+            domain_service = get_detection_service_domain()
+            cameras = await domain_service.get_cameras(active_only=active_only)
+            return {"cameras": cameras}
+    except Exception as e:
+        logger.warning(f"领域服务获取摄像头列表失败，回退到YAML配置: {e}")
+
+    # 旧实现（回退）
     data = _read_yaml(_cameras_path())
     return {"cameras": data.get("cameras", [])}
 
 
 @router.post("/cameras")
-def create_camera(payload: Dict[str, Any]) -> Dict[str, Any]:
+async def create_camera(
+    payload: Dict[str, Any],
+    force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
+) -> Dict[str, Any]:
     """创建一个新的摄像头配置.
 
     Args:
         payload: 包含新摄像头信息的字典.
+        force_domain: 测试用途，强制走领域分支
 
     Returns:
         一个表示操作成功的字典，包含新创建的摄像头信息.
     """
+    # 灰度：写操作需要更谨慎，使用should_use_domain进行灰度控制
+    try:
+        if should_use_domain(force_domain) and get_camera_service is not None:
+            camera_service = await get_camera_service()  # type: ignore
+            if camera_service:
+                result = await camera_service.create_camera(payload)
+                return result
+    except ValueError as e:
+        # 业务逻辑错误（如ID已存在），直接抛出HTTP异常
+        raise HTTPException(status_code=409, detail=str(e))
+    except Exception as e:
+        logger.warning(f"领域服务创建摄像头失败，回退到旧实现: {e}")
+
+    # 旧实现（回退）
     required = ["id", "name", "source"]
     for k in required:
         if k not in payload:
@@ -93,18 +169,35 @@ def create_camera(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @router.put("/cameras/{camera_id}")
-def update_camera(
-    camera_id: str = Path(...), payload: Dict[str, Any] = {}
+async def update_camera(
+    camera_id: str = Path(...),
+    payload: Dict[str, Any] = {},
+    force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
 ) -> Dict[str, Any]:
     """更新指定摄像头的配置.
 
     Args:
         camera_id: 要更新的摄像头的ID.
         payload: 包含要更新的字段的字典.
+        force_domain: 测试用途，强制走领域分支
 
     Returns:
         一个表示操作成功的字典.
     """
+    # 灰度：写操作需要更谨慎，使用should_use_domain进行灰度控制
+    try:
+        if should_use_domain(force_domain) and get_camera_service is not None:
+            camera_service = await get_camera_service()  # type: ignore
+            if camera_service:
+                result = await camera_service.update_camera(camera_id, payload)
+                return result
+    except ValueError as e:
+        # 业务逻辑错误（如摄像头不存在），直接抛出HTTP异常
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.warning(f"领域服务更新摄像头失败，回退到旧实现: {e}")
+
+    # 旧实现（回退）
     data = _read_yaml(_cameras_path())
     cameras = data.get("cameras", [])
     for i, cam in enumerate(cameras):
@@ -116,15 +209,33 @@ def update_camera(
 
 
 @router.delete("/cameras/{camera_id}")
-def delete_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
+async def delete_camera(
+    camera_id: str = Path(...),
+    force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
+) -> Dict[str, Any]:
     """删除指定摄像头的配置.
 
     Args:
         camera_id: 要删除的摄像头的ID.
+        force_domain: 测试用途，强制走领域分支
 
     Returns:
         一个表示操作成功的字典.
     """
+    # 灰度：写操作需要更谨慎，使用should_use_domain进行灰度控制
+    try:
+        if should_use_domain(force_domain) and get_camera_service is not None:
+            camera_service = await get_camera_service()  # type: ignore
+            if camera_service:
+                result = await camera_service.delete_camera(camera_id)
+                return result
+    except ValueError as e:
+        # 业务逻辑错误（如摄像头不存在），直接抛出HTTP异常
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.warning(f"领域服务删除摄像头失败，回退到旧实现: {e}")
+
+    # 旧实现（回退）
     data = _read_yaml(_cameras_path())
     cameras = data.get("cameras", [])
     for i, cam in enumerate(cameras):
@@ -191,8 +302,25 @@ def preview_camera(camera_id: str = Path(...)) -> Response:  # noqa: C901
 
 
 @router.post("/cameras/{camera_id}/start")
-def start_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
+async def start_camera(
+    camera_id: str = Path(...),
+    force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
+) -> Dict[str, Any]:
     """启动指定摄像头的检测进程."""
+    # 灰度：按配置或强制参数决定是否走领域分支
+    try:
+        if should_use_domain(force_domain) and get_camera_control_service is not None:
+            control_service = await get_camera_control_service()  # type: ignore
+            if control_service:
+                result = control_service.start_camera(camera_id)
+                return result
+    except ValueError as e:
+        # 业务逻辑错误（如启动失败），直接抛出HTTP异常
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.warning(f"摄像头控制服务启动失败，回退到调度器: {e}")
+
+    # 旧实现（回退）
     scheduler = get_scheduler()
     res = scheduler.start_detection(camera_id)
     if not res.get("ok"):
@@ -207,8 +335,25 @@ def start_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
 
 
 @router.post("/cameras/{camera_id}/stop")
-def stop_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
+async def stop_camera(
+    camera_id: str = Path(...),
+    force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
+) -> Dict[str, Any]:
     """停止指定摄像头的检测进程."""
+    # 灰度：按配置或强制参数决定是否走领域分支
+    try:
+        if should_use_domain(force_domain) and get_camera_control_service is not None:
+            control_service = await get_camera_control_service()  # type: ignore
+            if control_service:
+                result = control_service.stop_camera(camera_id)
+                return result
+    except ValueError as e:
+        # 业务逻辑错误（如停止失败），直接抛出HTTP异常
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.warning(f"摄像头控制服务停止失败，回退到调度器: {e}")
+
+    # 旧实现（回退）
     scheduler = get_scheduler()
     res = scheduler.stop_detection(camera_id)
     if not res.get("ok"):
@@ -221,8 +366,25 @@ def stop_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
 
 
 @router.post("/cameras/{camera_id}/restart")
-def restart_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
+async def restart_camera(
+    camera_id: str = Path(...),
+    force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
+) -> Dict[str, Any]:
     """重启指定摄像头的检测进程."""
+    # 灰度：按配置或强制参数决定是否走领域分支
+    try:
+        if should_use_domain(force_domain) and get_camera_control_service is not None:
+            control_service = await get_camera_control_service()  # type: ignore
+            if control_service:
+                result = control_service.restart_camera(camera_id)
+                return result
+    except ValueError as e:
+        # 业务逻辑错误（如重启失败），直接抛出HTTP异常
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.warning(f"摄像头控制服务重启失败，回退到调度器: {e}")
+
+    # 旧实现（回退）
     scheduler = get_scheduler()
     res = scheduler.restart_detection(camera_id)
     if not res.get("ok"):
@@ -237,8 +399,25 @@ def restart_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
 
 
 @router.get("/cameras/{camera_id}/status")
-def status_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
+async def status_camera(
+    camera_id: str = Path(...),
+    force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
+) -> Dict[str, Any]:
     """获取指定摄像头检测进程的状态."""
+    # 灰度：按配置或强制参数决定是否走领域分支
+    try:
+        if should_use_domain(force_domain) and get_camera_control_service is not None:
+            control_service = await get_camera_control_service()  # type: ignore
+            if control_service:
+                result = control_service.get_camera_status(camera_id)
+                return result
+    except ValueError as e:
+        # 业务逻辑错误，直接抛出HTTP异常
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.warning(f"摄像头控制服务状态查询失败，回退到调度器: {e}")
+
+    # 旧实现（回退）
     scheduler = get_scheduler()
     res = scheduler.get_status(camera_id)
     logger.info(
@@ -248,8 +427,28 @@ def status_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
 
 
 @router.post("/cameras/batch-status")
-def batch_camera_status(request_body: Dict[str, Any] = None) -> Dict[str, Any]:
+async def batch_camera_status(
+    request_body: Dict[str, Any] = None,
+    force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
+) -> Dict[str, Any]:
     """批量查询摄像头运行状态."""
+    # 灰度：按配置或强制参数决定是否走领域分支
+    try:
+        if should_use_domain(force_domain) and get_camera_control_service is not None:
+            control_service = await get_camera_control_service()  # type: ignore
+            if control_service:
+                camera_ids_to_query = None
+                if request_body and "camera_ids" in request_body:
+                    camera_ids_to_query = request_body["camera_ids"]
+                result = control_service.get_batch_status(camera_ids_to_query)
+                return result
+    except ValueError as e:
+        # 业务逻辑错误，直接抛出HTTP异常
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.warning(f"摄像头控制服务批量状态查询失败，回退到调度器: {e}")
+
+    # 旧实现（回退）
     scheduler = get_scheduler()
 
     camera_ids_to_query = []
@@ -264,15 +463,33 @@ def batch_camera_status(request_body: Dict[str, Any] = None) -> Dict[str, Any]:
 
 
 @router.post("/cameras/{camera_id}/activate")
-def activate_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
+async def activate_camera(
+    camera_id: str = Path(...),
+    force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
+) -> Dict[str, Any]:
     """激活摄像头（允许启动检测）.
 
     Args:
         camera_id: 目标摄像头的ID.
+        force_domain: 测试用途，强制走领域分支
 
     Returns:
         操作结果字典.
     """
+    # 灰度：按配置或强制参数决定是否走领域分支
+    try:
+        if should_use_domain(force_domain) and get_camera_control_service is not None:
+            control_service = await get_camera_control_service()  # type: ignore
+            if control_service:
+                result = await control_service.activate_camera(camera_id)
+                return result
+    except ValueError as e:
+        # 业务逻辑错误（如摄像头不存在），直接抛出HTTP异常
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.warning(f"摄像头控制服务激活失败，回退到YAML配置: {e}")
+
+    # 旧实现（回退）
     path = _cameras_path()
     data = _read_yaml(path)
     cameras: List[Dict[str, Any]] = data.get("cameras", [])
@@ -292,8 +509,25 @@ def activate_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
 
 
 @router.post("/cameras/{camera_id}/deactivate")
-def deactivate_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
+async def deactivate_camera(
+    camera_id: str = Path(...),
+    force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
+) -> Dict[str, Any]:
     """停用摄像头（禁止启动检测，如正在运行则先停止）."""
+    # 灰度：按配置或强制参数决定是否走领域分支
+    try:
+        if should_use_domain(force_domain) and get_camera_control_service is not None:
+            control_service = await get_camera_control_service()  # type: ignore
+            if control_service:
+                result = await control_service.deactivate_camera(camera_id)
+                return result
+    except ValueError as e:
+        # 业务逻辑错误（如摄像头不存在），直接抛出HTTP异常
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.warning(f"摄像头控制服务停用失败，回退到YAML配置: {e}")
+
+    # 旧实现（回退）
     # 1. 先检查并停止运行中的进程
     scheduler = get_scheduler()
     status = scheduler.status(camera_id)
@@ -330,18 +564,37 @@ def deactivate_camera(camera_id: str = Path(...)) -> Dict[str, Any]:
 
 
 @router.put("/cameras/{camera_id}/auto-start")
-def toggle_auto_start(
-    camera_id: str = Path(...), auto_start: bool = False
+async def toggle_auto_start(
+    camera_id: str = Path(...),
+    auto_start: bool = False,
+    force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
 ) -> Dict[str, Any]:
     """切换摄像头的自动启动设置.
 
     Args:
         camera_id: 目标摄像头的ID.
         auto_start: 是否自动启动.
+        force_domain: 测试用途，强制走领域分支
 
     Returns:
         操作结果字典.
     """
+    # 灰度：按配置或强制参数决定是否走领域分支
+    try:
+        if should_use_domain(force_domain) and get_camera_control_service is not None:
+            control_service = await get_camera_control_service()  # type: ignore
+            if control_service:
+                result = await control_service.toggle_auto_start(camera_id, auto_start)
+                return result
+    except ValueError as e:
+        # 业务逻辑错误（如摄像头不存在或未激活），直接抛出HTTP异常
+        if "不存在" in str(e):
+            raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.warning(f"摄像头控制服务切换自动启动失败，回退到YAML配置: {e}")
+
+    # 旧实现（回退）
     path = _cameras_path()
     data = _read_yaml(path)
     cameras: List[Dict[str, Any]] = data.get("cameras", [])
@@ -366,17 +619,31 @@ def toggle_auto_start(
 
 
 @router.get("/cameras/{camera_id}/stats")
-def get_camera_stats(camera_id: str = Path(...)) -> Dict[str, Any]:
+async def get_camera_stats(
+    camera_id: str = Path(...),
+    force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
+) -> Dict[str, Any]:
     """获取指定摄像头的详细检测统计信息.
 
     数据源已切换为由Redis Pub/Sub实时更新的内存缓存.
 
     Args:
         camera_id: 目标摄像头的ID.
+        force_domain: 测试用途，强制走领域分支
 
     Returns:
         包含检测统计数据的字典.
     """
+    # 灰度：按配置或强制参数决定是否走领域分支
+    try:
+        if should_use_domain(force_domain) and get_detection_service_domain is not None:
+            domain_service = get_detection_service_domain()
+            result = await domain_service.get_camera_stats_detailed(camera_id)
+            return result
+    except Exception as e:
+        logger.warning(f"领域服务获取摄像头统计失败，回退到缓存统计: {e}")
+
+    # 旧实现（回退）
     scheduler = get_scheduler()
     status = scheduler.status(camera_id)
 
@@ -431,16 +698,35 @@ def get_camera_stats(camera_id: str = Path(...)) -> Dict[str, Any]:
 
 
 @router.get("/cameras/{camera_id}/logs")
-def get_camera_logs(camera_id: str = Path(...), lines: int = 100) -> Dict[str, Any]:
+async def get_camera_logs(
+    camera_id: str = Path(...),
+    lines: int = 100,
+    force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
+) -> Dict[str, Any]:
     """获取指定摄像头的最新日志.
 
     Args:
         camera_id: 目标摄像头的ID.
         lines: 返回的日志行数（默认100）.
+        force_domain: 测试用途，强制走领域分支
 
     Returns:
         包含日志内容的字典.
     """
+    # 灰度：按配置或强制参数决定是否走领域分支
+    try:
+        if should_use_domain(force_domain) and get_camera_control_service is not None:
+            control_service = await get_camera_control_service()  # type: ignore
+            if control_service:
+                result = control_service.get_camera_logs(camera_id, lines)
+                return result
+    except ValueError as e:
+        # 业务逻辑错误（如日志文件未配置），直接抛出HTTP异常
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.warning(f"摄像头控制服务读取日志失败，回退到直接读取: {e}")
+
+    # 旧实现（回退）
     from pathlib import Path as FilePath
 
     scheduler = get_scheduler()
@@ -474,15 +760,31 @@ def get_camera_logs(camera_id: str = Path(...), lines: int = 100) -> Dict[str, A
 
 
 @router.post("/cameras/refresh")
-def refresh_all_cameras() -> Dict[str, Any]:
+async def refresh_all_cameras(
+    force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
+) -> Dict[str, Any]:
     """刷新所有摄像头状态（占位实现）.
 
     前端仅用来触发状态刷新流程，随后会重新获取摄像头列表.
     这里返回简单的确认信息即可，未来可在此集成真实状态探测/进程同步.
 
+    Args:
+        force_domain: 测试用途，强制走领域分支
+
     Returns:
         一个表示操作成功的确认信息字典.
     """
+    # 灰度：按配置或强制参数决定是否走领域分支
+    try:
+        if should_use_domain(force_domain) and get_camera_control_service is not None:
+            control_service = await get_camera_control_service()  # type: ignore
+            if control_service:
+                result = control_service.refresh_all_cameras()
+                return result
+    except Exception as e:
+        logger.warning(f"摄像头控制服务刷新失败，回退到旧实现: {e}")
+
+    # 旧实现（回退）
     return {
         "status": "success",
         "message": "All camera statuses refreshed",

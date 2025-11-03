@@ -1,72 +1,98 @@
-# 生产环境Dockerfile - 支持GPU和TensorRT
+# 生产环境Dockerfile - 改进版本
+# 支持.env文件配置管理
 # 多阶段构建，优化镜像大小
 
-# 阶段1: 基础环境
-FROM nvidia/cuda:12.4.0-runtime-ubuntu22.04 AS base
+# ==================== 阶段1: 基础环境 ====================
+FROM python:3.10-slim-bookworm AS base
 
 # 设置环境变量
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONPATH=/app
 
 # 安装系统依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.10 \
-    python3-pip \
-    python3-dev \
-    curl \
-    wget \
-    git \
-    libgl1-mesa-glx \
+    # OpenCV依赖
+    libgl1 \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
     libxrender-dev \
     libgomp1 \
+    # 网络工具
+    curl \
+    wget \
+    # 构建工具
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# 设置Python别名
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 && \
-    update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
-
-# 阶段2: 生产镜像
-FROM base
+# ==================== 阶段2: 构建依赖 ====================
+FROM base AS builder
 
 # 设置工作目录
 WORKDIR /app
 
-# 安装Python依赖
+# 升级pip
 RUN pip install --upgrade pip setuptools wheel
 
 # 复制依赖文件
 COPY requirements.txt /tmp/requirements.txt
 
-# 安装Python依赖（跳过-e . 行）
-RUN grep -v "^-e " /tmp/requirements.txt > /tmp/requirements_clean.txt && \
-    pip install --no-cache-dir -r /tmp/requirements_clean.txt
+# 安装Python依赖到临时目录
+RUN pip install --user --no-cache-dir -r /tmp/requirements.txt
 
-# 确保脚本可执行
-ENV PATH=/root/.local/bin:$PATH
+# 安装Gunicorn（生产环境）
+RUN pip install --user --no-cache-dir \
+    gunicorn \
+    uvicorn[standard] \
+    python-dotenv
+
+# ==================== 阶段3: 生产镜像 ====================
+FROM base
+
+# 创建非root用户
+RUN useradd -m -u 1000 appuser && \
+    mkdir -p /app/logs /app/output /app/data /app/models /app/config
+
+# 设置工作目录
+WORKDIR /app
+
+# 从builder阶段复制Python包
+COPY --from=builder /root/.local /home/appuser/.local
+
+# 确保脚本在PATH中
+ENV PATH=/home/appuser/.local/bin:$PATH
 
 # 复制应用代码
-COPY . /app/
+COPY --chown=appuser:appuser . /app/
 
-# 创建必要的目录
-RUN mkdir -p /app/logs /app/output /app/data/models /app/models /app/mlruns /app/dvc_cache
+# 设置权限
+RUN chown -R appuser:appuser /app
 
-# 设置权限（如果目录存在）
-RUN if [ -d "/app/scripts/optimization" ]; then \
-        chmod +x /app/scripts/optimization/*.py; \
-    fi
+# 切换到非root用户
+USER appuser
 
 # 暴露端口
 EXPOSE 8000
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:8000/api/v1/monitoring/health || exit 1
 
-# 启动命令
-CMD ["python", "-m", "uvicorn", "src.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+# 启动命令（使用Gunicorn + Uvicorn Workers）
+# 配置通过.env文件或环境变量加载
+CMD ["gunicorn", "src.api.app:app", \
+     "--workers", "4", \
+     "--worker-class", "uvicorn.workers.UvicornWorker", \
+     "--bind", "0.0.0.0:8000", \
+     "--timeout", "120", \
+     "--keepalive", "5", \
+     "--max-requests", "1000", \
+     "--max-requests-jitter", "50", \
+     "--access-logfile", "/app/logs/access.log", \
+     "--error-logfile", "/app/logs/error.log", \
+     "--log-level", "info"]
+

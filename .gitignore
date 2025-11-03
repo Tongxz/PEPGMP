@@ -250,3 +250,12 @@ cache/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+
+# 生产环境配置（包含敏感信息）
+.env.production
+secrets/
+production_secrets_backup.txt
+
+# 本地开发配置（可能包含敏感信息）
+.env.local
+.env.*.local

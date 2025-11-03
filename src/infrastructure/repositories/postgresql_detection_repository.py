@@ -149,14 +149,25 @@ class PostgreSQLDetectionRepository(IDetectionRepository):
         try:
             conn = await self._get_connection()
 
-            select_sql = """
-            SELECT id, camera_id, objects, timestamp, confidence, processing_time,
-                   frame_id, region_id, metadata
-            FROM detection_records
-            WHERE id = $1
-            """
-
-            row = await conn.fetchrow(select_sql, record_id)
+            try:
+                select_sql = """
+                SELECT id, camera_id, objects, timestamp, confidence, processing_time,
+                       frame_id, region_id, metadata
+                FROM detection_records
+                WHERE id = $1
+                """
+                row = await conn.fetchrow(select_sql, record_id)
+            except Exception:
+                # 兼容无 objects 等旧结构
+                compat_sql = """
+                SELECT id, camera_id, timestamp, processing_time,
+                       frame_number as frame_id,
+                       NULL::VARCHAR as region_id,
+                       NULL::JSONB as metadata
+                FROM detection_records
+                WHERE id = $1
+                """
+                row = await conn.fetchrow(compat_sql, record_id)
 
             if row is None:
                 return None
@@ -184,16 +195,28 @@ class PostgreSQLDetectionRepository(IDetectionRepository):
         try:
             conn = await self._get_connection()
 
-            select_sql = """
-            SELECT id, camera_id, objects, timestamp, confidence, processing_time,
-                   frame_id, region_id, metadata
-            FROM detection_records
-            WHERE camera_id = $1
-            ORDER BY timestamp DESC
-            LIMIT $2 OFFSET $3
-            """
-
-            rows = await conn.fetch(select_sql, camera_id, limit, offset)
+            try:
+                select_sql = """
+                SELECT id, camera_id, objects, timestamp, confidence, processing_time,
+                       frame_id, region_id, metadata
+                FROM detection_records
+                WHERE camera_id = $1
+                ORDER BY timestamp DESC
+                LIMIT $2 OFFSET $3
+                """
+                rows = await conn.fetch(select_sql, camera_id, limit, offset)
+            except Exception:
+                compat_sql = """
+                SELECT id, camera_id, timestamp, processing_time,
+                       frame_number as frame_id,
+                       NULL::VARCHAR as region_id,
+                       NULL::JSONB as metadata
+                FROM detection_records
+                WHERE camera_id = $1
+                ORDER BY timestamp DESC
+                LIMIT $2 OFFSET $3
+                """
+                rows = await conn.fetch(compat_sql, camera_id, limit, offset)
 
             return [self._row_to_record(row) for row in rows]
 
@@ -223,28 +246,56 @@ class PostgreSQLDetectionRepository(IDetectionRepository):
         try:
             conn = await self._get_connection()
 
-            if camera_id:
-                select_sql = """
-                SELECT id, camera_id, objects, timestamp, confidence, processing_time,
-                       frame_id, region_id, metadata
-                FROM detection_records
-                WHERE timestamp BETWEEN $1 AND $2 AND camera_id = $3
-                ORDER BY timestamp DESC
-                LIMIT $4
-                """
-                rows = await conn.fetch(
-                    select_sql, start_time, end_time, camera_id, limit
-                )
-            else:
-                select_sql = """
-                SELECT id, camera_id, objects, timestamp, confidence, processing_time,
-                       frame_id, region_id, metadata
-                FROM detection_records
-                WHERE timestamp BETWEEN $1 AND $2
-                ORDER BY timestamp DESC
-                LIMIT $3
-                """
-                rows = await conn.fetch(select_sql, start_time, end_time, limit)
+            try:
+                if camera_id:
+                    select_sql = """
+                    SELECT id, camera_id, objects, timestamp, confidence, processing_time,
+                           frame_id, region_id, metadata
+                    FROM detection_records
+                    WHERE timestamp BETWEEN $1 AND $2 AND camera_id = $3
+                    ORDER BY timestamp DESC
+                    LIMIT $4
+                    """
+                    rows = await conn.fetch(
+                        select_sql, start_time, end_time, camera_id, limit
+                    )
+                else:
+                    select_sql = """
+                    SELECT id, camera_id, objects, timestamp, confidence, processing_time,
+                           frame_id, region_id, metadata
+                    FROM detection_records
+                    WHERE timestamp BETWEEN $1 AND $2
+                    ORDER BY timestamp DESC
+                    LIMIT $3
+                    """
+                    rows = await conn.fetch(select_sql, start_time, end_time, limit)
+            except Exception:
+                if camera_id:
+                    compat_sql = """
+                    SELECT id, camera_id, timestamp, processing_time,
+                           frame_number as frame_id,
+                           NULL::VARCHAR as region_id,
+                           NULL::JSONB as metadata
+                    FROM detection_records
+                    WHERE timestamp BETWEEN $1 AND $2 AND camera_id = $3
+                    ORDER BY timestamp DESC
+                    LIMIT $4
+                    """
+                    rows = await conn.fetch(
+                        compat_sql, start_time, end_time, camera_id, limit
+                    )
+                else:
+                    compat_sql = """
+                    SELECT id, camera_id, timestamp, processing_time,
+                           frame_number as frame_id,
+                           NULL::VARCHAR as region_id,
+                           NULL::JSONB as metadata
+                    FROM detection_records
+                    WHERE timestamp BETWEEN $1 AND $2
+                    ORDER BY timestamp DESC
+                    LIMIT $3
+                    """
+                    rows = await conn.fetch(compat_sql, start_time, end_time, limit)
 
             return [self._row_to_record(row) for row in rows]
 
@@ -462,22 +513,196 @@ class PostgreSQLDetectionRepository(IDetectionRepository):
             logger.error(f"获取统计信息失败: {e}")
             raise RepositoryError(f"获取统计信息失败: {e}")
 
+    async def get_violations(
+        self,
+        camera_id: Optional[str] = None,
+        status: Optional[str] = None,
+        violation_type: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        """
+        查询违规明细，返回 { violations: List[Dict], total: int }
+
+        兼容不同历史表结构：优先使用完整字段；失败时回退到最小字段集合。
+        """
+        try:
+            conn = await self._get_connection()
+
+            # 统计总数
+            count_where = []
+            params: List[Any] = []
+            p = 0
+            if camera_id:
+                p += 1
+                count_where.append(f"camera_id = ${p}")
+                params.append(camera_id)
+            if status:
+                p += 1
+                count_where.append(f"status = ${p}")
+                params.append(status)
+            if violation_type:
+                p += 1
+                count_where.append(f"violation_type = ${p}")
+                params.append(violation_type)
+            where_sql = (" WHERE " + " AND ".join(count_where)) if count_where else ""
+
+            total_sql = f"SELECT COUNT(*) AS total FROM violation_events{where_sql}"
+            total = await conn.fetchval(total_sql, *params)
+
+            # 查询明细（完整字段集）
+            try:
+                detail_sql = f"""
+                SELECT id, camera_id, timestamp, violation_type, track_id, confidence,
+                       status, snapshot_path, bbox, handled_at, handled_by, notes,
+                       created_at, updated_at
+                FROM violation_events
+                {where_sql}
+                ORDER BY timestamp DESC
+                LIMIT ${p + 1} OFFSET ${p + 2}
+                """
+                rows = await conn.fetch(detail_sql, *params, limit, offset)
+                def _row_to_obj(r):
+                    item = dict(r)
+                    # 反序列化 JSON
+                    try:
+                        if isinstance(item.get("bbox"), str):
+                            item["bbox"] = json.loads(item.get("bbox") or "null")
+                    except Exception:
+                        pass
+                    # 时间格式
+                    for k in ("timestamp", "handled_at", "created_at", "updated_at"):
+                        if item.get(k) is not None and hasattr(item[k], "isoformat"):
+                            item[k] = item[k].isoformat()
+                    return item
+                violations = [_row_to_obj(r) for r in rows]
+                return {"violations": violations, "total": int(total or 0), "limit": limit, "offset": offset}
+            except Exception:
+                # 兼容最小字段集合
+                compat_sql = f"""
+                SELECT id, camera_id, timestamp, violation_type, track_id, confidence,
+                       status, snapshot_path
+                FROM violation_events
+                {where_sql}
+                ORDER BY timestamp DESC
+                LIMIT ${p + 1} OFFSET ${p + 2}
+                """
+                rows = await conn.fetch(compat_sql, *params, limit, offset)
+                def _row_to_min(r):
+                    item = dict(r)
+                    if item.get("timestamp") is not None and hasattr(item["timestamp"], "isoformat"):
+                        item["timestamp"] = item["timestamp"].isoformat()
+                    # 补齐缺失字段
+                    for k in ("bbox", "handled_at", "handled_by", "notes", "created_at", "updated_at"):
+                        item.setdefault(k, None)
+                    return item
+                violations = [_row_to_min(r) for r in rows]
+                return {"violations": violations, "total": int(total or 0), "limit": limit, "offset": offset}
+
+        except Exception as e:
+            logger.error(f"查询违规明细失败: {e}")
+            raise RepositoryError(f"查询违规明细失败: {e}")
+
+    async def update_violation_status(
+        self,
+        violation_id: int,
+        status: str,
+        notes: Optional[str] = None,
+        handled_by: Optional[str] = None,
+    ) -> bool:
+        """
+        更新违规状态
+
+        Args:
+            violation_id: 违规ID
+            status: 新状态（pending, confirmed, false_positive, resolved）
+            notes: 备注信息（可选）
+            handled_by: 处理人（可选）
+
+        Returns:
+            bool: 更新是否成功
+        """
+        try:
+            conn = await self._get_connection()
+
+            # 构建UPDATE语句
+            update_fields = ["status = $1", "handled_at = NOW()"]
+            params: List[Any] = [status]
+            param_idx = 1
+
+            if notes is not None:
+                param_idx += 1
+                update_fields.append(f"notes = ${param_idx}")
+                params.append(notes)
+
+            if handled_by is not None:
+                param_idx += 1
+                update_fields.append(f"handled_by = ${param_idx}")
+                params.append(handled_by)
+
+            param_idx += 1
+            update_sql = f"""
+                UPDATE violation_events
+                SET {', '.join(update_fields)}
+                WHERE id = ${param_idx}
+            """
+            params.append(violation_id)
+
+            result = await conn.execute(update_sql, *params)
+
+            # PostgreSQL返回格式: "UPDATE N"
+            updated_count = int(result.split()[-1])
+            success = updated_count > 0
+
+            if success:
+                logger.info(f"违规状态已更新: {violation_id} -> {status}")
+            else:
+                logger.warning(f"违规记录不存在: {violation_id}")
+
+            return success
+
+        except Exception as e:
+            logger.error(f"更新违规状态失败: {e}")
+            raise RepositoryError(f"更新违规状态失败: {e}")
+
     def _row_to_record(self, row) -> DetectionRecord:
-        """将数据库行转换为DetectionRecord对象"""
+        """将数据库行转换为DetectionRecord对象（兼容无 objects/信心度的结构）。"""
+        try:
+            objects_val = row.get("objects") if hasattr(row, "get") else row["objects"]
+        except Exception:
+            objects_val = []
+        # 解析 objects JSON
+        if isinstance(objects_val, str):
+            try:
+                objects_val = json.loads(objects_val)
+            except Exception:
+                objects_val = []
+
+        # 置信度兼容
+        try:
+            confidence_val = float(row["confidence"]) if row["confidence"] is not None else 0.0
+        except Exception:
+            confidence_val = 0.0
+
+        # 元数据兼容
+        metadata_val = None
+        try:
+            metadata_val = row["metadata"]
+            if isinstance(metadata_val, str):
+                metadata_val = json.loads(metadata_val)
+        except Exception:
+            metadata_val = None
+
         return DetectionRecord(
             id=row["id"],
             camera_id=row["camera_id"],
-            objects=json.loads(row["objects"])
-            if isinstance(row["objects"], str)
-            else row["objects"],
+            objects=objects_val or [],
             timestamp=row["timestamp"],
-            confidence=row["confidence"],
+            confidence=confidence_val,
             processing_time=row["processing_time"],
-            frame_id=row["frame_id"],
-            region_id=row["region_id"],
-            metadata=json.loads(row["metadata"])
-            if row["metadata"] and isinstance(row["metadata"], str)
-            else row["metadata"],
+            frame_id=row.get("frame_id") if hasattr(row, "get") else row["frame_id"],
+            region_id=row.get("region_id") if hasattr(row, "get") else row["region_id"],
+            metadata=metadata_val,
         )
 
     async def close(self):
