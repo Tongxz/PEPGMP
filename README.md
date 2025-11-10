@@ -306,6 +306,42 @@ REDIS_URL=redis://:STRONG_PASSWORD@prod-redis:6379/0
    - 所有 `.env.bak.*` 文件都是备份，可以安全删除
    - 有Git历史记录，不需要本地备份
 
+### 快照存储配置
+
+新增检测快照持久化后，可通过以下环境变量控制存储行为：
+
+| 环境变量 | 默认值 | 作用 |
+|----------|--------|------|
+| `SNAPSHOT_BASE_DIR` | `datasets/raw` | 快照根目录，建议使用绝对路径确保多进程可见 |
+| `SNAPSHOT_IMAGE_FORMAT` | `jpg` | 保存格式，支持 `jpg` / `png` |
+| `SNAPSHOT_IMAGE_QUALITY` | `90` | JPEG 图像质量（1-100），数值越大画质越好文件越大 |
+
+> ⚠️ 建议确保目录具有写入权限，并纳入备份策略。
+
+### 数据集生成配置
+
+通过 MLOps 接口生成训练数据集时，可使用以下环境变量定制输出位置及标注文件：
+
+| 环境变量 | 默认值 | 说明 |
+|----------|--------|------|
+| `DATASET_OUTPUT_DIR` | `datasets/exports` | 自动生成数据集的根目录 |
+| `DATASET_ANNOTATION_FORMAT` | `csv` | 当前支持 `csv` |
+| `DATASET_ANNOTATION_FILENAME` | `annotations.csv` | 标注文件名称 |
+
+接口会将检测快照拷贝至 `images/` 子目录，并生成 `annotations.csv` 描述快照与违规信息。
+
+### 模型训练配置
+
+工作流中的“模型训练”步骤会读取自动生成的数据集并输出轻量级分类模型，可通过以下环境变量调整行为：
+
+| 环境变量 | 默认值 | 说明 |
+|----------|--------|------|
+| `MODEL_TRAINING_OUTPUT_DIR` | `models/mlops` | 训练得到的模型文件保存目录 |
+| `MODEL_TRAINING_REPORT_DIR` | `models/mlops/reports` | 训练报告输出目录 |
+| `MODEL_TRAINING_TEST_SIZE` | `0.2` | 训练/验证集划分比例 |
+| `MODEL_TRAINING_RANDOM_STATE` | `42` | 随机种子，保证可复现 |
+| `MODEL_TRAINING_MAX_ITER` | `200` | 逻辑回归最大迭代次数 |
+
 ---
 
 ## 🐳 Docker服务管理
@@ -435,7 +471,26 @@ python scripts/export_regions_to_json.py
 
 - **[➡️ 系统架构文档 (docs/SYSTEM_ARCHITECTURE.md)](./docs/SYSTEM_ARCHITECTURE.md)**: 详细的系统架构说明，包括DDD架构设计、数据流、API端点等。
 
-- **[➡️ 重构完成报告 (docs/REFACTORING_COMPLETE_CHECKLIST.md)](./docs/REFACTORING_COMPLETE_CHECKLIST.md)**: 完整的重构工作检查清单，包括38个API端点重构、配置迁移等。
+- **[➡️ 最近更新索引 (docs/RECENT_UPDATES_INDEX.md)](./docs/RECENT_UPDATES_INDEX.md)**: **最新更新文档索引**，快速查找最近的更新和文档。
+
+### 最近更新（2025-11-04）
+
+#### 代码重构 ✅
+- **[代码重构完成报告](./docs/MAIN_REFACTORING_FINAL_SUMMARY.md)**: main.py 简化（1,226→368行，-70%）
+- **[重构测试报告](./docs/REFACTORING_TEST_RESULTS.md)**: 完整测试验证结果
+
+#### 问题修复 ✅
+- **[P0问题修复](./docs/P0_ISSUES_FIX_COMPLETE.md)**: 数据库时区和greenlet依赖修复
+- **[P1问题修复](./docs/P1_ISSUES_FIX_COMPLETE.md)**: 文档和XGBoost修复
+- **[全部工作总结](./docs/ALL_ISSUES_FIX_SUMMARY.md)**: 完整工作总结
+
+#### 依赖管理 ✅
+- **[可选依赖指南](./docs/OPTIONAL_DEPENDENCIES.md)**: 完整的依赖管理指南
+- **[pyproject.toml依赖组指南](./docs/PYPROJECT_DEPENDENCIES_GUIDE.md)**: 依赖组使用指南
+
+#### XGBoost ML分类器 ✅
+- **[XGBoost详细分析](./docs/XGBOOST_ANALYSIS.md)**: 技术原理和选择理由
+- **[XGBoost启用指南](./docs/XGBOOST_ENABLE_GUIDE.md)**: 启用步骤和配置
 
 ### 配置和部署文档
 
@@ -456,6 +511,69 @@ python scripts/export_regions_to_json.py
 - **AI/ML**: PyTorch, Ultralytics (YOLOv8), MediaPipe
 - **数据库**: PostgreSQL (主数据源), Redis (缓存和消息队列)
 - **架构**: 领域驱动设计（DDD）, SOLID原则, 仓储模式, 依赖注入
+
+### 可选依赖
+
+本项目的部分依赖是**按需安装**的，根据您的硬件设备和功能需求选择安装。
+
+#### 使用 pyproject.toml 安装（推荐）
+
+项目已配置可选依赖组，您可以使用以下方式安装：
+
+```bash
+# 基础安装（最小依赖，推荐）
+pip install -e .
+
+# NVIDIA GPU 用户（推荐）
+pip install -e ".[gpu-nvidia]"
+
+# 需要 ML 增强功能
+pip install -e ".[ml]"
+
+# NVIDIA GPU + ML 组合（推荐用于 NVIDIA GPU 用户）
+pip install -e ".[gpu-nvidia-ml]"
+
+# 或组合多个依赖组
+pip install -e ".[gpu-nvidia,ml]"
+```
+
+#### 手动安装（备选方式）
+
+如果您不想使用可选依赖组，也可以手动安装：
+
+**NVIDIA GPU监控（仅GPU设备需要）**
+```bash
+# 仅在使用 NVIDIA GPU 时安装
+pip install pynvml
+```
+
+**说明**:
+- ✅ **CPU/Mac设备**: 无需安装，系统会自动使用PyTorch进行设备检测
+- ✅ **NVIDIA GPU**: 推荐安装以获取详细的GPU信息和监控
+- ✅ **未安装时**: 系统自动回退到PyTorch，功能不受影响
+
+**XGBoost机器学习分类器 - 洗手行为识别增强**
+```bash
+pip install xgboost
+```
+
+**说明**:
+- 用于提升洗手行为识别的准确率，与规则引擎融合使用
+- 默认使用规则推理引擎（无需此依赖）
+- 安装后可在配置文件中启用（`use_ml_classifier: true`）
+- 详细说明请参考: [XGBoost 详细分析](./docs/XGBOOST_ANALYSIS.md)
+
+#### 可选依赖组说明
+
+| 依赖组 | 包含依赖 | 适用场景 |
+|--------|---------|----------|
+| `gpu-nvidia` | pynvml | NVIDIA GPU 用户 |
+| `ml` | xgboost | 洗手行为识别增强 |
+| `gpu-nvidia-ml` | pynvml + xgboost | NVIDIA GPU + ML 用户 |
+| `dev` | 测试、代码质量工具 | 开发环境 |
+| `test` | 测试框架 | 运行测试 |
+| `docs` | 文档工具 | 生成文档 |
+| `production` | Gunicorn、监控等 | 生产环境 |
 
 ### 前端技术
 - **框架**: Vue 3, Vite, TypeScript
