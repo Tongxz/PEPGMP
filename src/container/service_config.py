@@ -6,12 +6,17 @@
 import logging
 import os
 
+from src.application.dataset_generation_service import DatasetGenerationService
+from src.application.model_training_service import ModelTrainingService
+from src.config.dataset_config import get_dataset_generation_config
+from src.config.model_training_config import get_model_training_config
 from src.container.service_container import container
 from src.infrastructure.repositories.repository_factory import RepositoryFactory
 from src.interfaces.detection.detector_interface import IDetector
 from src.interfaces.repositories.detection_repository_interface import (
     IDetectionRepository,
 )
+from src.interfaces.storage import SnapshotStorageProtocol
 from src.interfaces.tracking.tracker_interface import ITracker
 
 logger = logging.getLogger(__name__)
@@ -127,7 +132,7 @@ def _configure_tracker_services():
         logger.warning("使用默认跟踪器实现")
 
 
-def _configure_repository_services():
+def _configure_repository_services():  # noqa: C901
     """配置仓储服务"""
     try:
         # 通过工厂按配置创建仓储实现（postgresql|redis|hybrid）
@@ -227,6 +232,10 @@ def _configure_repository_services():
 
 def _configure_other_services():
     """配置其他服务"""
+    _configure_storage_services()
+    _configure_dataset_services()
+    _configure_training_services()
+
     # 领域服务开关
     use_domain_service = os.getenv("USE_DOMAIN_SERVICE", "false").lower() == "true"
     if use_domain_service:
@@ -244,6 +253,47 @@ def _configure_other_services():
             logger.error(f"注册领域检测服务失败: {e}")
     else:
         logger.info("领域检测服务未启用（USE_DOMAIN_SERVICE=false）")
+
+
+def _configure_storage_services():
+    """配置存储服务"""
+    try:
+        from src.config.storage_config import build_snapshot_storage
+
+        snapshot_storage = build_snapshot_storage()
+        container.register_instance(SnapshotStorageProtocol, snapshot_storage)
+        logger.info(
+            "快照存储服务已注册: %s",
+            snapshot_storage.__class__.__name__,
+        )
+    except Exception as exc:
+        logger.error(f"注册快照存储服务失败: {exc}")
+
+
+def _configure_dataset_services():
+    """配置数据集服务"""
+    try:
+        detection_repository = container.get(IDetectionRepository)
+        dataset_config = get_dataset_generation_config()
+        dataset_service = DatasetGenerationService(
+            detection_repository=detection_repository,
+            config=dataset_config,
+        )
+        container.register_instance(DatasetGenerationService, dataset_service)
+        logger.info("数据集生成服务已注册")
+    except Exception as exc:
+        logger.error(f"注册数据集生成服务失败: {exc}")
+
+
+def _configure_training_services():
+    """配置模型训练服务"""
+    try:
+        training_config = get_model_training_config()
+        training_service = ModelTrainingService(training_config)
+        container.register_instance(ModelTrainingService, training_service)
+        logger.info("模型训练服务已注册")
+    except Exception as exc:
+        logger.error(f"注册模型训练服务失败: {exc}")
 
 
 def _log_registered_services():
