@@ -33,6 +33,12 @@ class CameraControlService:
     def start_camera(self, camera_id: str) -> Dict[str, Any]:
         """启动指定摄像头的检测进程.
 
+        业务规则：
+        1. 检查摄像头是否已在运行（避免重复启动）
+        2. 检查系统资源是否足够
+        3. 启动进程
+        4. 发布摄像头启动事件（未来实现）
+
         Args:
             camera_id: 摄像头ID
 
@@ -40,21 +46,40 @@ class CameraControlService:
             包含启动结果的字典
 
         Raises:
-            ValueError: 如果摄像头不存在或启动失败
+            ValueError: 如果摄像头不存在、已在运行或启动失败
         """
         try:
-            # 检查摄像头是否存在（通过camera_service）
-            # 注意：这里需要同步调用，但camera_service是异步的
-            # 为了简化，我们先直接调用scheduler，如果失败再检查
+            # 1. 业务规则：检查摄像头是否已在运行
+            status = self.scheduler.get_status(camera_id)
+            if status.get("running"):
+                pid = status.get("pid", "unknown")
+                raise ValueError(f"摄像头 {camera_id} 已在运行（PID: {pid}），" "请先停止后再启动")
 
+            # 2. 业务规则：检查系统资源（简化版，检查运行中的摄像头数量）
+            batch_status = self.scheduler.get_batch_status()
+            running_count = sum(1 for s in batch_status.values() if s.get("running"))
+            MAX_CONCURRENT_CAMERAS = 10  # 可配置
+
+            if running_count >= MAX_CONCURRENT_CAMERAS:
+                raise ValueError(
+                    f"系统资源不足：当前运行 {running_count} 个摄像头，"
+                    f"已达上限 {MAX_CONCURRENT_CAMERAS}"
+                )
+
+            # 3. 启动进程（委托给执行器）
             res = self.scheduler.start_detection(camera_id)
             if not res.get("ok"):
-                logger.error(f"启动摄像头失败 {camera_id}: {res}")
-                raise ValueError(res.get("error") or "启动摄像头失败")
+                error_msg = res.get("error") or "启动摄像头失败"
+                logger.error(f"启动摄像头失败 {camera_id}: {error_msg}")
+                raise ValueError(error_msg)
 
+            # 4. 记录成功日志
             logger.info(
-                f"摄像头启动成功 {camera_id}: pid={res.get('pid')} log={res.get('log')}"
+                f"✓ 摄像头启动成功 {camera_id}: " f"pid={res.get('pid')}, log={res.get('log')}"
             )
+
+            # TODO: 发布领域事件 CameraStartedEvent
+
             return res
 
         except ValueError:
@@ -66,6 +91,12 @@ class CameraControlService:
     def stop_camera(self, camera_id: str) -> Dict[str, Any]:
         """停止指定摄像头的检测进程.
 
+        业务规则：
+        1. 检查摄像头是否正在运行
+        2. 停止进程
+        3. 验证进程已停止
+        4. 发布摄像头停止事件（未来实现）
+
         Args:
             camera_id: 摄像头ID
 
@@ -76,12 +107,41 @@ class CameraControlService:
             ValueError: 如果停止失败
         """
         try:
+            # 1. 业务规则：检查摄像头是否正在运行
+            status = self.scheduler.get_status(camera_id)
+            if not status.get("running"):
+                logger.warning(f"摄像头 {camera_id} 未在运行，无需停止")
+                return {
+                    "ok": True,
+                    "running": False,
+                    "message": "摄像头未在运行",
+                }
+
+            pid = status.get("pid")
+            logger.info(f"正在停止摄像头 {camera_id} (PID: {pid})...")
+
+            # 2. 停止进程（委托给执行器）
             res = self.scheduler.stop_detection(camera_id)
             if not res.get("ok"):
-                logger.error(f"停止摄像头失败 {camera_id}: {res}")
-                raise ValueError(res.get("error") or "停止摄像头失败")
+                error_msg = res.get("error") or "停止摄像头失败"
+                logger.error(f"停止摄像头失败 {camera_id}: {error_msg}")
+                raise ValueError(error_msg)
 
-            logger.info(f"摄像头停止成功 {camera_id}")
+            # 3. 验证进程已停止（业务规则）
+            # 给进程一点时间停止
+            import time
+
+            time.sleep(0.5)
+
+            final_status = self.scheduler.get_status(camera_id)
+            if final_status.get("running"):
+                logger.warning(f"摄像头 {camera_id} 进程可能仍在运行，" "系统将在后台继续尝试停止")
+
+            # 4. 记录成功日志
+            logger.info(f"✓ 摄像头停止成功 {camera_id}")
+
+            # TODO: 发布领域事件 CameraStoppedEvent
+
             return res
 
         except ValueError:

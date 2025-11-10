@@ -183,28 +183,53 @@ class DetectionService:
         # 基本统计
         total_records = len(records)
         total_objects = sum(record.object_count for record in records)
+        # average_confidence 属性已兼容字典和对象格式
         average_confidence = (
             sum(record.average_confidence for record in records) / total_records
+            if total_records > 0
+            else 0.0
         )
         average_processing_time = (
             sum(record.processing_time for record in records) / total_records
+            if total_records > 0
+            else 0.0
         )
 
-        # 对象分布
+        # 对象分布（兼容字典格式和对象格式）
         object_distribution = {}
         for record in records:
             for obj in record.objects:
-                class_name = obj.class_name
+                # 兼容字典格式（从数据库读取）和对象格式
+                if isinstance(obj, dict):
+                    class_name = obj.get("class_name", "unknown")
+                else:
+                    class_name = obj.class_name
                 object_distribution[class_name] = (
                     object_distribution.get(class_name, 0) + 1
                 )
 
-        # 置信度分布
+        # 置信度分布（兼容字典格式和对象格式）
         confidence_ranges = {"high": 0, "medium": 0, "low": 0}
         for record in records:
-            confidence_ranges["high"] += len(record.high_confidence_objects)
-            confidence_ranges["medium"] += len(record.medium_confidence_objects)
-            confidence_ranges["low"] += len(record.low_confidence_objects)
+            if not record.objects:
+                continue
+            # 如果 objects 是字典列表，需要手动计算置信度分布
+            if isinstance(record.objects[0], dict):
+                for obj in record.objects:
+                    conf_value = obj.get("confidence", 0.0)
+                    if isinstance(conf_value, dict):
+                        conf_value = conf_value.get("value", 0.0)
+                    if conf_value >= 0.8:
+                        confidence_ranges["high"] += 1
+                    elif conf_value >= 0.5:
+                        confidence_ranges["medium"] += 1
+                    else:
+                        confidence_ranges["low"] += 1
+            else:
+                # 对象格式，使用属性
+                confidence_ranges["high"] += len(record.high_confidence_objects)
+                confidence_ranges["medium"] += len(record.medium_confidence_objects)
+                confidence_ranges["low"] += len(record.low_confidence_objects)
 
         # 时间范围
         timestamps = [record.timestamp for record in records]

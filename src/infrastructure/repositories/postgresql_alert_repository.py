@@ -95,6 +95,17 @@ class PostgreSQLAlertRepository(IAlertRepository):
         try:
             conn = await self._get_connection()
             try:
+                # 数据库列是 TIMESTAMP WITHOUT TIME ZONE，需要naive datetime
+                # 如果传入的是aware datetime，先转换为UTC，然后去掉时区信息
+                from datetime import timezone as tz
+
+                timestamp_value = alert.timestamp
+                if timestamp_value.tzinfo is not None:
+                    # 转换为UTC并去掉时区信息
+                    timestamp_value = timestamp_value.astimezone(tz.utc).replace(
+                        tzinfo=None
+                    )
+
                 alert_id = await conn.fetchval(
                     """
                     INSERT INTO alert_history (
@@ -112,7 +123,7 @@ class PostgreSQLAlertRepository(IAlertRepository):
                     json.dumps(alert.notification_channels_used)
                     if alert.notification_channels_used
                     else None,
-                    alert.timestamp,
+                    timestamp_value,
                 )
                 return alert_id
             finally:

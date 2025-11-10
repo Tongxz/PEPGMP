@@ -122,6 +122,26 @@ class LocalProcessExecutor(AbstractProcessExecutor):
         cmd += ["--log-interval", "120"]
 
         env = os.environ.copy()
+
+        # 确保Redis环境变量被传递（如果未设置，使用默认值）
+        if "REDIS_URL" not in env:
+            redis_host = os.getenv("REDIS_HOST", "localhost")
+            redis_port = os.getenv("REDIS_PORT", "6379")
+            redis_db = os.getenv("REDIS_DB", "0")
+            redis_password = os.getenv(
+                "REDIS_PASSWORD", "pyt_dev_redis"
+            )  # Docker Redis默认密码
+            if redis_password:
+                env[
+                    "REDIS_URL"
+                ] = f"redis://:{redis_password}@{redis_host}:{redis_port}/{redis_db}"
+            else:
+                env["REDIS_URL"] = f"redis://{redis_host}:{redis_port}/{redis_db}"
+
+        # 确保视频流相关环境变量被传递
+        if "VIDEO_STREAM_USE_REDIS" not in env:
+            env["VIDEO_STREAM_USE_REDIS"] = "1"
+
         cam_env: Dict[str, Any] = cam.get("env", {}) or {}
         for k, v in cam_env.items():
             env[str(k)] = str(v)

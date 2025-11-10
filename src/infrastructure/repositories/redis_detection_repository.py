@@ -176,6 +176,7 @@ class RedisDetectionRepository(IDetectionRepository):
         end_time: datetime,
         camera_id: Optional[str] = None,
         limit: int = 100,
+        offset: int = 0,
     ) -> List[DetectionRecord]:
         """
         根据时间范围查找记录

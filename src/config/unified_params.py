@@ -103,11 +103,14 @@ class BehaviorRecognitionParams:
     # 历史记录配置
     history_maxlen: int = 30  # 行为历史最大长度
 
-    # ML 分类器融合（可选）
-    use_ml_classifier: bool = False
-    ml_model_path: str = "models/handwash_xgb.joblib"
-    ml_window: int = 30
-    ml_fusion_alpha: float = 0.7
+    # ML 分类器融合（XGBoost）
+    # 用于洗手行为识别，与规则引擎进行加权融合提升准确率
+    # 详细说明请参考: docs/XGBOOST_ANALYSIS.md
+    # 启用方法: 在 config/unified_params.yaml 中设置 use_ml_classifier: true
+    use_ml_classifier: bool = False  # 默认关闭，需在配置文件中启用
+    ml_model_path: str = "models/handwash_xgb.joblib.real"  # 使用joblib格式以兼容XGBoost 3.0+
+    ml_window: int = 30  # 时序窗口大小（帧数）
+    ml_fusion_alpha: float = 0.7  # ML权重，规则权重 = 1 - alpha
 
 
 @dataclass
@@ -234,7 +237,7 @@ class UnifiedParams:
             logger.error(f"保存配置失败: {e}")
 
     @classmethod
-    def load_from_yaml(cls, file_path: str) -> "UnifiedParams":
+    def load_from_yaml(cls, file_path: str) -> "UnifiedParams":  # noqa: C901
         """从YAML文件加载配置"""
         instance = cls()
 

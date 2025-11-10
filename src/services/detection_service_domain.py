@@ -4,7 +4,8 @@
 """
 
 import logging
-from datetime import datetime
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from src.domain.entities.camera import Camera, CameraStatus, CameraType
@@ -16,12 +17,14 @@ from src.domain.events.detection_events import (
 )
 from src.domain.repositories.camera_repository import ICameraRepository
 from src.domain.repositories.detection_repository import IDetectionRepository
+from src.domain.repositories.violation_repository import IViolationRepository
 from src.domain.services.detection_service import DetectionService
 from src.domain.services.violation_service import ViolationService
 from src.domain.value_objects.bounding_box import BoundingBox
 from src.domain.value_objects.confidence import Confidence
 from src.domain.value_objects.timestamp import Timestamp
 from src.infrastructure.repositories.repository_factory import RepositoryFactory
+from src.interfaces.storage import SnapshotInfo
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,7 @@ class DetectionServiceDomain:
         self,
         detection_repository: IDetectionRepository,
         camera_repository: ICameraRepository,
+        violation_repository: Optional[IViolationRepository] = None,
     ):
         """
         初始化检测服务
@@ -40,20 +44,23 @@ class DetectionServiceDomain:
         Args:
             detection_repository: 检测记录仓储
             camera_repository: 摄像头仓储
+            violation_repository: 违规仓储（可选）
         """
         self.detection_repository = detection_repository
         self.camera_repository = camera_repository
+        self.violation_repository = violation_repository
         self.detection_service = DetectionService()
         self.violation_service = ViolationService()
 
         logger.info("领域模型检测服务初始化完成")
 
-    async def process_detection(
+    async def process_detection(  # noqa: C901
         self,
         camera_id: str,
         detected_objects: List[Dict[str, Any]],
         processing_time: float,
         frame_id: Optional[int] = None,
+        snapshots: Optional[List[SnapshotInfo]] = None,
     ) -> DetectionRecord:
         """
         处理检测结果 - 使用领域模型
@@ -76,13 +83,49 @@ class DetectionServiceDomain:
             # 2. 创建检测对象实体
             domain_objects = []
             for obj_data in detected_objects:
-                bbox = BoundingBox(
-                    x1=obj_data["bbox"][0],
-                    y1=obj_data["bbox"][1],
-                    x2=obj_data["bbox"][2],
-                    y2=obj_data["bbox"][3],
-                )
-                confidence = Confidence(obj_data["confidence"])
+                # 验证和修复边界框数据
+                bbox_data = obj_data.get("bbox", [0, 0, 0, 0])
+                if len(bbox_data) < 4:
+                    logger.warning(f"无效的边界框数据: {bbox_data}，跳过此对象")
+                    continue
+
+                x1, y1, x2, y2 = bbox_data[0], bbox_data[1], bbox_data[2], bbox_data[3]
+
+                # 修复无效的边界框（确保 x1 < x2 和 y1 < y2）
+                if x1 >= x2:
+                    if x1 == 0 and x2 == 0:
+                        # 如果都是0，跳过此对象
+                        logger.debug(f"边界框宽度为0，跳过: {bbox_data}")
+                        continue
+                    else:
+                        # 交换坐标
+                        x1, x2 = min(x1, x2), max(x1, x2)
+                        logger.debug(
+                            f"修复边界框 x 坐标: {bbox_data} -> [{x1}, {y1}, {x2}, {y2}]"
+                        )
+
+                if y1 >= y2:
+                    if y1 == 0 and y2 == 0:
+                        # 如果都是0，跳过此对象
+                        logger.debug(f"边界框高度为0，跳过: {bbox_data}")
+                        continue
+                    else:
+                        # 交换坐标
+                        y1, y2 = min(y1, y2), max(y1, y2)
+                        logger.debug(
+                            f"修复边界框 y 坐标: {bbox_data} -> [{x1}, {y1}, {x2}, {y2}]"
+                        )
+
+                # 确保坐标非负
+                x1, y1, x2, y2 = max(0, x1), max(0, y1), max(0, x2), max(0, y2)
+
+                try:
+                    bbox = BoundingBox(x1=x1, y1=y1, x2=x2, y2=y2)
+                except ValueError as e:
+                    logger.warning(f"创建边界框失败: {e}, bbox_data={bbox_data}, 跳过此对象")
+                    continue
+
+                confidence = Confidence(obj_data.get("confidence", 0.0))
 
                 domain_obj = DetectedObject(
                     class_id=obj_data["class_id"],
@@ -96,7 +139,7 @@ class DetectionServiceDomain:
 
             # 3. 创建检测记录实体
             record = DetectionRecord(
-                id=f"{camera_id}_{int(datetime.now().timestamp() * 1000)}",
+                id=f"{camera_id}_{int(datetime.now(timezone.utc).timestamp() * 1000)}",
                 camera_id=camera_id,
                 objects=domain_objects,
                 timestamp=Timestamp.now(),
@@ -104,6 +147,21 @@ class DetectionServiceDomain:
                 frame_id=frame_id,
                 region_id=camera.region_id,
             )
+
+            if snapshots:
+                record.add_metadata(
+                    "snapshots",
+                    [
+                        {
+                            "relative_path": info.relative_path,
+                            "absolute_path": info.absolute_path,
+                            "captured_at": info.captured_at.isoformat(),
+                            "violation_type": info.violation_type,
+                            "metadata": dict(info.metadata) if info.metadata else None,
+                        }
+                        for info in snapshots
+                    ],
+                )
 
             # 4. 分析检测质量
             quality_analysis = self.detection_service.analyze_detection_quality(record)
@@ -115,15 +173,37 @@ class DetectionServiceDomain:
                 record.add_metadata("violations", [v.__dict__ for v in violations])
                 record.add_metadata("violation_count", len(violations))
 
-                # 发布违规事件
+            # 6. 保存检测记录（先保存以获取数据库ID）
+            saved_record_id = await self.detection_repository.save(record)
+
+            # 7. 保存违规事件到violation_events表（如果有违规）
+            if violations and self.violation_repository:
+                for violation in violations:
+                    try:
+                        # 在violation的metadata中添加detection_id（字符串格式，用于记录）
+                        if not violation.metadata:
+                            violation.metadata = {}
+                        violation.metadata["detection_id"] = saved_record_id
+
+                        # 保存违规事件（传递detection_id，仓储会处理ID转换）
+                        await self.violation_repository.save(
+                            violation, detection_id=saved_record_id
+                        )
+                        logger.debug(
+                            f"违规事件已保存: type={violation.violation_type.value}, "
+                            f"camera={violation.camera_id}, detection_id={saved_record_id}"
+                        )
+                    except Exception as e:
+                        logger.error(f"保存违规事件失败: {e}", exc_info=True)
+                        # 不中断流程，继续处理其他违规
+
+            # 8. 发布违规事件（如果有违规）
+            if violations:
                 for violation in violations:
                     event = ViolationDetectedEvent.from_violation(violation)
                     await self._publish_event(event)
 
-            # 6. 保存检测记录
-            await self.detection_repository.save(record)
-
-            # 7. 发布检测创建事件
+            # 9. 发布检测创建事件
             detection_event = DetectionCreatedEvent.from_detection_record(record)
             await self._publish_event(detection_event)
 
@@ -165,7 +245,7 @@ class DetectionServiceDomain:
                 )
             else:
                 # 获取最近1小时的记录
-                end_time = datetime.now()
+                end_time = datetime.now(timezone.utc)
                 from datetime import timedelta
 
                 start_time = end_time - timedelta(hours=1)
@@ -249,7 +329,7 @@ class DetectionServiceDomain:
                 raise ValueError(f"摄像头不存在: {camera_id}")
 
             # 2. 获取最近的检测记录
-            end_time = datetime.now()
+            end_time = datetime.now(timezone.utc)
             from datetime import timedelta
 
             start_time = end_time - timedelta(hours=24)  # 最近24小时
@@ -407,6 +487,8 @@ class DetectionServiceDomain:
         camera_id: str,
         limit: int = 100,
         offset: int = 0,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
     ) -> Dict[str, Any]:
         """
         根据摄像头ID获取检测记录列表
@@ -415,38 +497,113 @@ class DetectionServiceDomain:
             camera_id: 摄像头ID
             limit: 返回记录数量
             offset: 偏移量
+            start_time: 开始时间（可选，用于优化查询）
+            end_time: 结束时间（可选，用于优化查询）
 
         Returns:
             Dict[str, Any]: 包含检测记录列表和总数等信息
         """
         try:
-            # 从仓储获取检测记录
-            records = await self.detection_repository.find_by_camera_id(
-                camera_id, limit=limit, offset=offset
-            )
+            # 完全移除COUNT查询，避免性能问题
+            # 如果有时间范围，使用时间范围查询（更高效）
+            if start_time and end_time:
+                records = await self.detection_repository.find_by_time_range(
+                    start_time=start_time,
+                    end_time=end_time,
+                    camera_id=camera_id,
+                    limit=limit,
+                    offset=offset,
+                )
+                # 对于时间范围查询，使用智能近似总数
+                if len(records) == limit:
+                    # 返回的记录数等于limit，说明可能还有更多数据
+                    total = offset + len(records) + 1  # +1表示可能还有更多
+                else:
+                    # 返回的记录数小于limit，说明这是最后一页
+                    total = offset + len(records)
+            else:
+                # 如果没有提供时间范围，默认查询最近1小时的数据，避免全表扫描
+                # 这样可以大幅提升查询性能（减少到1小时，用户可以手动选择更长时间范围）
+                if not start_time and not end_time:
+                    end_time = datetime.utcnow()
+                    start_time = end_time - timedelta(hours=1)  # 改为1小时，大幅减少数据量
+                    logger.debug(f"未提供时间范围，默认查询最近1小时: {start_time} to {end_time}")
+
+                    records = await self.detection_repository.find_by_time_range(
+                        start_time=start_time,
+                        end_time=end_time,
+                        camera_id=camera_id,
+                        limit=limit,
+                        offset=offset,
+                    )
+                else:
+                    # 从仓储获取检测记录
+                    records = await self.detection_repository.find_by_camera_id(
+                        camera_id, limit=limit, offset=offset
+                    )
+
+                # 完全移除COUNT查询，使用智能近似值
+                # 如果返回的记录数等于limit，说明可能还有更多数据
+                if len(records) == limit:
+                    # 返回的记录数等于limit，说明可能还有更多数据
+                    total = offset + len(records) + 1  # +1表示可能还有更多
+                else:
+                    # 返回的记录数小于limit，说明这是最后一页
+                    total = offset + len(records)
 
             # 转换为字典格式（兼容旧API响应结构）
+            # 优化：减少不必要的对象属性访问，直接使用记录数据
             formatted_records = []
             for record in records:
-                formatted_records.append(
-                    {
-                        "id": record.id,
-                        "camera_id": record.camera_id,
-                        "timestamp": record.timestamp.iso_string,
-                        "frame_number": record.frame_id or 0,
-                        "person_count": record.person_count,
-                        "hairnet_violations": record.metadata.get(
-                            "hairnet_violations", 0
-                        ),
-                        "handwash_events": record.metadata.get("handwash_events", 0),
-                        "sanitize_events": record.metadata.get("sanitize_events", 0),
-                        "fps": record.metadata.get("fps", 0.0),
-                        "processing_time": record.processing_time,
-                    }
+                # 优化时间戳转换 - 直接获取datetime对象
+                try:
+                    if hasattr(record.timestamp, "value"):
+                        ts_value = record.timestamp.value
+                        if hasattr(ts_value, "isoformat"):
+                            timestamp_str = ts_value.isoformat()
+                        else:
+                            timestamp_str = str(ts_value)
+                    elif hasattr(record.timestamp, "iso_string"):
+                        timestamp_str = record.timestamp.iso_string
+                    else:
+                        timestamp_str = str(record.timestamp)
+                except Exception:
+                    timestamp_str = str(record.timestamp)
+
+                # 优化metadata访问 - 缓存结果
+                metadata = record.metadata or {} if hasattr(record, "metadata") else {}
+
+                # 优化person_count - 直接使用属性，避免重复计算
+                person_count = (
+                    record.person_count if hasattr(record, "person_count") else 0
                 )
 
-            # 获取总数（用于分页）
-            total = await self.detection_repository.count_by_camera_id(camera_id)
+                formatted_records.append(
+                    {
+                        "id": str(record.id),
+                        "camera_id": str(record.camera_id),
+                        "timestamp": timestamp_str,
+                        "frame_number": record.frame_id or 0
+                        if hasattr(record, "frame_id")
+                        else 0,
+                        "person_count": person_count,
+                        "hairnet_violations": metadata.get("hairnet_violations", 0)
+                        if isinstance(metadata, dict)
+                        else 0,
+                        "handwash_events": metadata.get("handwash_events", 0)
+                        if isinstance(metadata, dict)
+                        else 0,
+                        "sanitize_events": metadata.get("sanitize_events", 0)
+                        if isinstance(metadata, dict)
+                        else 0,
+                        "fps": metadata.get("fps", 0.0)
+                        if isinstance(metadata, dict)
+                        else 0.0,
+                        "processing_time": float(record.processing_time)
+                        if hasattr(record, "processing_time")
+                        else 0.0,
+                    }
+                )
 
             return {
                 "records": formatted_records,
@@ -509,11 +666,10 @@ class DetectionServiceDomain:
             List[Dict[str, Any]]: 每日统计信息列表
         """
         try:
-            from collections import defaultdict
             from datetime import timedelta
 
             # 计算时间范围
-            end_time = datetime.now()
+            end_time = datetime.now(timezone.utc)
             start_time = end_time - timedelta(days=days)
 
             # 获取检测记录
@@ -522,20 +678,28 @@ class DetectionServiceDomain:
             )
 
             # 按天分组统计
-            from collections import defaultdict
-
             per_day: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
             total_day: Dict[str, int] = defaultdict(int)
 
             for record in records:
                 # 获取日期字符串
-                # timestamp 是 Timestamp 对象，转换为 datetime
-                record_date = record.timestamp.value
+                # timestamp 是 Timestamp 对象，需要获取 value 属性
+                if hasattr(record.timestamp, "value"):
+                    record_date = record.timestamp.value
+                elif isinstance(record.timestamp, datetime):
+                    record_date = record.timestamp
+                else:
+                    # 如果是其他格式，尝试转换
+                    record_date = datetime.fromisoformat(str(record.timestamp))
                 date_str = record_date.date().isoformat()
 
                 # 统计对象类型
                 for obj in record.objects:
-                    class_name = obj.class_name
+                    # 兼容字典格式和对象格式
+                    if isinstance(obj, dict):
+                        class_name = obj.get("class_name", "unknown")
+                    else:
+                        class_name = obj.class_name
                     per_day[date_str][class_name] += 1
 
                 total_day[date_str] += 1
@@ -585,7 +749,7 @@ class DetectionServiceDomain:
 
             # 默认查询最近24小时
             if not end_time:
-                end_time = datetime.now()
+                end_time = datetime.now(timezone.utc)
             if not start_time:
                 start_time = end_time - timedelta(hours=24)
 
@@ -602,21 +766,48 @@ class DetectionServiceDomain:
                     continue
 
                 # 从检测记录生成事件
+                # 注意：record.objects可能是字典列表（从数据库读取）或DetectedObject对象列表
                 for obj in record.objects:
+                    # 兼容字典格式和对象格式
+                    if isinstance(obj, dict):
+                        obj_class_name = obj.get("class_name", "unknown")
+                        obj_confidence = obj.get("confidence", 0.0)
+                        obj_track_id = obj.get("track_id")
+                        obj_metadata = obj.get("metadata", {})
+                    else:
+                        # DetectedObject对象格式
+                        obj_class_name = obj.class_name
+                        obj_confidence = (
+                            obj.confidence.value
+                            if hasattr(obj.confidence, "value")
+                            else obj.confidence
+                        )
+                        obj_track_id = obj.track_id
+                        obj_metadata = obj.metadata or {}
+
                     # 事件类型过滤
-                    if event_type and obj.class_name != event_type:
+                    if event_type and obj_class_name != event_type:
                         continue
+
+                    # 获取时间戳（兼容Timestamp对象和datetime）
+                    timestamp_str = (
+                        record.timestamp.iso_string
+                        if hasattr(record.timestamp, "iso_string")
+                        else record.timestamp.isoformat()
+                    )
 
                     events.append(
                         {
-                            "id": f"{record.id}_{obj.track_id or ''}",
-                            "timestamp": record.timestamp.iso_string,
-                            "type": obj.class_name,
+                            "id": f"{record.id}_{obj_track_id or ''}",
+                            "timestamp": timestamp_str,
+                            "type": obj_class_name,
                             "camera_id": record.camera_id,
-                            "confidence": obj.confidence.value,
-                            "track_id": obj.track_id,
+                            "confidence": float(obj_confidence)
+                            if obj_confidence is not None
+                            else 0.0,
+                            "track_id": obj_track_id,
                             "region": record.region_id,
-                            "metadata": obj.metadata,
+                            "metadata": obj_metadata,
                         }
                     )
 
@@ -653,7 +844,7 @@ class DetectionServiceDomain:
             from datetime import timedelta
 
             # 计算时间范围
-            end_time = datetime.now()
+            end_time = datetime.now(timezone.utc)
             start_time = end_time - timedelta(minutes=minutes)
 
             # 获取检测记录
@@ -664,19 +855,49 @@ class DetectionServiceDomain:
             # 转换为事件列表（按时间倒序）
             events = []
             for record in sorted(
-                records, key=lambda r: r.timestamp.value, reverse=True
+                records,
+                key=lambda r: r.timestamp.value
+                if hasattr(r.timestamp, "value")
+                else r.timestamp,
+                reverse=True,
             ):
+                # 兼容字典格式和对象格式
                 for obj in record.objects:
+                    if isinstance(obj, dict):
+                        obj_class_name = obj.get("class_name", "unknown")
+                        obj_confidence = obj.get("confidence", 0.0)
+                        obj_track_id = obj.get("track_id")
+                        obj_metadata = obj.get("metadata", {})
+                    else:
+                        # DetectedObject对象格式
+                        obj_class_name = obj.class_name
+                        obj_confidence = (
+                            obj.confidence.value
+                            if hasattr(obj.confidence, "value")
+                            else obj.confidence
+                        )
+                        obj_track_id = obj.track_id
+                        obj_metadata = obj.metadata or {}
+
+                    # 获取时间戳（兼容Timestamp对象和datetime）
+                    timestamp_str = (
+                        record.timestamp.iso_string
+                        if hasattr(record.timestamp, "iso_string")
+                        else record.timestamp.isoformat()
+                    )
+
                     events.append(
                         {
-                            "id": f"{record.id}_{obj.track_id or ''}",
-                            "timestamp": record.timestamp.iso_string,
-                            "type": obj.class_name,
+                            "id": f"{record.id}_{obj_track_id or ''}",
+                            "timestamp": timestamp_str,
+                            "type": obj_class_name,
                             "camera_id": record.camera_id,
-                            "confidence": obj.confidence.value,
-                            "track_id": obj.track_id,
+                            "confidence": float(obj_confidence)
+                            if obj_confidence is not None
+                            else 0.0,
+                            "track_id": obj_track_id,
                             "region": record.region_id,
-                            "metadata": obj.metadata,
+                            "metadata": obj_metadata,
                         }
                     )
 
@@ -715,7 +936,7 @@ class DetectionServiceDomain:
             from datetime import timedelta
 
             # 计算时间范围
-            end_time = datetime.now()
+            end_time = datetime.now(timezone.utc)
             start_time = end_time - timedelta(minutes=minutes)
 
             # 获取检测记录
@@ -726,36 +947,81 @@ class DetectionServiceDomain:
             # 转换为事件列表（按时间倒序，兼容旧格式）
             events = []
             for record in sorted(
-                records, key=lambda r: r.timestamp.value, reverse=True
+                records,
+                key=lambda r: r.timestamp.value
+                if hasattr(r.timestamp, "value")
+                else r.timestamp,
+                reverse=True,
             ):
                 # 摄像头过滤
                 if camera_id and record.camera_id != camera_id:
                     continue
 
                 for obj in record.objects:
+                    # 兼容字典格式和对象格式
+                    if isinstance(obj, dict):
+                        obj_class_name = obj.get("class_name", "unknown")
+                        obj_confidence = obj.get("confidence", 0.0)
+                        obj_track_id = obj.get("track_id")
+                        obj_bbox = obj.get("bbox", [])
+                        obj_metadata = obj.get("metadata", {})
+                    else:
+                        # DetectedObject对象格式
+                        obj_class_name = obj.class_name
+                        obj_confidence = (
+                            obj.confidence.value
+                            if hasattr(obj.confidence, "value")
+                            else obj.confidence
+                        )
+                        obj_track_id = obj.track_id
+                        obj_bbox = obj.bbox
+                        obj_metadata = obj.metadata or {}
+
                     # 事件类型过滤
-                    if event_type and obj.class_name != event_type:
+                    if event_type and obj_class_name != event_type:
                         continue
+
+                    # 获取时间戳（兼容Timestamp对象和datetime）
+                    timestamp_value = (
+                        record.timestamp.value
+                        if hasattr(record.timestamp, "value")
+                        else record.timestamp
+                    )
+                    ts = (
+                        timestamp_value.timestamp()
+                        if hasattr(timestamp_value, "timestamp")
+                        else float(timestamp_value)
+                    )
+
+                    # 处理bbox（兼容BoundingBox对象和列表）
+                    bbox_list = None
+                    if obj_bbox:
+                        if hasattr(obj_bbox, "x1"):
+                            # BoundingBox对象
+                            bbox_list = [
+                                obj_bbox.x1,
+                                obj_bbox.y1,
+                                obj_bbox.x2,
+                                obj_bbox.y2,
+                            ]
+                        elif isinstance(obj_bbox, (list, tuple)) and len(obj_bbox) >= 4:
+                            # 列表格式
+                            bbox_list = list(obj_bbox[:4])
 
                     # 转换为旧API格式（兼容events_record.jsonl格式）
                     events.append(
                         {
-                            "ts": record.timestamp.value.timestamp(),
-                            "type": obj.class_name,
+                            "ts": ts,
+                            "type": obj_class_name,
                             "camera_id": record.camera_id,
-                            "track_id": obj.track_id,
+                            "track_id": obj_track_id,
                             "evidence": {
-                                "confidence": obj.confidence.value,
+                                "confidence": float(obj_confidence)
+                                if obj_confidence is not None
+                                else 0.0,
                                 "region": record.region_id,
-                                "bbox": [
-                                    obj.bbox.x1,
-                                    obj.bbox.y1,
-                                    obj.bbox.x2,
-                                    obj.bbox.y2,
-                                ]
-                                if obj.bbox
-                                else None,
-                                **obj.metadata,
+                                "bbox": bbox_list,
+                                **obj_metadata,
                             },
                         }
                     )
@@ -783,7 +1049,7 @@ class DetectionServiceDomain:
             from datetime import timedelta
 
             # 获取最近1小时的记录
-            end_time = datetime.now()
+            end_time = datetime.now(timezone.utc)
             start_time = end_time - timedelta(hours=1)
 
             # 获取检测记录
@@ -807,11 +1073,17 @@ class DetectionServiceDomain:
 
                 # 统计各类检测事件
                 for obj in record.objects:
-                    if obj.class_name.lower() in ["handwash", "handwashing"]:
+                    # 兼容字典格式和对象格式
+                    if isinstance(obj, dict):
+                        obj_class_name = obj.get("class_name", "unknown").lower()
+                    else:
+                        obj_class_name = obj.class_name.lower()
+
+                    if obj_class_name in ["handwash", "handwashing"]:
                         handwashing_detections += 1
-                    elif obj.class_name.lower() in ["sanitize", "disinfection"]:
+                    elif obj_class_name in ["sanitize", "disinfection"]:
                         disinfection_detections += 1
-                    elif obj.class_name.lower() in ["hairnet", "person"]:
+                    elif obj_class_name in ["hairnet", "person"]:
                         hairnet_detections += 1
 
             # 计算平均处理时间
@@ -830,7 +1102,7 @@ class DetectionServiceDomain:
                     active_regions.add(camera.region_id)
 
             return {
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "system_status": "active",
                 "detection_stats": {
                     "total_detections_today": total_detections,
@@ -845,10 +1117,22 @@ class DetectionServiceDomain:
                 },
                 "performance_metrics": {
                     "average_processing_time": avg_processing_time,
-                    "detection_accuracy": sum(r.average_confidence for r in records)
-                    / len(records)
-                    if records
-                    else 0.0,
+                    "detection_accuracy": (
+                        sum(
+                            r.average_confidence
+                            if hasattr(r, "average_confidence")
+                            else (
+                                r.confidence.value
+                                if hasattr(r, "confidence")
+                                and hasattr(r.confidence, "value")
+                                else 0.0
+                            )
+                            for r in records
+                        )
+                        / len(records)
+                        if records
+                        else 0.0
+                    ),
                     "system_uptime": "N/A",  # 需要从系统层面获取
                 },
                 "alerts": {
@@ -968,7 +1252,7 @@ class DetectionServiceDomain:
             from datetime import timedelta
 
             # 计算时间范围
-            end_time = datetime.now()
+            end_time = datetime.now(timezone.utc)
             if period == "1d":
                 start_time = end_time - timedelta(days=1)
             elif period == "7d":
@@ -1179,10 +1463,24 @@ def get_detection_service_domain() -> DetectionServiceDomain:
         detection_repo = RepositoryFactory.create_repository_from_env()
         camera_repo = DefaultCameraRepository()
 
+        # 创建违规仓储
+        violation_repo = None
+        try:
+            from src.infrastructure.repositories.postgresql_violation_repository import (
+                PostgreSQLViolationRepository,
+            )
+
+            # 使用连接字符串创建违规仓储（会自动创建连接池）
+            violation_repo = PostgreSQLViolationRepository(connection_string=None)
+            logger.info("违规仓储已创建")
+        except Exception as e:
+            logger.warning(f"创建违规仓储失败: {e}，将不使用违规仓储")
+
         _detection_service_domain_instance = DetectionServiceDomain(
             detection_repository=detection_repo,
             camera_repository=camera_repo,
+            violation_repository=violation_repo,
         )
-        logger.info("领域模型检测服务单例已创建 (工厂+默认摄像头仓储)")
+        logger.info("领域模型检测服务单例已创建 (工厂+默认摄像头仓储+违规仓储)")
 
     return _detection_service_domain_instance

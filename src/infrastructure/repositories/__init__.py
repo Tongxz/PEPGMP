@@ -4,11 +4,13 @@
 """
 
 from .postgresql_detection_repository import PostgreSQLDetectionRepository
+from .postgresql_violation_repository import PostgreSQLViolationRepository
 from .redis_detection_repository import RedisDetectionRepository
 from .repository_factory import RepositoryFactory
 
 __all__ = [
     "PostgreSQLDetectionRepository",
+    "PostgreSQLViolationRepository",
     "RedisDetectionRepository",
     "RepositoryFactory",
 ]

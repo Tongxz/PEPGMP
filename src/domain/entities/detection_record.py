@@ -41,56 +41,189 @@ class DetectionRecord:
 
     @property
     def person_count(self) -> int:
-        """获取人体数量"""
-        return sum(1 for obj in self.objects if obj.is_person)
+        """获取人体数量（兼容字典格式和对象格式）"""
+        count = 0
+        for obj in self.objects:
+            if isinstance(obj, dict):
+                class_name = obj.get("class_name", "").lower()
+                if class_name in ["person", "人", "human"]:
+                    count += 1
+            else:
+                if obj.is_person:
+                    count += 1
+        return count
 
     @property
     def vehicle_count(self) -> int:
-        """获取车辆数量"""
-        return sum(1 for obj in self.objects if obj.is_vehicle)
+        """获取车辆数量（兼容字典格式和对象格式）"""
+        count = 0
+        for obj in self.objects:
+            if isinstance(obj, dict):
+                class_name = obj.get("class_name", "").lower()
+                if class_name in [
+                    "car",
+                    "truck",
+                    "bus",
+                    "motorcycle",
+                    "bicycle",
+                    "车",
+                    "汽车",
+                ]:
+                    count += 1
+            else:
+                if obj.is_vehicle:
+                    count += 1
+        return count
 
     @property
     def high_confidence_objects(self) -> List[DetectedObject]:
-        """获取高置信度对象"""
-        return [obj for obj in self.objects if obj.is_high_confidence]
+        """获取高置信度对象（兼容字典格式和对象格式）"""
+        result = []
+        for obj in self.objects:
+            if isinstance(obj, dict):
+                conf_value = obj.get("confidence", 0.0)
+                if isinstance(conf_value, dict):
+                    conf_value = conf_value.get("value", 0.0)
+                elif isinstance(conf_value, (int, float)):
+                    conf_value = float(conf_value)
+                else:
+                    conf_value = 0.0
+                if conf_value >= 0.8:
+                    result.append(obj)  # 返回字典格式
+            else:
+                if obj.is_high_confidence:
+                    result.append(obj)
+        return result
 
     @property
     def medium_confidence_objects(self) -> List[DetectedObject]:
-        """获取中等置信度对象"""
-        return [obj for obj in self.objects if obj.is_medium_confidence]
+        """获取中等置信度对象（兼容字典格式和对象格式）"""
+        result = []
+        for obj in self.objects:
+            if isinstance(obj, dict):
+                conf_value = obj.get("confidence", 0.0)
+                if isinstance(conf_value, dict):
+                    conf_value = conf_value.get("value", 0.0)
+                elif isinstance(conf_value, (int, float)):
+                    conf_value = float(conf_value)
+                else:
+                    conf_value = 0.0
+                if 0.5 <= conf_value < 0.8:
+                    result.append(obj)  # 返回字典格式
+            else:
+                if obj.is_medium_confidence:
+                    result.append(obj)
+        return result
 
     @property
     def low_confidence_objects(self) -> List[DetectedObject]:
-        """获取低置信度对象"""
-        return [obj for obj in self.objects if obj.is_low_confidence]
+        """获取低置信度对象（兼容字典格式和对象格式）"""
+        result = []
+        for obj in self.objects:
+            if isinstance(obj, dict):
+                conf_value = obj.get("confidence", 0.0)
+                if isinstance(conf_value, dict):
+                    conf_value = conf_value.get("value", 0.0)
+                elif isinstance(conf_value, (int, float)):
+                    conf_value = float(conf_value)
+                else:
+                    conf_value = 0.0
+                if conf_value < 0.5:
+                    result.append(obj)  # 返回字典格式
+            else:
+                if obj.is_low_confidence:
+                    result.append(obj)
+        return result
 
     @property
     def average_confidence(self) -> float:
-        """获取平均置信度"""
+        """获取平均置信度（兼容字典格式和对象格式）"""
         if not self.objects:
             return 0.0
-        return sum(obj.confidence.value for obj in self.objects) / len(self.objects)
+
+        total_confidence = 0.0
+        for obj in self.objects:
+            # 兼容字典格式（从数据库读取）和对象格式
+            if isinstance(obj, dict):
+                conf_value = obj.get("confidence", 0.0)
+                if isinstance(conf_value, dict):
+                    conf_value = conf_value.get("value", 0.0)
+                elif isinstance(conf_value, (int, float)):
+                    conf_value = float(conf_value)
+                else:
+                    conf_value = 0.0
+                total_confidence += conf_value
+            else:
+                # 对象格式
+                total_confidence += obj.confidence.value
+
+        return total_confidence / len(self.objects)
 
     @property
     def has_violations(self) -> bool:
-        """是否有违规行为"""
-        # 这里可以根据业务规则判断是否有违规
-        # 例如：检测到未戴安全帽的人
-        return any(
-            obj.is_person
-            and obj.confidence.is_high
-            and obj.get_metadata("violation_type") is not None
-            for obj in self.objects
-        )
+        """是否有违规行为（兼容字典格式和对象格式）"""
+        for obj in self.objects:
+            is_person = False
+            is_high_confidence = False
+            violation_type = None
+
+            if isinstance(obj, dict):
+                class_name = obj.get("class_name", "").lower()
+                is_person = class_name in ["person", "人", "human"]
+
+                conf_value = obj.get("confidence", 0.0)
+                if isinstance(conf_value, dict):
+                    conf_value = conf_value.get("value", 0.0)
+                elif isinstance(conf_value, (int, float)):
+                    conf_value = float(conf_value)
+                else:
+                    conf_value = 0.0
+                is_high_confidence = conf_value >= 0.8
+
+                metadata = obj.get("metadata", {})
+                if isinstance(metadata, dict):
+                    violation_type = metadata.get("violation_type")
+            else:
+                is_person = obj.is_person
+                is_high_confidence = obj.confidence.is_high
+                violation_type = obj.get_metadata("violation_type")
+
+            if is_person and is_high_confidence and violation_type is not None:
+                return True
+        return False
 
     @property
     def violation_types(self) -> List[str]:
-        """获取违规类型列表"""
+        """获取违规类型列表（兼容字典格式和对象格式）"""
         violation_types = []
         for obj in self.objects:
-            if obj.is_person and obj.confidence.is_high:
+            is_person = False
+            is_high_confidence = False
+            violation_type = None
+
+            if isinstance(obj, dict):
+                class_name = obj.get("class_name", "").lower()
+                is_person = class_name in ["person", "人", "human"]
+
+                conf_value = obj.get("confidence", 0.0)
+                if isinstance(conf_value, dict):
+                    conf_value = conf_value.get("value", 0.0)
+                elif isinstance(conf_value, (int, float)):
+                    conf_value = float(conf_value)
+                else:
+                    conf_value = 0.0
+                is_high_confidence = conf_value >= 0.8
+
+                metadata = obj.get("metadata", {})
+                if isinstance(metadata, dict):
+                    violation_type = metadata.get("violation_type")
+            else:
+                is_person = obj.is_person
+                is_high_confidence = obj.confidence.is_high
                 violation_type = obj.get_metadata("violation_type")
-                if violation_type and violation_type not in violation_types:
+
+            if is_person and is_high_confidence and violation_type:
+                if violation_type not in violation_types:
                     violation_types.append(violation_type)
         return violation_types
 

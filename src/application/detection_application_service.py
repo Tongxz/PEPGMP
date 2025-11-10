@@ -9,6 +9,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -19,6 +20,7 @@ from src.core.optimized_detection_pipeline import (
     DetectionResult,
     OptimizedDetectionPipeline,
 )
+from src.interfaces.storage import SnapshotInfo, SnapshotStorageProtocol
 from src.services.detection_service_domain import DetectionServiceDomain
 
 logger = logging.getLogger(__name__)
@@ -68,6 +70,7 @@ class DetectionApplicationService:
         self,
         detection_pipeline: OptimizedDetectionPipeline,
         detection_domain_service: DetectionServiceDomain,
+        snapshot_storage: Optional[SnapshotStorageProtocol] = None,
         save_policy: Optional[SavePolicy] = None,
     ):
         """
@@ -80,6 +83,7 @@ class DetectionApplicationService:
         """
         self.detection_pipeline = detection_pipeline
         self.detection_domain_service = detection_domain_service
+        self.snapshot_storage = snapshot_storage
         self.save_policy = save_policy or SavePolicy()  # 默认SMART策略
         self.logger = logging.getLogger(__name__)
 
@@ -204,6 +208,45 @@ class DetectionApplicationService:
                 )
 
         return violations
+
+    def _get_primary_violation_type(
+        self, detection_result: DetectionResult
+    ) -> Optional[str]:
+        """获取主要违规类型"""
+        violations = self._extract_violations_summary(detection_result)
+        if violations:
+            return violations[0].get("type")
+        return None
+
+    async def _save_snapshot_if_possible(
+        self,
+        frame: np.ndarray,
+        camera_id: str,
+        *,
+        violation_type: Optional[str],
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Optional[SnapshotInfo]:
+        """尝试保存快照并返回结果"""
+        if self.snapshot_storage is None:
+            return None
+
+        metadata_mapping = None
+        if metadata:
+            metadata_mapping = {str(k): str(v) for k, v in metadata.items()}
+
+        try:
+            return await self.snapshot_storage.save_frame(
+                frame,
+                camera_id,
+                captured_at=datetime.utcnow(),
+                violation_type=violation_type,
+                metadata=metadata_mapping,
+            )
+        except Exception as exc:
+            self.logger.warning(
+                "保存快照失败: camera=%s, error=%s", camera_id, exc, exc_info=True
+            )
+            return None
 
     def _get_save_reason(
         self,
@@ -350,17 +393,31 @@ class DetectionApplicationService:
 
         # 3. 分析违规
         has_violations, violation_severity = self._analyze_violations(detection_result)
+        violations_summary = self._extract_violations_summary(detection_result)
 
         # 4. 转换为领域模型格式
         detected_objects = self._convert_to_domain_format(detection_result)
 
         # 5. 业务处理（领域层）
         record = None
+        snapshot_info: Optional[SnapshotInfo] = None
         if save_to_db:
+            snapshot_info = await self._save_snapshot_if_possible(
+                image,
+                camera_id,
+                violation_type=violations_summary[0]["type"]
+                if violations_summary
+                else None,
+                metadata={
+                    "mode": DetectionMode.SINGLE_IMAGE.value,
+                    "has_violations": has_violations,
+                },
+            )
             record = await self.detection_domain_service.process_detection(
                 camera_id=camera_id,
                 detected_objects=detected_objects,
                 processing_time=processing_time,
+                snapshots=[snapshot_info] if snapshot_info else None,
             )
             detection_id = record.id
             self.logger.info(f"检测记录已保存: {detection_id}")
@@ -385,6 +442,7 @@ class DetectionApplicationService:
             "quality": record.metadata.get("quality_analysis") if record else None,
             "violations": record.metadata.get("violations", []) if record else [],
             "saved_to_db": save_to_db,
+            "snapshots": record.metadata.get("snapshots", []) if record else [],
         }
 
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -432,13 +490,25 @@ class DetectionApplicationService:
 
         # 5. 如果需要保存
         record = None
+        snapshot_info: Optional[SnapshotInfo] = None
         if should_save:
             detected_objects = self._convert_to_domain_format(detection_result)
+            snapshot_info = await self._save_snapshot_if_possible(
+                frame,
+                camera_id,
+                violation_type=self._get_primary_violation_type(detection_result),
+                metadata={
+                    "mode": DetectionMode.REALTIME_STREAM.value,
+                    "frame_count": frame_count,
+                    "has_violations": has_violations,
+                },
+            )
             record = await self.detection_domain_service.process_detection(
                 camera_id=camera_id,
                 detected_objects=detected_objects,
                 processing_time=processing_time,
                 frame_id=frame_count,
+                snapshots=[snapshot_info] if snapshot_info else None,
             )
 
             self.logger.info(
@@ -475,6 +545,7 @@ class DetectionApplicationService:
             "save_reason": self._get_save_reason(
                 frame_count, has_violations, violation_severity, should_save
             ),
+            "snapshots": record.metadata.get("snapshots", []) if record else [],
         }
 
 

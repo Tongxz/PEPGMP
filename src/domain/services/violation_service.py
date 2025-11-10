@@ -7,7 +7,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from src.domain.entities.detected_object import DetectedObject
 from src.domain.entities.detection_record import DetectionRecord
@@ -65,6 +65,118 @@ class ViolationService:
         """初始化违规检测服务"""
         self.logger = logging.getLogger(__name__)
         self.violation_rules = self._initialize_violation_rules()
+
+    def _is_person(self, obj: Any) -> bool:
+        """检查对象是否是人体（兼容字典格式和对象格式）"""
+        if isinstance(obj, dict):
+            class_name = obj.get("class_name", "").lower()
+            return class_name in ["person", "人", "human"]
+        return obj.is_person
+
+    def _get_confidence_value(self, obj: Any) -> float:
+        """获取置信度值（兼容字典格式和对象格式）"""
+        if isinstance(obj, dict):
+            conf_value = obj.get("confidence", 0.0)
+            if isinstance(conf_value, dict):
+                return conf_value.get("value", 0.0)
+            elif isinstance(conf_value, (int, float)):
+                return float(conf_value)
+            return 0.0
+        return obj.confidence.value
+
+    def _get_track_id(self, obj: Any) -> Optional[int]:
+        """获取跟踪ID（兼容字典格式和对象格式）"""
+        if isinstance(obj, dict):
+            return obj.get("track_id")
+        return obj.track_id
+
+    def _get_bbox(self, obj: Any) -> BoundingBox:
+        """获取边界框（兼容字典格式和对象格式）"""
+        if isinstance(obj, dict):
+            bbox_data = obj.get("bbox")
+            if isinstance(bbox_data, dict):
+                return BoundingBox.from_dict(bbox_data)
+            elif isinstance(bbox_data, BoundingBox):
+                return bbox_data
+            else:
+                # 如果bbox是列表格式 [x1, y1, x2, y2]
+                if isinstance(bbox_data, (list, tuple)) and len(bbox_data) >= 4:
+                    return BoundingBox(
+                        x1=bbox_data[0],
+                        y1=bbox_data[1],
+                        x2=bbox_data[2],
+                        y2=bbox_data[3],
+                    )
+                raise ValueError(f"无法解析bbox格式: {bbox_data}")
+        return obj.bbox
+
+    def _get_center(self, obj: Any) -> Tuple[float, float]:
+        """获取边界框中心点（兼容字典格式和对象格式）"""
+        bbox = self._get_bbox(obj)
+        return bbox.center
+
+    def _get_area(self, obj: Any) -> float:
+        """获取边界框面积（兼容字典格式和对象格式）"""
+        bbox = self._get_bbox(obj)
+        return bbox.area
+
+    def _get_class_name(self, obj: Any) -> str:
+        """获取类别名称（兼容字典格式和对象格式）"""
+        if isinstance(obj, dict):
+            return obj.get("class_name", "")
+        return obj.class_name
+
+    def _to_detected_object(self, obj: Any) -> DetectedObject:
+        """将对象转换为DetectedObject实例（兼容字典格式和对象格式）"""
+        if isinstance(obj, DetectedObject):
+            return obj
+        elif isinstance(obj, dict):
+            # 处理字典格式，确保confidence和bbox格式正确
+            obj_dict = obj.copy()
+
+            # 处理confidence：可能是字典{"value": 0.8}或数值
+            if "confidence" in obj_dict:
+                conf_value = obj_dict["confidence"]
+                if isinstance(conf_value, dict):
+                    obj_dict["confidence"] = conf_value.get("value", 0.0)
+                elif not isinstance(conf_value, (int, float)):
+                    obj_dict["confidence"] = 0.0
+
+            # 处理bbox：确保是字典格式（DetectedObject.from_dict期望字典）
+            if "bbox" in obj_dict:
+                bbox_data = obj_dict["bbox"]
+                if isinstance(bbox_data, BoundingBox):
+                    obj_dict["bbox"] = bbox_data.to_dict()
+                elif not isinstance(bbox_data, dict):
+                    # 如果bbox是列表格式 [x1, y1, x2, y2]，转换为字典
+                    if isinstance(bbox_data, (list, tuple)) and len(bbox_data) >= 4:
+                        obj_dict["bbox"] = {
+                            "x1": bbox_data[0],
+                            "y1": bbox_data[1],
+                            "x2": bbox_data[2],
+                            "y2": bbox_data[3],
+                        }
+                    else:
+                        raise ValueError(f"无法解析bbox格式: {bbox_data}")
+
+            # 确保必需的字段存在
+            if "class_id" not in obj_dict:
+                obj_dict["class_id"] = 0
+            if "class_name" not in obj_dict:
+                obj_dict["class_name"] = "unknown"
+
+            return DetectedObject.from_dict(obj_dict)
+        else:
+            raise ValueError(f"无法将对象转换为DetectedObject: {type(obj)}")
+
+    def _get_metadata(self, obj: Any, key: str, default: Any = None) -> Any:
+        """获取元数据（兼容字典格式和对象格式）"""
+        if isinstance(obj, dict):
+            metadata = obj.get("metadata", {})
+            if isinstance(metadata, dict):
+                return metadata.get(key, default)
+            return default
+        return obj.get_metadata(key, default)
 
     def _initialize_violation_rules(self) -> Dict[str, Dict[str, Any]]:
         """初始化违规检测规则"""
@@ -153,31 +265,43 @@ class ViolationService:
         violations = []
 
         for obj in record.objects:
-            if obj.is_person and obj.confidence.value >= rule_config["min_confidence"]:
-                # 检查是否检测到安全帽
-                has_helmet = self._has_object_nearby(
-                    record.objects,
-                    obj,
-                    rule_config["forbidden_objects"],
-                    max_distance=50.0,
-                )
+            if not self._is_person(obj):
+                continue
 
-                if not has_helmet:
-                    violation = Violation(
-                        id=f"violation_{record.id}_{obj.track_id or 'unknown'}",
-                        violation_type=ViolationType.NO_SAFETY_HELMET,
-                        severity=rule_config["severity"],
-                        camera_id=record.camera_id,
-                        detected_object=obj,
-                        timestamp=record.timestamp.value,
-                        confidence=obj.confidence,
-                        description=rule_config["description"],
-                        metadata={
-                            "rule_name": "no_safety_helmet",
-                            "detection_confidence": obj.confidence.value,
-                        },
-                    )
-                    violations.append(violation)
+            conf_value = self._get_confidence_value(obj)
+            if conf_value < rule_config["min_confidence"]:
+                continue
+
+            # 检查是否检测到安全帽
+            has_helmet = self._has_object_nearby(
+                record.objects,
+                obj,
+                rule_config["forbidden_objects"],
+                max_distance=50.0,
+            )
+
+            if not has_helmet:
+                # 转换为DetectedObject实例
+                detected_obj = self._to_detected_object(obj)
+                track_id = self._get_track_id(obj) or "unknown"
+
+                violation = Violation(
+                    id=f"violation_{record.id}_{track_id}",
+                    violation_type=ViolationType.NO_SAFETY_HELMET,
+                    severity=rule_config["severity"],
+                    camera_id=record.camera_id,
+                    detected_object=detected_obj,
+                    timestamp=record.timestamp.value
+                    if hasattr(record.timestamp, "value")
+                    else record.timestamp,
+                    confidence=detected_obj.confidence,
+                    description=rule_config["description"],
+                    metadata={
+                        "rule_name": "no_safety_helmet",
+                        "detection_confidence": conf_value,
+                    },
+                )
+                violations.append(violation)
 
         return violations
 
@@ -188,31 +312,43 @@ class ViolationService:
         violations = []
 
         for obj in record.objects:
-            if obj.is_person and obj.confidence.value >= rule_config["min_confidence"]:
-                # 检查是否检测到安全背心
-                has_vest = self._has_object_nearby(
-                    record.objects,
-                    obj,
-                    rule_config["forbidden_objects"],
-                    max_distance=30.0,
-                )
+            if not self._is_person(obj):
+                continue
 
-                if not has_vest:
-                    violation = Violation(
-                        id=f"violation_{record.id}_{obj.track_id or 'unknown'}",
-                        violation_type=ViolationType.NO_SAFETY_VEST,
-                        severity=rule_config["severity"],
-                        camera_id=record.camera_id,
-                        detected_object=obj,
-                        timestamp=record.timestamp.value,
-                        confidence=obj.confidence,
-                        description=rule_config["description"],
-                        metadata={
-                            "rule_name": "no_safety_vest",
-                            "detection_confidence": obj.confidence.value,
-                        },
-                    )
-                    violations.append(violation)
+            conf_value = self._get_confidence_value(obj)
+            if conf_value < rule_config["min_confidence"]:
+                continue
+
+            # 检查是否检测到安全背心
+            has_vest = self._has_object_nearby(
+                record.objects,
+                obj,
+                rule_config["forbidden_objects"],
+                max_distance=30.0,
+            )
+
+            if not has_vest:
+                # 转换为DetectedObject实例
+                detected_obj = self._to_detected_object(obj)
+                track_id = self._get_track_id(obj) or "unknown"
+
+                violation = Violation(
+                    id=f"violation_{record.id}_{track_id}",
+                    violation_type=ViolationType.NO_SAFETY_VEST,
+                    severity=rule_config["severity"],
+                    camera_id=record.camera_id,
+                    detected_object=detected_obj,
+                    timestamp=record.timestamp.value
+                    if hasattr(record.timestamp, "value")
+                    else record.timestamp,
+                    confidence=detected_obj.confidence,
+                    description=rule_config["description"],
+                    metadata={
+                        "rule_name": "no_safety_vest",
+                        "detection_confidence": conf_value,
+                    },
+                )
+                violations.append(violation)
 
         return violations
 
@@ -228,29 +364,39 @@ class ViolationService:
             return violations
 
         for obj in record.objects:
-            if obj.is_person and obj.confidence.value >= rule_config["min_confidence"]:
-                # 检查是否在限制区域内
-                is_in_restricted_area = self._is_in_restricted_area(
-                    obj, restricted_areas
-                )
+            if not self._is_person(obj):
+                continue
 
-                if is_in_restricted_area:
-                    violation = Violation(
-                        id=f"violation_{record.id}_{obj.track_id or 'unknown'}",
-                        violation_type=ViolationType.UNAUTHORIZED_ACCESS,
-                        severity=rule_config["severity"],
-                        camera_id=record.camera_id,
-                        detected_object=obj,
-                        timestamp=record.timestamp.value,
-                        confidence=obj.confidence,
-                        description=rule_config["description"],
-                        metadata={
-                            "rule_name": "unauthorized_access",
-                            "restricted_areas": restricted_areas,
-                            "detection_confidence": obj.confidence.value,
-                        },
-                    )
-                    violations.append(violation)
+            conf_value = self._get_confidence_value(obj)
+            if conf_value < rule_config["min_confidence"]:
+                continue
+
+            # 检查是否在限制区域内
+            is_in_restricted_area = self._is_in_restricted_area(obj, restricted_areas)
+
+            if is_in_restricted_area:
+                # 转换为DetectedObject实例
+                detected_obj = self._to_detected_object(obj)
+                track_id = self._get_track_id(obj) or "unknown"
+
+                violation = Violation(
+                    id=f"violation_{record.id}_{track_id}",
+                    violation_type=ViolationType.UNAUTHORIZED_ACCESS,
+                    severity=rule_config["severity"],
+                    camera_id=record.camera_id,
+                    detected_object=detected_obj,
+                    timestamp=record.timestamp.value
+                    if hasattr(record.timestamp, "value")
+                    else record.timestamp,
+                    confidence=detected_obj.confidence,
+                    description=rule_config["description"],
+                    metadata={
+                        "rule_name": "unauthorized_access",
+                        "restricted_areas": restricted_areas,
+                        "detection_confidence": conf_value,
+                    },
+                )
+                violations.append(violation)
 
         return violations
 
@@ -260,25 +406,37 @@ class ViolationService:
         """检查人员聚集违规"""
         violations = []
 
-        person_objects = [obj for obj in record.objects if obj.is_person]
+        person_objects = [obj for obj in record.objects if self._is_person(obj)]
 
         if len(person_objects) < rule_config["min_person_count"]:
             return violations
 
         # 计算人员密度
-        total_area = sum(obj.area for obj in person_objects)
+        total_area = sum(self._get_area(obj) for obj in person_objects)
         if total_area > 0:
             area_per_person = total_area / len(person_objects)
             if area_per_person < rule_config["max_area_per_person"]:
+                # 转换为DetectedObject实例（使用第一个人员对象）
+                detected_obj = self._to_detected_object(person_objects[0])
+
+                # 获取平均置信度
+                avg_confidence = (
+                    record.average_confidence
+                    if hasattr(record, "average_confidence")
+                    else 0.0
+                )
+
                 # 创建聚集违规记录
                 violation = Violation(
                     id=f"violation_{record.id}_crowding",
                     violation_type=ViolationType.CROWDING,
                     severity=rule_config["severity"],
                     camera_id=record.camera_id,
-                    detected_object=person_objects[0],  # 使用第一个人员对象
-                    timestamp=record.timestamp.value,
-                    confidence=Confidence(record.average_confidence),
+                    detected_object=detected_obj,
+                    timestamp=record.timestamp.value
+                    if hasattr(record.timestamp, "value")
+                    else record.timestamp,
+                    confidence=Confidence(avg_confidence),
                     description=rule_config["description"],
                     metadata={
                         "rule_name": "crowding",
@@ -299,26 +457,32 @@ class ViolationService:
 
         # 这里需要结合历史记录来计算速度
         # 简化实现，仅检查是否有移动对象
-        moving_objects = [
-            obj
-            for obj in record.objects
-            if obj.track_id is not None
-            and obj.confidence.value >= rule_config["min_confidence"]
-        ]
+        moving_objects = []
+        for obj in record.objects:
+            track_id = self._get_track_id(obj)
+            conf_value = self._get_confidence_value(obj)
+            if track_id is not None and conf_value >= rule_config["min_confidence"]:
+                moving_objects.append(obj)
 
         for obj in moving_objects:
             # 获取移动速度（需要从历史记录计算）
-            speed = obj.get_metadata("speed", 0.0)
+            speed = self._get_metadata(obj, "speed", 0.0)
 
             if speed > rule_config["max_speed"]:
+                # 转换为DetectedObject实例
+                detected_obj = self._to_detected_object(obj)
+                track_id = self._get_track_id(obj)
+
                 violation = Violation(
-                    id=f"violation_{record.id}_{obj.track_id}",
+                    id=f"violation_{record.id}_{track_id}",
                     violation_type=ViolationType.SPEEDING,
                     severity=rule_config["severity"],
                     camera_id=record.camera_id,
-                    detected_object=obj,
-                    timestamp=record.timestamp.value,
-                    confidence=obj.confidence,
+                    detected_object=detected_obj,
+                    timestamp=record.timestamp.value
+                    if hasattr(record.timestamp, "value")
+                    else record.timestamp,
+                    confidence=detected_obj.confidence,
                     description=rule_config["description"],
                     metadata={
                         "rule_name": "speeding",
@@ -332,32 +496,46 @@ class ViolationService:
 
     def _has_object_nearby(
         self,
-        objects: List[DetectedObject],
-        target_obj: DetectedObject,
+        objects: List[Any],
+        target_obj: Any,
         object_classes: List[str],
         max_distance: float,
     ) -> bool:
-        """检查附近是否有指定类别的对象"""
+        """检查附近是否有指定类别的对象（兼容字典格式和对象格式）"""
+        target_center = self._get_center(target_obj)
+
         for obj in objects:
-            if obj == target_obj:
+            # 简单比较，避免深度比较
+            if obj is target_obj:
                 continue
 
-            if obj.class_name.lower() in [cls.lower() for cls in object_classes]:
+            obj_class_name = self._get_class_name(obj).lower()
+            if obj_class_name in [cls.lower() for cls in object_classes]:
                 # 计算距离
-                distance = self._calculate_distance(target_obj.center, obj.center)
+                obj_center = self._get_center(obj)
+                distance = self._calculate_distance(target_center, obj_center)
                 if distance <= max_distance:
                     return True
 
         return False
 
     def _is_in_restricted_area(
-        self, obj: DetectedObject, restricted_areas: List[Dict[str, Any]]
+        self, obj: Any, restricted_areas: List[Dict[str, Any]]
     ) -> bool:
-        """检查对象是否在限制区域内"""
+        """检查对象是否在限制区域内（兼容字典格式和对象格式）"""
+        obj_bbox = self._get_bbox(obj)
+
         for area in restricted_areas:
             if "bbox" in area:
-                area_bbox = BoundingBox.from_dict(area["bbox"])
-                if area_bbox.contains_bbox(obj.bbox):
+                area_bbox_data = area["bbox"]
+                if isinstance(area_bbox_data, dict):
+                    area_bbox = BoundingBox.from_dict(area_bbox_data)
+                elif isinstance(area_bbox_data, BoundingBox):
+                    area_bbox = area_bbox_data
+                else:
+                    continue
+
+                if area_bbox.contains_bbox(obj_bbox):
                     return True
 
         return False

@@ -265,6 +265,82 @@ class RegionDomainService:
             logger.error(f"获取区域meta配置失败: {e}")
             return None
 
+    async def import_from_file(
+        self, file_path: str, camera_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """从配置文件导入区域到数据库.
+
+        Args:
+            file_path: 配置文件路径
+            camera_id: 关联的相机ID（可选）
+
+        Returns:
+            包含导入结果的字典
+        """
+        try:
+            import json
+            import os
+
+            if not os.path.exists(file_path):
+                raise ValueError(f"配置文件不存在: {file_path}")
+
+            with open(file_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+
+            regions_data = config.get("regions", [])
+            if not regions_data:
+                logger.warning(f"配置文件中没有区域数据: {file_path}")
+                return {"status": "success", "imported": 0, "skipped": 0, "errors": 0}
+
+            imported = 0
+            skipped = 0
+            errors = 0
+
+            for r in regions_data:
+                try:
+                    # 转换数据格式
+                    region_data = {
+                        "region_id": r.get("region_id") or r.get("id"),
+                        "region_type": r.get("region_type") or r.get("type", "custom"),
+                        "name": r.get("name", ""),
+                        "polygon": r.get("polygon") or r.get("points", []),
+                        "is_active": r.get("is_active", True),
+                        "rules": r.get("rules", {}),
+                    }
+
+                    # 检查是否已存在
+                    existing = await self.region_repository.find_by_id(
+                        region_data["region_id"]
+                    )
+                    if existing:
+                        logger.debug(f"区域已存在，跳过: {region_data['region_id']}")
+                        skipped += 1
+                        continue
+
+                    # 创建区域（会自动保存到数据库）
+                    await self.create_region(region_data, camera_id)
+                    imported += 1
+                    logger.debug(f"已导入区域: {region_data['region_id']}")
+                except ValueError as e:
+                    # 业务逻辑错误（如ID已存在），跳过
+                    logger.warning(f"跳过区域（业务错误）: {e}")
+                    skipped += 1
+                except Exception as e:
+                    logger.error(f"导入区域失败: {e}")
+                    errors += 1
+
+            logger.info(f"从配置文件导入区域完成: 导入={imported}, 跳过={skipped}, 错误={errors}")
+            return {
+                "status": "success",
+                "imported": imported,
+                "skipped": skipped,
+                "errors": errors,
+                "total": len(regions_data),
+            }
+        except Exception as e:
+            logger.error(f"从配置文件导入区域失败: {e}")
+            raise
+
     def _region_to_dict(self, region: Region) -> Dict[str, Any]:
         """将Region实体转换为字典."""
         return {

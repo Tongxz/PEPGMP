@@ -467,7 +467,12 @@ async def batch_camera_status(
             if control_service:
                 camera_ids_to_query = None
                 if request_body and "camera_ids" in request_body:
-                    camera_ids_to_query = request_body["camera_ids"]
+                    camera_ids = request_body["camera_ids"]
+                    # 如果 camera_ids 是空数组，视为查询所有摄像头（None）
+                    # 如果 camera_ids 是有效数组，使用它
+                    if camera_ids and len(camera_ids) > 0:
+                        camera_ids_to_query = camera_ids
+                    # 如果 camera_ids 是空数组或 None，保持为 None（查询所有）
                 result = control_service.get_batch_status(camera_ids_to_query)
                 return result
     except ValueError as e:
@@ -479,12 +484,17 @@ async def batch_camera_status(
     # 旧实现（回退）
     scheduler = get_scheduler()
 
-    camera_ids_to_query = []
+    camera_ids_to_query = None
     if request_body and "camera_ids" in request_body:
-        camera_ids_to_query = request_body["camera_ids"]
+        camera_ids = request_body["camera_ids"]
+        # 如果 camera_ids 是空数组，视为查询所有摄像头（None）
+        # 如果 camera_ids 是有效数组，使用它
+        if camera_ids and len(camera_ids) > 0:
+            camera_ids_to_query = camera_ids
+        # 如果 camera_ids 是空数组或 None，保持为 None（查询所有）
 
     # The scheduler's get_batch_status can handle the None case to query all
-    result = scheduler.get_batch_status(camera_ids_to_query or None)
+    result = scheduler.get_batch_status(camera_ids_to_query)
 
     logger.debug(f"Batch status query for {len(result)} cameras")
     return result

@@ -131,6 +131,7 @@ class HybridDetectionRepository(IDetectionRepository):
         end_time: datetime,
         camera_id: Optional[str] = None,
         limit: int = 100,
+        offset: int = 0,
     ) -> List[DetectionRecord]:
         """
         根据时间范围查找记录
@@ -147,7 +148,7 @@ class HybridDetectionRepository(IDetectionRepository):
         try:
             # 对于时间范围查询，优先使用主存储
             records = await self.primary.find_by_time_range(
-                start_time, end_time, camera_id, limit
+                start_time, end_time, camera_id, limit, offset
             )
 
             # 将结果写入缓存

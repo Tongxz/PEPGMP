@@ -12,6 +12,11 @@ try:
 except Exception:
     joblib = None
 
+try:
+    import xgboost as xgb  # type: ignore
+except Exception:
+    xgb = None
+
 from src.detection.motion_analyzer import MotionAnalyzer
 
 # 导入pose_detector模块以使用统一的GPU配置策略
@@ -35,7 +40,6 @@ try:
     from src.config.unified_params import get_unified_params
 except ImportError:
     # 兼容性处理
-    import os
     import sys
 
     sys.path.append(
@@ -77,7 +81,7 @@ class BehaviorRecognizer:
     - 手部消毒识别
     """
 
-    def __init__(
+    def __init__(  # noqa: C901
         self,
         confidence_threshold: Optional[float] = None,
         use_advanced_detection: Optional[bool] = None,
@@ -129,26 +133,87 @@ class BehaviorRecognizer:
             lambda: deque(maxlen=self.ml_window)
         )
         if self.use_ml_classifier:
-            try:
-                if os.path.exists(self.ml_model_path):
-                    # 优先使用XGBoost native格式
-                    if self.ml_model_path.endswith(
-                        ".json"
-                    ) or self.ml_model_path.endswith(".ubj"):
-                        self.ml_model = xgb.Booster()
-                        self.ml_model.load_model(self.ml_model_path)
-                    # 向后兼容joblib格式（但会有警告）
-                    elif joblib is not None and self.ml_model_path.endswith(".joblib"):
-                        self.ml_model = joblib.load(self.ml_model_path)
-                    logger.info(f"Loaded ML handwash classifier: {self.ml_model_path}")
-                else:
-                    logger.warning(
-                        "ML classifier enabled but joblib missing or model file not found; disabling ML fusion"
-                    )
-                    self.use_ml_classifier = False
-            except Exception as e:
-                logger.warning(f"Failed to load ML classifier: {e}")
+            # 检查XGBoost是否可用
+            if xgb is None:
+                logger.warning(
+                    "ML classifier enabled but XGBoost not installed; disabling ML fusion. "
+                    "Install with: pip install xgboost"
+                )
                 self.use_ml_classifier = False
+            else:
+                try:
+                    if os.path.exists(self.ml_model_path):
+                        # 优先使用XGBoost native格式
+                        if self.ml_model_path.endswith(
+                            ".json"
+                        ) or self.ml_model_path.endswith(".ubj"):
+                            try:
+                                self.ml_model = xgb.Booster()
+                                self.ml_model.load_model(self.ml_model_path)
+                                logger.info(
+                                    f"✅ Loaded ML handwash classifier: {self.ml_model_path}"
+                                )
+                            except Exception as json_error:
+                                # JSON格式加载失败，可能是版本不兼容
+                                logger.warning(
+                                    f"Failed to load XGBoost JSON model (可能版本不兼容): {json_error}. "
+                                    f"尝试使用joblib格式..."
+                                )
+                                # 尝试joblib格式作为回退
+                                if joblib is not None:
+                                    joblib_path = self.ml_model_path.replace(
+                                        ".json", ".joblib"
+                                    )
+                                    if os.path.exists(joblib_path):
+                                        try:
+                                            self.ml_model = joblib.load(joblib_path)
+                                            logger.info(
+                                                f"✅ Loaded ML handwash classifier (joblib): {joblib_path}"
+                                            )
+                                        except Exception as joblib_error:
+                                            logger.error(
+                                                f"Failed to load joblib model: {joblib_error}"
+                                            )
+                                            self.use_ml_classifier = False
+                                    else:
+                                        logger.error(
+                                            f"Joblib model file not found: {joblib_path}"
+                                        )
+                                        self.use_ml_classifier = False
+                                else:
+                                    logger.error("joblib not available for fallback")
+                                    self.use_ml_classifier = False
+                        # 向后兼容joblib格式（包括.joblib.real等变体）
+                        elif joblib is not None and (".joblib" in self.ml_model_path):
+                            try:
+                                self.ml_model = joblib.load(self.ml_model_path)
+                                # 检查模型类型
+                                model_type = type(self.ml_model).__name__
+                                logger.info(
+                                    f"✅ Loaded ML handwash classifier (joblib, {model_type}): {self.ml_model_path}"
+                                )
+                            except Exception as joblib_error:
+                                logger.error(
+                                    f"Failed to load joblib model: {joblib_error}"
+                                )
+                                self.use_ml_classifier = False
+                        else:
+                            logger.warning(
+                                f"Unsupported model format: {self.ml_model_path}"
+                            )
+                            self.use_ml_classifier = False
+                    else:
+                        logger.warning(
+                            "ML classifier enabled but model file not found; disabling ML fusion. "
+                            f"Expected path: {self.ml_model_path}"
+                        )
+                        self.use_ml_classifier = False
+                except Exception as e:
+                    logger.error(f"Failed to load ML classifier: {e}")
+                    import traceback
+
+                    logger.debug(traceback.format_exc())
+                    self.use_ml_classifier = False
 
         # 初始化 MediaPipe 手部检测器（使用统一参数）
         self.mp_hands = None

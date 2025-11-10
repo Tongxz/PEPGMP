@@ -65,7 +65,9 @@ try:
         download,
         error_monitoring,
         events,
+        export,
         metrics,
+        mlops,
         monitoring,
         records,
         region_management,
@@ -76,7 +78,7 @@ try:
         websocket,
     )
     from src.monitoring.advanced_monitoring import start_monitoring, stop_monitoring
-    from src.services import detection_service, region_service
+    from src.services import detection_service
     from src.utils.error_monitor import start_error_monitoring, stop_error_monitoring
 except ImportError:
     # Add project root to Python path
@@ -93,7 +95,9 @@ except ImportError:
         download,
         error_monitoring,
         events,
+        export,
         metrics,
+        mlops,
         monitoring,
         records,
         region_management,
@@ -104,7 +108,7 @@ except ImportError:
         websocket,
     )
     from src.monitoring.advanced_monitoring import start_monitoring, stop_monitoring
-    from src.services import detection_service, region_service
+    from src.services import detection_service
     from src.utils.error_monitor import start_error_monitoring, stop_error_monitoring
 
 logging.basicConfig(level=logging.INFO)
@@ -120,7 +124,7 @@ except Exception as e:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI):  # noqa: C901
     """应用程序生命周期管理."""
     # Startup
     logger.info("Starting up the application...")
@@ -156,11 +160,64 @@ async def lifespan(app: FastAPI):
         app.state.optimized_pipeline = None
         app.state.hairnet_pipeline = None
         logger.warning(f"检测服务初始化失败 (非关键): {e}")
-    # 统一区域文件来源：优先环境变量 HBD_REGIONS_FILE，其次默认 config/regions.json
-    regions_file = os.environ.get(
-        "HBD_REGIONS_FILE", os.path.join(project_root, "config", "regions.json")
-    )
-    region_service.initialize_region_service(regions_file)
+    # 初始化区域服务（数据库存储）
+    # 如果有配置文件，自动导入到数据库
+    try:
+        from src.domain.services.region_service import RegionDomainService
+        from src.infrastructure.repositories.postgresql_region_repository import (
+            PostgreSQLRegionRepository,
+        )
+        from src.services.database_service import get_db_service
+
+        db_service = await get_db_service()
+        if db_service and db_service.pool:
+            region_repo = PostgreSQLRegionRepository(db_service.pool)
+            region_domain_service = RegionDomainService(region_repo)
+
+            # 检查是否有配置文件需要导入
+            regions_file = os.environ.get(
+                "HBD_REGIONS_FILE", os.path.join(project_root, "config", "regions.json")
+            )
+
+            if os.path.exists(regions_file):
+                try:
+                    # 检查数据库中是否已有区域
+                    existing_regions = await region_domain_service.get_all_regions(
+                        active_only=False
+                    )
+                    if not existing_regions:
+                        # 如果数据库为空，导入配置文件
+                        logger.info(f"数据库中没有区域数据，从配置文件导入: {regions_file}")
+                        result = await region_domain_service.import_from_file(
+                            regions_file
+                        )
+                        logger.info(
+                            f"区域导入完成: 导入={result.get('imported', 0)}, "
+                            f"跳过={result.get('skipped', 0)}, "
+                            f"错误={result.get('errors', 0)}"
+                        )
+                    else:
+                        logger.info(f"数据库中已有 {len(existing_regions)} 个区域，跳过配置文件导入")
+                except Exception as e:
+                    logger.warning(f"从配置文件导入区域失败（非关键）: {e}")
+            else:
+                logger.info(f"区域配置文件不存在，跳过导入: {regions_file}")
+        else:
+            logger.warning("数据库连接池未初始化，无法初始化区域服务")
+    except Exception as e:
+        logger.warning(f"区域服务初始化失败（非关键）: {e}")
+
+    # 初始化旧的RegionManager（用于向后兼容旧的get_region_service依赖）
+    try:
+        from src.services.region_service import initialize_region_service
+
+        regions_file = os.environ.get(
+            "HBD_REGIONS_FILE", os.path.join(project_root, "config", "regions.json")
+        )
+        initialize_region_service(regions_file)
+        logger.info("RegionManager已初始化（向后兼容）")
+    except Exception as e:
+        logger.warning(f"RegionManager初始化失败（非关键，可能影响旧接口）: {e}")
 
     # 启动错误监控
     try:
@@ -274,6 +331,7 @@ app.include_router(region_management.compat_router, tags=["Compat"])
 app.include_router(websocket.router, prefix="", tags=["WebSocket"])
 app.include_router(statistics.router, prefix="/api/v1", tags=["Statistics"])
 app.include_router(download.router, prefix="/api/v1/download", tags=["Download"])
+app.include_router(export.router, tags=["Export"])
 app.include_router(events.router, tags=["Events"])
 app.include_router(metrics.router, tags=["Metrics"])
 app.include_router(monitoring.router, prefix="/api/v1", tags=["Monitoring"])
@@ -286,6 +344,7 @@ app.include_router(records.router, tags=["Records"])
 app.include_router(video_stream.router, prefix="/api/v1", tags=["Video Stream"])
 # 配置管理路由
 app.include_router(config.router, prefix="/api/v1/config", tags=["Config"])
+app.include_router(mlops.router)
 
 
 @app.get("/", include_in_schema=False)

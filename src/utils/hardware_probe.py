@@ -15,6 +15,7 @@ def _safe_import_torch():
 
 
 def _gpu_info_pynvml() -> Dict[str, Any]:
+    """使用 pynvml 获取 NVIDIA GPU 详细信息（仅 NVIDIA GPU 需要）"""
     info: Dict[str, Any] = {"gpu_name": None, "vram_gb": None, "device_count": 0}
     try:
         import pynvml  # type: ignore
@@ -30,8 +31,12 @@ def _gpu_info_pynvml() -> Dict[str, Any]:
                 name.decode("utf-8") if hasattr(name, "decode") else str(name)
             )
             info["vram_gb"] = round(float(mem.total) / (1024**3), 1)
+    except ImportError:
+        # pynvml 未安装（这是正常的，仅 NVIDIA GPU 需要）
+        # 系统会自动使用 PyTorch 作为 fallback
+        pass
     except Exception as e:
-        # 如果pynvml失败，尝试使用torch获取信息
+        # pynvml 已安装但获取失败
         print(f"pynvml failed: {e}, trying torch fallback")
     return info
 
@@ -63,7 +68,9 @@ def detect_environment() -> Dict[str, Any]:
         except Exception:
             env["has_cuda"] = False
 
-    # 优先使用 pynvml 获取更准确信息（会覆盖torch的结果）
+    # 优先使用 pynvml 获取更准确的 NVIDIA GPU 信息（会覆盖torch的结果）
+    # 注意：pynvml 是可选依赖，仅在使用 NVIDIA GPU 时推荐安装
+    # 如未安装，系统会使用 PyTorch 提供的 GPU 信息（功能不受影响）
     nv = _gpu_info_pynvml()
     for k, v in nv.items():
         if v is not None:

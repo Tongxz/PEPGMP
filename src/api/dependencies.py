@@ -11,8 +11,10 @@ from src.application.detection_application_service import (
     DetectionApplicationService,
     create_save_policy_from_env,
 )
+from src.container.service_container import get_service
 from src.core.optimized_detection_pipeline import OptimizedDetectionPipeline
 from src.detection.yolo_hairnet_detector import YOLOHairnetDetector
+from src.interfaces.storage import SnapshotStorageProtocol
 from src.services.detection_service_domain import get_detection_service_domain
 
 logger = logging.getLogger(__name__)
@@ -83,9 +85,16 @@ async def get_detection_app_service() -> Optional[DetectionApplicationService]:
             save_policy = create_save_policy_from_env()
 
             # 创建应用服务
+            try:
+                snapshot_storage = get_service(SnapshotStorageProtocol)
+            except Exception as storage_error:
+                logger.error(f"获取快照存储服务失败: {storage_error}")
+                snapshot_storage = None
+
             _detection_app_service = DetectionApplicationService(
                 detection_pipeline=pipeline,
                 detection_domain_service=domain_service,
+                snapshot_storage=snapshot_storage,
                 save_policy=save_policy,
             )
 

@@ -47,23 +47,37 @@ compat_router = APIRouter()
 async def get_all_regions(
     active_only: bool = Query(False, description="是否只返回活跃区域"),
     force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
-    region_service: RegionService = Depends(get_region_service),
+    camera_id: Optional[str] = Query(None, description="按摄像头ID过滤（可选）"),
 ) -> List[Dict[str, Any]]:
-    """获取所有区域信息."""
-    # 灰度：按配置或强制参数决定是否走领域分支
+    """获取所有区域信息（从数据库读取）."""
+    # 统一使用数据库（领域服务）
     try:
-        if should_use_domain(force_domain) and get_region_domain_service is not None:
+        if get_region_domain_service is not None:
             region_domain_service = await get_region_domain_service()
             if region_domain_service:
-                regions = await region_domain_service.get_all_regions(
-                    active_only=active_only
-                )
+                if camera_id:
+                    regions = await region_domain_service.get_regions_by_camera_id(
+                        camera_id
+                    )
+                else:
+                    regions = await region_domain_service.get_all_regions(
+                        active_only=active_only
+                    )
                 return regions
+            else:
+                logger.error("区域领域服务未初始化")
+                raise HTTPException(status_code=500, detail="区域服务未初始化")
+        else:
+            logger.error("区域领域服务不可用")
+            raise HTTPException(status_code=500, detail="区域服务不可用")
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.warning(f"领域服务获取区域列表失败，回退到旧实现: {e}")
+        logger.error(f"从数据库获取区域列表失败: {e}")
+        import traceback
 
-    # 旧实现（回退到JSON文件）
-    return region_service.get_all_regions()
+        logger.debug(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"获取区域列表失败: {str(e)}")
 
 
 @router.post("/regions", summary="创建新区域")
@@ -71,35 +85,34 @@ async def create_region(
     region_data: Dict[str, Any],
     camera_id: Optional[str] = Query(None, description="关联的相机ID（可选）"),
     force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
-    region_service: RegionService = Depends(get_region_service),
 ) -> Dict[str, Any]:
-    """创建新区域."""
-    # 灰度：写操作需要更谨慎，使用should_use_domain进行灰度控制
+    """创建新区域（存储到数据库）."""
+    # 统一使用数据库（领域服务）
     try:
-        if should_use_domain(force_domain) and get_region_domain_service is not None:
+        if get_region_domain_service is not None:
             region_domain_service = await get_region_domain_service()
             if region_domain_service:
                 result = await region_domain_service.create_region(
                     region_data, camera_id
                 )
                 return result
+            else:
+                logger.error("区域领域服务未初始化")
+                raise HTTPException(status_code=500, detail="区域服务未初始化")
+        else:
+            logger.error("区域领域服务不可用")
+            raise HTTPException(status_code=500, detail="区域服务不可用")
+    except HTTPException:
+        raise
     except ValueError as e:
         # 业务逻辑错误（如ID已存在），直接抛出HTTP异常
         raise HTTPException(status_code=409, detail=str(e))
     except Exception as e:
-        logger.warning(f"领域服务创建区域失败，回退到旧实现: {e}")
+        logger.error(f"创建区域失败: {e}")
+        import traceback
 
-    # 旧实现（回退到JSON文件）
-    try:
-        region_id = region_service.create_region(region_data)
-        # 持久化到JSON文件（向后兼容）
-        try:
-            region_service.save_to_file()
-        except Exception:
-            pass
-        return {"status": "success", "region_id": region_id}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.debug(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"创建区域失败: {str(e)}")
 
 
 @router.post("/regions/meta", summary="更新区域元信息（画布/背景/铺放/参考）")
@@ -170,64 +183,165 @@ async def update_region(
     region_id: str,
     region_data: Dict[str, Any],
     force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
-    region_service: RegionService = Depends(get_region_service),
 ) -> Dict[str, Any]:
-    """更新区域信息."""
-    # 灰度：写操作需要更谨慎
+    """更新区域信息（存储到数据库）."""
+    # 统一使用数据库（领域服务）
     try:
-        if should_use_domain(force_domain) and get_region_domain_service is not None:
+        if get_region_domain_service is not None:
             region_domain_service = await get_region_domain_service()
             if region_domain_service:
                 result = await region_domain_service.update_region(
                     region_id, region_data
                 )
                 return result
+            else:
+                logger.error("区域领域服务未初始化")
+                raise HTTPException(status_code=500, detail="区域服务未初始化")
+        else:
+            logger.error("区域领域服务不可用")
+            raise HTTPException(status_code=500, detail="区域服务不可用")
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        logger.warning(f"领域服务更新区域失败，回退到旧实现: {e}")
+        logger.error(f"更新区域失败: {e}")
+        import traceback
 
-    # 旧实现（回退到JSON文件）
-    try:
-        region_service.update_region(region_id, region_data)
-        try:
-            region_service.save_to_file()
-        except Exception:
-            pass
-        return {"status": "success"}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.debug(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"更新区域失败: {str(e)}")
 
 
 @router.delete("/regions/{region_id}", summary="删除区域")
 async def delete_region(
     region_id: str,
     force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
-    region_service: RegionService = Depends(get_region_service),
 ) -> Dict[str, Any]:
-    """删除区域."""
-    # 灰度：写操作需要更谨慎
+    """删除区域（从数据库删除）."""
+    # 统一使用数据库（领域服务）
     try:
-        if should_use_domain(force_domain) and get_region_domain_service is not None:
+        if get_region_domain_service is not None:
             region_domain_service = await get_region_domain_service()
             if region_domain_service:
                 result = await region_domain_service.delete_region(region_id)
                 return result
+            else:
+                logger.error("区域领域服务未初始化")
+                raise HTTPException(status_code=500, detail="区域服务未初始化")
+        else:
+            logger.error("区域领域服务不可用")
+            raise HTTPException(status_code=500, detail="区域服务不可用")
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        logger.warning(f"领域服务删除区域失败，回退到旧实现: {e}")
+        logger.error(f"删除区域失败: {e}")
+        import traceback
 
-    # 旧实现（回退到JSON文件）
+        logger.debug(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"删除区域失败: {str(e)}")
+
+
+@router.post("/regions/import", summary="从配置文件导入区域到数据库")
+async def import_regions_from_file(
+    file_path: Optional[str] = Query(
+        None, description="配置文件路径（可选，默认使用config/regions.json）"
+    ),
+    camera_id: Optional[str] = Query(None, description="关联的相机ID（可选）"),
+    force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
+) -> Dict[str, Any]:
+    """从配置文件导入区域到数据库."""
     try:
-        region_service.delete_region(region_id)
-        try:
-            region_service.save_to_file()
-        except Exception:
-            pass
-        return {"status": "success"}
+        if get_region_domain_service is not None:
+            region_domain_service = await get_region_domain_service()
+            if region_domain_service:
+                # 如果没有指定文件路径，使用默认路径
+                if not file_path:
+                    import os
+                    from pathlib import Path
+
+                    project_root = Path(__file__).parent.parent.parent.parent
+                    file_path = os.path.join(project_root, "config", "regions.json")
+
+                result = await region_domain_service.import_from_file(
+                    file_path, camera_id
+                )
+                return result
+            else:
+                logger.error("区域领域服务未初始化")
+                raise HTTPException(status_code=500, detail="区域服务未初始化")
+        else:
+            logger.error("区域领域服务不可用")
+            raise HTTPException(status_code=500, detail="区域服务不可用")
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"导入区域失败: {e}")
+        import traceback
+
+        logger.debug(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"导入区域失败: {str(e)}")
+
+
+@router.get("/regions/export", summary="导出区域配置到文件")
+async def export_regions_to_file(
+    file_path: Optional[str] = Query(
+        None, description="导出文件路径（可选，默认使用config/regions.json）"
+    ),
+    force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
+) -> Dict[str, Any]:
+    """从数据库导出区域配置到文件."""
+    try:
+        if get_region_domain_service is not None:
+            region_domain_service = await get_region_domain_service()
+            if region_domain_service:
+                # 获取所有区域
+                regions = await region_domain_service.get_all_regions(active_only=False)
+
+                # 获取meta配置
+                meta = await region_domain_service.get_meta() or {}
+
+                # 如果没有指定文件路径，使用默认路径
+                if not file_path:
+                    import os
+                    from pathlib import Path
+
+                    project_root = Path(__file__).parent.parent.parent.parent
+                    file_path = os.path.join(project_root, "config", "regions.json")
+
+                # 构建导出数据
+                export_data = {
+                    "regions": regions,
+                    "meta": meta,
+                }
+
+                # 保存到文件
+                import json
+
+                with open(file_path, "w", encoding="utf-8") as f:
+                    json.dump(export_data, f, indent=2, ensure_ascii=False)
+
+                logger.info(f"区域配置已导出到: {file_path}")
+                return {
+                    "status": "success",
+                    "file_path": file_path,
+                    "exported_count": len(regions),
+                }
+            else:
+                logger.error("区域领域服务未初始化")
+                raise HTTPException(status_code=500, detail="区域服务未初始化")
+        else:
+            logger.error("区域领域服务不可用")
+            raise HTTPException(status_code=500, detail="区域服务不可用")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"导出区域配置失败: {e}")
+        import traceback
+
+        logger.debug(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"导出区域配置失败: {str(e)}")
 
 
 # ----------------------------
@@ -249,15 +363,27 @@ def _region_to_ui(r: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-@compat_router.get("/api/regions", summary="[兼容] 获取区域（旧版前端）")
-def compat_get_regions(
-    region_service: RegionService = Depends(get_region_service),
-) -> Dict[str, Any]:
+@compat_router.get("/api/regions", summary="[兼容] 获取区域（旧版前端，从数据库读取）")
+async def compat_get_regions() -> Dict[str, Any]:
+    """兼容旧版前端的API（从数据库读取）."""
     try:
-        data = region_service.get_all_regions()
-        ui_regions = [_region_to_ui(d) for d in data]
-        return {"regions": ui_regions, "canvas_size": {"width": 800, "height": 600}}
+        if get_region_domain_service is not None:
+            region_domain_service = await get_region_domain_service()
+            if region_domain_service:
+                data = await region_domain_service.get_all_regions(active_only=False)
+                ui_regions = [_region_to_ui(d) for d in data]
+                return {
+                    "regions": ui_regions,
+                    "canvas_size": {"width": 800, "height": 600},
+                }
+            else:
+                raise HTTPException(status_code=500, detail="区域服务未初始化")
+        else:
+            raise HTTPException(status_code=500, detail="区域服务不可用")
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"获取区域失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 

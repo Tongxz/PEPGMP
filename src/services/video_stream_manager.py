@@ -33,8 +33,8 @@ class VideoStreamManager:
         # 每个摄像头的最新帧缓存 (帧共享机制)
         self.frame_cache: Dict[str, bytes] = {}
 
-        # 发送队列 (异步发送机制)
-        self.send_queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+        # 发送队列 (异步发送机制，增加队列大小以减少丢帧)
+        self.send_queue: asyncio.Queue = asyncio.Queue(maxsize=200)
 
         # 后台发送任务
         self._sender_task: Optional[asyncio.Task] = None
@@ -65,7 +65,8 @@ class VideoStreamManager:
 
             logger.info(
                 f"客户端已连接到视频流 [{camera_id}], "
-                f"当前客户端数: {len(self.active_connections[camera_id])}"
+                f"当前客户端数: {len(self.active_connections[camera_id])}, "
+                f"是否有缓存帧: {camera_id in self.frame_cache}"
             )
 
             # 如果这是第一个客户端，记录活跃摄像头
@@ -77,7 +78,9 @@ class VideoStreamManager:
             if camera_id in self.frame_cache:
                 try:
                     await websocket.send_bytes(self.frame_cache[camera_id])
-                    logger.debug(f"已发送缓存帧到新客户端 [{camera_id}]")
+                    logger.info(
+                        f"已发送缓存帧到新客户端 [{camera_id}], 帧大小={len(self.frame_cache[camera_id])} bytes"
+                    )
                 except Exception as e:
                     logger.warning(f"发送缓存帧失败: {e}")
 
@@ -202,7 +205,7 @@ class VideoStreamManager:
                 logger.error(f"发送循环错误: {e}")
                 await asyncio.sleep(0.1)
 
-    async def _redis_subscribe_loop(self) -> None:
+    async def _redis_subscribe_loop(self) -> None:  # noqa: C901
         """订阅 Redis Pub/Sub 的视频帧并转发到本地发送队列.
 
         订阅通配频道: video:* ，消息负载为JPEG字节。
@@ -258,14 +261,26 @@ class VideoStreamManager:
                 masked_url = urlunparse(
                     (p.scheme, masked_netloc, p.path, p.params, p.query, p.fragment)
                 )
-                logger.info(f"视频流Redis订阅使用连接: {masked_url}")
             except Exception:
-                pass
+                masked_url = redis_url  # 如果解析失败，使用原始URL
 
+            logger.info(f"视频流Redis订阅使用连接: {masked_url}")
+
+            # 创建Redis连接
             self._redis = aioredis.from_url(redis_url, decode_responses=False)
+
+            # 测试连接
+            try:
+                await self._redis.ping()
+                logger.info(f"Redis连接测试成功: {masked_url}")
+            except Exception as e:
+                logger.error(f"Redis连接测试失败: {e}, url={masked_url}")
+                raise
+
+            # 创建pubsub并订阅
             pubsub = self._redis.pubsub()
             await pubsub.psubscribe("video:*")
-            logger.info(f"视频流Redis订阅已启动: {redis_url} (pattern=video:*)")
+            logger.info(f"视频流Redis订阅已启动: {masked_url} (pattern=video:*)")
 
             async for msg in pubsub.listen():
                 try:
@@ -293,15 +308,49 @@ class VideoStreamManager:
                     # 直接调用内部方法，避免重复编码
                     self.frame_cache[camera_id] = data
                     self.stats["frames_received"] += 1
-                    if self.stats["frames_received"] % 30 == 0:
-                        logger.debug(
-                            f"Redis已接收帧: {self.stats['frames_received']} (camera={camera_id})"
+
+                    # 每30帧记录一次，第一次和每100帧也记录
+                    if (
+                        self.stats["frames_received"] == 1
+                        or self.stats["frames_received"] % 30 == 0
+                        or self.stats["frames_received"] % 100 == 0
+                    ):
+                        logger.info(
+                            f"Redis已接收帧: {self.stats['frames_received']} (camera={camera_id}, "
+                            f"size={len(data)}, clients={len(self.active_connections.get(camera_id, set()))})"
                         )
-                    if self.has_clients(camera_id):
+
+                    # 检查是否有客户端连接
+                    has_clients = self.has_clients(camera_id)
+
+                    if has_clients:
                         try:
+                            # 如果队列快满了，尝试丢弃旧帧，只保留最新帧
+                            if self.send_queue.qsize() > 150:
+                                try:
+                                    # 尝试丢弃一个旧帧
+                                    self.send_queue.get_nowait()
+                                    self.stats["frames_dropped"] += 1
+                                except asyncio.QueueEmpty:
+                                    pass
                             self.send_queue.put_nowait((camera_id, data))
+                            # 每100帧记录一次队列日志（减少日志输出）
+                            if self.stats["frames_received"] % 100 == 0:
+                                logger.debug(
+                                    f"帧已加入发送队列: camera={camera_id}, queue_size={self.send_queue.qsize()}"
+                                )
                         except asyncio.QueueFull:
                             self.stats["frames_dropped"] += 1
+                            logger.warning(f"发送队列已满，丢弃帧: camera={camera_id}")
+                    else:
+                        # 只在第一次或每100帧记录一次（减少日志输出）
+                        if (
+                            self.stats["frames_received"] == 1
+                            or self.stats["frames_received"] % 100 == 0
+                        ):
+                            logger.debug(
+                                f"无客户端连接，跳过发送队列: camera={camera_id} (已接收{self.stats['frames_received']}帧)"
+                            )
                 except Exception as ie:
                     logger.debug(f"Redis订阅消息处理失败: {ie}")
         except asyncio.CancelledError:
@@ -328,15 +377,33 @@ class VideoStreamManager:
         """启动后台发送任务"""
         if self._sender_task is None or self._sender_task.done():
             self._sender_task = asyncio.create_task(self._sender_loop())
-            logger.info("视频流管理器已启动")
+            logger.info("视频流发送循环任务已启动")
+
         # 启动Redis订阅（可选）
         enable_redis = os.getenv("VIDEO_STREAM_USE_REDIS", "1").strip() not in (
             "0",
             "false",
             "False",
         )
-        if enable_redis and self._redis_task is None:
-            self._redis_task = asyncio.create_task(self._redis_subscribe_loop())
+
+        logger.info(
+            f"视频流Redis订阅配置: enable_redis={enable_redis}, task_exists={self._redis_task is not None}, task_done={self._redis_task.done() if self._redis_task else 'N/A'}"
+        )
+
+        if enable_redis:
+            if self._redis_task is None or self._redis_task.done():
+                try:
+                    logger.info("正在启动Redis订阅任务...")
+                    self._redis_task = asyncio.create_task(self._redis_subscribe_loop())
+                    logger.info("视频流Redis订阅任务已创建")
+                    # 等待一小段时间，让任务启动
+                    await asyncio.sleep(0.1)
+                except Exception as e:
+                    logger.error(f"启动Redis订阅任务失败: {e}", exc_info=True)
+            else:
+                logger.info("Redis订阅任务已在运行")
+        else:
+            logger.info("视频流Redis订阅已禁用（VIDEO_STREAM_USE_REDIS=0）")
 
     async def stop(self) -> None:
         """停止后台任务"""
