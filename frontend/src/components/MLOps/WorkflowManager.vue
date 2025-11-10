@@ -168,7 +168,69 @@
               <n-input v-model:value="step.description" placeholder="输入步骤描述" />
             </n-form-item>
             <n-form-item label="配置">
-              <n-input v-model:value="step.config" type="textarea" placeholder="JSON配置" />
+              <n-input
+                :value="configToString(step.config)"
+                type="textarea"
+                placeholder="JSON配置"
+                @update:value="val => (step.config = val)"
+              />
+            </n-form-item>
+            <n-form-item v-if="step.type === 'dataset_generation'" label="数据集配置">
+              <n-grid :cols="2" :x-gap="12" :y-gap="12">
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>数据集名称</n-input-group-label>
+                    <n-input
+                      :value="step.dataset_params?.dataset_name || ''"
+                      @update:value="val => updateDatasetParam(step, 'dataset_name', val)"
+                      placeholder="不填则自动生成"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>摄像头ID</n-input-group-label>
+                    <n-input
+                      :value="step.dataset_params?.camera_ids || ''"
+                      @update:value="val => updateDatasetParam(step, 'camera_ids', val)"
+                      placeholder="多个摄像头用逗号分隔"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>最大记录</n-input-group-label>
+                    <n-input-number
+                      :value="step.dataset_params?.max_records || 1000"
+                      @update:value="val => updateDatasetParam(step, 'max_records', val)"
+                      :min="100"
+                      :max="50000"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>时间范围</n-input-group-label>
+                    <n-date-picker
+                      type="datetimerange"
+                      :value="datasetTimeRange(step)"
+                      @update:value="val => updateDatasetTimeRange(step, val)"
+                      clearable
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>包含正常样本</n-input-group-label>
+                    <div style="padding: 4px 0;">
+                      <n-switch
+                        :value="step.dataset_params?.include_normal_samples ?? false"
+                        @update:value="val => updateDatasetParam(step, 'include_normal_samples', val)"
+                      />
+                    </div>
+                  </n-input-group>
+                </n-gi>
+              </n-grid>
             </n-form-item>
           </n-card>
         </div>
@@ -302,6 +364,51 @@
       </template>
     </n-modal>
 
+    <!-- 运行详情对话框 -->
+    <n-modal v-model:show="showRunLogDialog" preset="dialog" title="运行详情" style="width: 720px;">
+      <div v-if="currentRun" class="run-log-content">
+        <n-descriptions :column="2" size="small" label-placement="left">
+          <n-descriptions-item label="运行ID">
+            <n-code :code="currentRun.id" />
+          </n-descriptions-item>
+          <n-descriptions-item label="状态">
+            <n-tag :type="getRunStatusType(currentRun.status)" size="small">
+              {{ getRunStatusText(currentRun.status) }}
+            </n-tag>
+          </n-descriptions-item>
+          <n-descriptions-item label="开始时间">
+            {{ formatTime(currentRun.started_at) }}
+          </n-descriptions-item>
+          <n-descriptions-item label="结束时间">
+            {{ currentRun.ended_at ? formatTime(currentRun.ended_at) : '未结束' }}
+          </n-descriptions-item>
+          <n-descriptions-item label="耗时">
+            {{ currentRun.duration != null ? `${currentRun.duration} 分钟` : '未记录' }}
+          </n-descriptions-item>
+        </n-descriptions>
+        <div v-if="currentRun.error_message" style="margin-top: 12px;">
+          <n-alert type="error" :title="currentRun.error_message" :bordered="false" />
+        </div>
+        <n-divider />
+        <n-text depth="3" style="font-size: 12px;">步骤输出</n-text>
+        <n-empty v-if="currentRunEntries.length === 0" description="暂无详细输出" style="margin-top: 12px;" />
+        <n-collapse v-else style="margin-top: 12px;">
+          <n-collapse-item
+            v-for="(entry, index) in currentRunEntries"
+            :key="index"
+            :title="`${entry.name || '步骤'} (${getStepTypeText(entry.type)})`"
+          >
+            <n-code :code="JSON.stringify(entry.output ?? {}, null, 2)" language="json" />
+          </n-collapse-item>
+        </n-collapse>
+      </div>
+      <template #action>
+        <n-space justify="end">
+          <n-button @click="showRunLogDialog = false">关闭</n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
     <!-- 编辑工作流对话框 -->
     <n-modal v-model:show="showEditDialog" preset="dialog" title="编辑工作流" style="width: 800px;">
       <n-form :model="editForm" label-placement="left" label-width="100px">
@@ -347,7 +454,69 @@
               <n-input v-model:value="step.description" placeholder="输入步骤描述" />
             </n-form-item>
             <n-form-item label="配置">
-              <n-input v-model:value="step.config" type="textarea" placeholder="JSON配置" />
+              <n-input
+                :value="configToString(step.config)"
+                type="textarea"
+                placeholder="JSON配置"
+                @update:value="val => (step.config = val)"
+              />
+            </n-form-item>
+            <n-form-item v-if="step.type === 'dataset_generation'" label="数据集配置">
+              <n-grid :cols="2" :x-gap="12" :y-gap="12">
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>数据集名称</n-input-group-label>
+                    <n-input
+                      :value="step.dataset_params?.dataset_name || ''"
+                      @update:value="val => updateDatasetParam(step, 'dataset_name', val)"
+                      placeholder="不填则自动生成"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>摄像头ID</n-input-group-label>
+                    <n-input
+                      :value="step.dataset_params?.camera_ids || ''"
+                      @update:value="val => updateDatasetParam(step, 'camera_ids', val)"
+                      placeholder="多个摄像头用逗号分隔"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>最大记录</n-input-group-label>
+                    <n-input-number
+                      :value="step.dataset_params?.max_records || 1000"
+                      @update:value="val => updateDatasetParam(step, 'max_records', val)"
+                      :min="100"
+                      :max="50000"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>时间范围</n-input-group-label>
+                    <n-date-picker
+                      type="datetimerange"
+                      :value="datasetTimeRange(step)"
+                      @update:value="val => updateDatasetTimeRange(step, val)"
+                      clearable
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>包含正常样本</n-input-group-label>
+                    <div style="padding: 4px 0;">
+                      <n-switch
+                        :value="step.dataset_params?.include_normal_samples ?? false"
+                        @update:value="val => updateDatasetParam(step, 'include_normal_samples', val)"
+                      />
+                    </div>
+                  </n-input-group>
+                </n-gi>
+              </n-grid>
             </n-form-item>
             <n-form-item v-if="step.type === 'model_training'" label="训练参数">
               <n-grid :cols="2" :x-gap="12">
@@ -402,14 +571,22 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { NCard, NButton, NSpace, NIcon, NEmpty, NList, NListItem, NTag, NDescriptions, NDescriptionsItem, NDivider, NText, NSteps, NStep, NModal, NForm, NFormItem, NSelect, NInput, NInputNumber, NInputGroup, NInputGroupLabel, useMessage } from 'naive-ui'
+import { NCard, NButton, NSpace, NIcon, NEmpty, NList, NListItem, NTag, NDescriptions, NDescriptionsItem, NDivider, NText, NSteps, NStep, NModal, NForm, NFormItem, NSelect, NInput, NInputNumber, NInputGroup, NInputGroupLabel, NDatePicker, NSwitch, NAlert, NCollapse, NCollapseItem, NCode, useMessage } from 'naive-ui'
 import { RefreshOutline, AddOutline } from '@vicons/ionicons5'
 
 interface WorkflowStep {
   name: string
   type: string
   description: string
-  config: string
+  config: string | Record<string, any>
+  dataset_params?: {
+    dataset_name?: string
+    camera_ids?: string
+    include_normal_samples?: boolean
+    max_records?: number
+    start_time?: string
+    end_time?: string
+  }
   training_params?: {
     learning_rate?: string
     batch_size?: string
@@ -424,8 +601,17 @@ interface WorkflowRun {
   id: string
   status: 'success' | 'failed' | 'running' | 'pending'
   started_at: string
-  duration: number
+  ended_at?: string | null
+  duration?: number | null
   error_message?: string
+  run_log?: string | null
+  run_config?: Record<string, any>
+}
+
+interface WorkflowStepOutput {
+  name: string
+  type: string
+  output?: Record<string, any> | null
 }
 
 interface Workflow {
@@ -455,6 +641,9 @@ const showEditDialog = ref(false)
 const selectedWorkflow = ref<Workflow | null>(null)
 const creating = ref(false)
 const editing = ref(false)
+const showRunLogDialog = ref(false)
+const currentRun = ref<WorkflowRun | null>(null)
+const currentRunEntries = ref<WorkflowStepOutput[]>([])
 
 const workflowForm = ref({
   name: '',
@@ -492,6 +681,7 @@ const triggerOptions = [
 
 const stepTypeOptions = [
   { label: '数据预处理', value: 'data_processing' },
+  { label: '数据集生成', value: 'dataset_generation' },
   { label: '模型训练', value: 'model_training' },
   { label: '模型评估', value: 'model_evaluation' },
   { label: '模型部署', value: 'model_deployment' },
@@ -519,6 +709,252 @@ function updateDeploymentParam(step: WorkflowStep, param: string, value: string 
     step.deployment_params = {}
   }
   step.deployment_params[param as keyof typeof step.deployment_params] = value
+}
+
+function parseConfig(config: WorkflowStep['config']) {
+  if (typeof config === 'string') {
+    try {
+      const parsed = JSON.parse(config)
+      return typeof parsed === 'object' && parsed !== null ? parsed : {}
+    } catch (error) {
+      console.warn('配置解析失败:', error)
+      return {}
+    }
+  }
+  return config && typeof config === 'object' ? config : {}
+}
+
+function configToString(config: WorkflowStep['config']) {
+  if (typeof config === 'string') {
+    return config
+  }
+  try {
+    return JSON.stringify(config || {}, null, 2)
+  } catch (error) {
+    console.warn('配置序列化失败:', error)
+    return '{}'
+  }
+}
+
+function ensureDatasetParams(step: WorkflowStep) {
+  if (!step.dataset_params) {
+    step.dataset_params = {
+      include_normal_samples: false,
+      max_records: 1000
+    }
+  }
+}
+
+function parseCameraIds(value: string | string[] | undefined): string[] | undefined {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean)
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+  return undefined
+}
+
+function datasetTimeRange(step: WorkflowStep) {
+  const params = step.dataset_params
+  if (!params || !params.start_time || !params.end_time) {
+    return null
+  }
+  const start = Date.parse(params.start_time)
+  const end = Date.parse(params.end_time)
+  if (Number.isNaN(start) || Number.isNaN(end)) {
+    return null
+  }
+  return [start, end]
+}
+
+function updateDatasetTimeRange(step: WorkflowStep, value: [number, number] | null) {
+  ensureDatasetParams(step)
+  if (value && Array.isArray(value) && value.length === 2) {
+    step.dataset_params!.start_time = new Date(value[0]).toISOString()
+    step.dataset_params!.end_time = new Date(value[1]).toISOString()
+  } else {
+    delete step.dataset_params!.start_time
+    delete step.dataset_params!.end_time
+  }
+  syncDatasetConfig(step)
+}
+
+function updateDatasetParam(step: WorkflowStep, param: string, value: any) {
+  ensureDatasetParams(step)
+  if (param === 'max_records') {
+    const numeric = Number(value)
+    step.dataset_params!.max_records = Number.isNaN(numeric) ? 1000 : numeric
+  } else if (param === 'include_normal_samples') {
+    step.dataset_params!.include_normal_samples = Boolean(value)
+  } else if (param === 'camera_ids') {
+    if (value) {
+      step.dataset_params!.camera_ids = value
+    } else {
+      delete step.dataset_params!.camera_ids
+    }
+  } else if (param === 'dataset_name') {
+    if (value) {
+      step.dataset_params!.dataset_name = value
+    } else {
+      delete step.dataset_params!.dataset_name
+    }
+  }
+  syncDatasetConfig(step)
+}
+
+function syncDatasetConfig(step: WorkflowStep) {
+  if (!step.dataset_params) {
+    return
+  }
+  const cameraIds = parseCameraIds(step.dataset_params.camera_ids)
+  const config: Record<string, any> = {
+    ...step.dataset_params,
+    camera_ids: cameraIds
+  }
+  if (cameraIds === undefined) {
+    delete config.camera_ids
+  }
+  step.config = JSON.stringify(config, null, 2)
+}
+
+function normalizeDatasetParams(step: WorkflowStep) {
+  if (step.type !== 'dataset_generation') {
+    return undefined
+  }
+  if (!step.dataset_params) {
+    return undefined
+  }
+  const params: Record<string, any> = {}
+  if (step.dataset_params.dataset_name) {
+    params.dataset_name = step.dataset_params.dataset_name
+  }
+  const cameraList = parseCameraIds(step.dataset_params.camera_ids)
+  if (cameraList && cameraList.length > 0) {
+    params.camera_ids = cameraList
+  }
+  if (step.dataset_params.include_normal_samples !== undefined) {
+    params.include_normal_samples = Boolean(step.dataset_params.include_normal_samples)
+  }
+  if (step.dataset_params.max_records !== undefined) {
+    const numeric = Number(step.dataset_params.max_records)
+    params.max_records = Number.isNaN(numeric) ? 1000 : numeric
+  }
+  if (step.dataset_params.start_time) {
+    params.start_time = step.dataset_params.start_time
+  }
+  if (step.dataset_params.end_time) {
+    params.end_time = step.dataset_params.end_time
+  }
+  return Object.keys(params).length > 0 ? params : undefined
+}
+
+function normalizeStepsForSubmit(steps: WorkflowStep[]) {
+  return steps.map((step) => {
+    const normalized: Record<string, any> = {
+      name: step.name,
+      type: step.type,
+      description: step.description
+    }
+    const configObj = parseConfig(step.config)
+    const datasetParams = normalizeDatasetParams(step)
+    if (datasetParams) {
+      normalized.dataset_params = datasetParams
+      Object.assign(configObj, datasetParams)
+    }
+    if (Object.keys(configObj).length > 0) {
+      normalized.config = configObj
+    }
+    if (step.training_params) {
+      const trainingPayload: Record<string, any> = {}
+      if (step.training_params.learning_rate) {
+        trainingPayload.learning_rate = step.training_params.learning_rate
+      }
+      if (step.training_params.batch_size) {
+        trainingPayload.batch_size = step.training_params.batch_size
+      }
+      if (Object.keys(trainingPayload).length > 0) {
+        normalized.training_params = trainingPayload
+      }
+    }
+    if (step.deployment_params) {
+      const deploymentPayload: Record<string, any> = {}
+      if (step.deployment_params.replicas) {
+        deploymentPayload.replicas = step.deployment_params.replicas
+      }
+      if (step.deployment_params.environment) {
+        deploymentPayload.environment = step.deployment_params.environment
+      }
+      if (Object.keys(deploymentPayload).length > 0) {
+        normalized.deployment_params = deploymentPayload
+      }
+    }
+    return normalized
+  })
+}
+
+function buildWorkflowPayload(formValue: typeof workflowForm.value) {
+  const payload: Record<string, any> = {
+    name: formValue.name,
+    type: formValue.type,
+    trigger: formValue.trigger,
+    description: formValue.description,
+    steps: normalizeStepsForSubmit(formValue.steps)
+  }
+  if (formValue.trigger === 'schedule' && formValue.schedule) {
+    payload.schedule = formValue.schedule
+  }
+  return payload
+}
+
+function resetWorkflowForm() {
+  workflowForm.value = {
+    name: '',
+    type: 'training',
+    trigger: 'manual',
+    schedule: '',
+    description: '',
+    steps: [
+      {
+        name: '数据预处理',
+        type: 'data_processing',
+        description: '清洗和预处理数据',
+        config: '{}'
+      }
+    ]
+  }
+}
+
+function prepareStepForForm(step: any): WorkflowStep {
+  const configObj = parseConfig(step?.config)
+  let datasetParams: WorkflowStep['dataset_params']
+  if (step?.type === 'dataset_generation') {
+    const paramsSource = step.dataset_params || configObj || {}
+    const cameraIds = paramsSource.camera_ids
+    datasetParams = {
+      dataset_name: paramsSource.dataset_name || '',
+      camera_ids: Array.isArray(cameraIds) ? cameraIds.join(',') : cameraIds || '',
+      include_normal_samples: paramsSource.include_normal_samples ?? false,
+      max_records: paramsSource.max_records ?? 1000,
+      start_time: paramsSource.start_time,
+      end_time: paramsSource.end_time
+    }
+    if (!datasetParams.camera_ids) {
+      delete datasetParams.camera_ids
+    }
+  }
+  return {
+    name: step?.name || '',
+    type: step?.type || 'data_processing',
+    description: step?.description || '',
+    config: JSON.stringify(configObj, null, 2),
+    dataset_params: datasetParams,
+    training_params: step?.training_params,
+    deployment_params: step?.deployment_params
+  }
 }
 
 // 获取工作流列表
@@ -640,7 +1076,7 @@ async function fetchWorkflows() {
 
 // 刷新工作流
 function refreshWorkflows() {
-  fetchWorkflows()
+  return fetchWorkflows()
 }
 
 // 获取工作流状态类型
@@ -738,24 +1174,28 @@ function viewWorkflow(workflow: Workflow) {
 // 编辑工作流
 function editWorkflow(workflow: Workflow) {
   selectedWorkflow.value = workflow
-  // 填充当前工作流的配置到编辑表单
   editForm.value = {
     name: workflow.name,
     type: workflow.type,
     trigger: workflow.trigger,
     schedule: workflow.schedule || '',
     description: workflow.description,
-    steps: workflow.steps.map(step => ({
-      ...step,
-      training_params: step.type === 'model_training' ? {
-        learning_rate: '0.001',
-        batch_size: '32'
-      } : undefined,
-      deployment_params: step.type === 'model_deployment' ? {
-        replicas: 1,
-        environment: 'staging'
-      } : undefined
-    }))
+    steps: workflow.steps.map((step) => {
+      const prepared = prepareStepForForm(step)
+      if (step.type === 'model_training') {
+        prepared.training_params = {
+          learning_rate: step.training_params?.learning_rate || '0.001',
+          batch_size: step.training_params?.batch_size || '32'
+        }
+      }
+      if (step.type === 'model_deployment') {
+        prepared.deployment_params = {
+          replicas: step.deployment_params?.replicas || 1,
+          environment: step.deployment_params?.environment || 'staging'
+        }
+      }
+      return prepared
+    })
   }
   showEditDialog.value = true
 }
@@ -771,8 +1211,19 @@ async function runWorkflow(workflow: Workflow) {
         method: 'POST'
       })
       if (response.ok) {
+        const result = await response.json()
         message.success('工作流运行成功')
-        refreshWorkflows()
+        await refreshWorkflows()
+        if (result.outputs && Array.isArray(result.outputs)) {
+          currentRunEntries.value = result.outputs as WorkflowStepOutput[]
+          currentRun.value = {
+            id: result.run_id,
+            status: 'success',
+            started_at: new Date().toISOString(),
+            run_log: JSON.stringify(result.outputs)
+          } as WorkflowRun
+          showRunLogDialog.value = true
+        }
       } else {
         throw new Error('运行失败')
       }
@@ -841,13 +1292,23 @@ function removeStep(index: number) {
 async function submitWorkflow() {
   creating.value = true
   try {
-    // 模拟API调用
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    console.log('工作流配置:', workflowForm.value)
+    const payload = buildWorkflowPayload(workflowForm.value)
+    const response = await fetch('/api/v1/mlops/workflows', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(errorText || '创建失败')
+    }
+    message.success('工作流创建成功')
     showCreateDialog.value = false
-    refreshWorkflows()
+    resetWorkflowForm()
+    await refreshWorkflows()
   } catch (error) {
     console.error('创建工作流失败:', error)
+    message.error('创建工作流失败')
   } finally {
     creating.value = false
   }
@@ -868,6 +1329,7 @@ function getWorkflowTypeColor(type: string) {
 function getStepTypeColor(type: string) {
   const typeMap = {
     data_processing: 'info',
+    dataset_generation: 'success',
     model_training: 'success',
     model_evaluation: 'warning',
     model_deployment: 'error',
@@ -881,6 +1343,7 @@ function getStepTypeColor(type: string) {
 function getStepTypeText(type: string) {
   const typeMap = {
     data_processing: '数据处理',
+    dataset_generation: '数据集生成',
     model_training: '模型训练',
     model_evaluation: '模型评估',
     model_deployment: '模型部署',
@@ -892,9 +1355,20 @@ function getStepTypeText(type: string) {
 
 // 查看运行详情
 function viewRunDetails(run: WorkflowRun) {
-  console.log('查看运行详情:', run)
-  message.info(`查看运行详情: ${run.id}`)
-  // TODO: 实现运行详情查看
+  currentRun.value = run
+  let entries: WorkflowStepOutput[] = []
+  if (run.run_log) {
+    try {
+      const parsed = JSON.parse(run.run_log)
+      if (Array.isArray(parsed)) {
+        entries = parsed as WorkflowStepOutput[]
+      }
+    } catch (error) {
+      console.warn('解析运行日志失败:', error)
+    }
+  }
+  currentRunEntries.value = entries
+  showRunLogDialog.value = true
 }
 
 // 添加编辑步骤
@@ -915,24 +1389,24 @@ function removeEditStep(index: number) {
 // 提交编辑
 async function submitEdit() {
   if (!selectedWorkflow.value) return
-  
+
   editing.value = true
   try {
-    message.loading('正在保存工作流...')
-    
-    // 调用更新API
+    const payload = buildWorkflowPayload(editForm.value as any)
+    const loadingMessage = message.loading('正在保存工作流...', { duration: 0 })
     const response = await fetch(`/api/v1/mlops/workflows/${selectedWorkflow.value.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(editForm.value)
+      body: JSON.stringify(payload)
     })
-    
+    loadingMessage.destroy()
     if (response.ok) {
       message.success('工作流保存成功')
       showEditDialog.value = false
-      refreshWorkflows()
+      await refreshWorkflows()
     } else {
-      throw new Error('保存失败')
+      const errorText = await response.text()
+      throw new Error(errorText || '保存失败')
     }
   } catch (error) {
     console.error('保存工作流失败:', error)
