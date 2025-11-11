@@ -1,0 +1,16 @@
+{
+  "dataset_dir": "datasets/exports/vid1-dataset-train_20251110_070323_20251110_070323",
+  "annotations_file": "datasets/exports/vid1-dataset-train_20251110_070323_20251110_070323/annotations.csv",
+  "samples": 46,
+  "metrics": {
+    "strategy": "most_frequent",
+    "class": 1,
+    "accuracy": 1.0
+  },
+  "generated_at": "2025-11-10T07:03:23.318673",
+  "model_path": "models/mlops/mlops_model_20251110_070323.joblib",
+  "training_params": {
+    "learning_rate": "0.001",
+    "batch_size": "32"
+  }
+}
