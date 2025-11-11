@@ -9,7 +9,6 @@ Human Behavior Detection System Main Entry Point
 """
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -20,7 +19,6 @@ sys.path.insert(0, str(src_path))
 try:
     import time
 
-    from utils.gpu_acceleration import initialize_gpu_acceleration
     from utils.logger import setup_project_logger
 except ImportError:
     # This is a workaround for running scripts directly from the repository root.
@@ -29,14 +27,10 @@ except ImportError:
     sys.path.insert(0, str(src_path))
     import time
 
-    from utils.gpu_acceleration import initialize_gpu_acceleration
     from utils.logger import setup_project_logger
 
-# GPU加速优化（在导入其他模块之前）
-try:
-    gpu_status = initialize_gpu_acceleration()
-except (ImportError, NameError):
-    gpu_status = {"device": "cpu", "gpu_available": False}
+# GPU加速优化已移除，设备选择由 ModelConfig.select_device() 处理
+# gpu_status 变量已不再使用，设备选择逻辑在 select_device() 函数中
 
 
 def create_argument_parser():
@@ -88,8 +82,12 @@ def create_argument_parser():
 
     # API服务参数
     parser.add_argument("--port", type=int, default=8000, help="API服务端口 (默认: 8000)")
+    # 对于 API 服务需要在局域网内可访问，因此默认绑定到 0.0.0.0
     parser.add_argument(
-        "--host", type=str, default="0.0.0.0", help="API服务主机 (默认: 0.0.0.0)"
+        "--host",
+        type=str,
+        default="0.0.0.0",  # nosec B104: 需要在局域网内开放访问
+        help="API服务主机 (默认: 0.0.0.0)",
     )
 
     # GPU和性能参数
@@ -176,14 +174,10 @@ def setup_logging_and_gpu(args):
     logger.info(f"运行模式: {args.mode}")
 
     # 显示GPU状态
-    if gpu_status["gpu_available"]:
-        logger.info(f"🚀 GPU加速已启用: {gpu_status['device']}")
-        if args.gpu_optimize:
-            logger.info("⚙️  GPU优化模式已启用")
-    else:
-        logger.info("⚠️  GPU不可用，使用CPU模式")
-        if args.gpu_optimize:
-            logger.warning("⚠️  GPU优化参数已忽略（GPU不可用）")
+    # GPU加速状态检查已移除，设备选择由 ModelConfig.select_device() 处理
+    # 设备信息会在 select_device() 函数中记录
+    if args.gpu_optimize:
+        logger.info("⚙️  GPU优化模式已启用")
 
     logger.info("=" * 50)
     return logger
@@ -234,674 +228,67 @@ def main():
         logger.info("程序结束")
 
 
-def load_unified_params(args, logger):
-    """加载统一参数并应用CLI覆盖"""
-    try:
-        from config.unified_params import get_unified_params
-
-        params = get_unified_params()
-        cli_overrides = {"runtime": {}, "human_detection": {}, "cascade": {}}
-        if args.imgsz:
-            cli_overrides["human_detection"]["imgsz"] = int(args.imgsz)
-        if args.human_weights:
-            cli_overrides["human_detection"]["model_path"] = str(args.human_weights)
-        if args.cascade_enable:
-            cli_overrides["cascade"]["enable"] = True
-        if args.log_interval is not None:
-            cli_overrides["runtime"]["log_interval"] = int(args.log_interval)
-        effective = params.build_effective_config(
-            profile=args.profile, cli_overrides=cli_overrides
-        )
-        return effective
-    except Exception as e:
-        logger.error(f"加载/合并配置失败: {e}")
-        return None
-
-
-def apply_adaptive_optimizations(args, logger):
-    """应用自适应性能优化"""
-    try:
-        from src.utils.adaptive_optimizer import apply_adaptive_optimizations
-
-        adaptive_config = apply_adaptive_optimizations()
-
-        # 应用自适应配置（如果用户未手动指定）
-        auto_device = (args.device is None) or (str(args.device).lower() == "auto")
-        auto_imgsz = (args.imgsz is None) or (str(args.imgsz).lower() == "auto")
-        auto_weights = args.human_weights is None
-
-        if auto_device:
-            args.device = "cuda" if adaptive_config.get("enable_amp") else "cpu"
-        if auto_imgsz:
-            args.imgsz = adaptive_config.get("imgsz", 416)
-        if auto_weights:
-            recommended_model = adaptive_config.get("model_recommendations", {}).get(
-                "human_model", "yolov8s.pt"
-            )
-            args.human_weights = f"models/yolo/{recommended_model}"
-
-        logger.info(f"自适应优化已启用: {adaptive_config['description']}")
-        logger.info(
-            f"推荐配置 - 设备: {args.device}, 图像尺寸: {args.imgsz}, 模型: {args.human_weights}"
-        )
-        return True
-
-    except Exception as e:
-        logger.debug(f"自适应优化跳过: {e}")
-        return False
-
-
-def apply_hardware_probe_fallback(args, logger):
-    """应用硬件探测回退逻辑"""
-    auto_device = (args.device is None) or (str(args.device).lower() == "auto")
-    auto_imgsz = (args.imgsz is None) or (str(args.imgsz).lower() == "auto")
-    auto_weights = args.human_weights is None
-
-    if auto_device or auto_imgsz or auto_weights:
-        try:
-            from src.utils.hardware_probe import decide_policy
-
-            pol = decide_policy(
-                preferred_profile=args.profile,
-                user_device=args.device,
-                user_imgsz=args.imgsz,
-            )
-            if auto_device:
-                args.device = pol.get("device")
-            if auto_imgsz:
-                args.imgsz = pol.get("imgsz")
-            if auto_weights and pol.get("human_weights"):
-                args.human_weights = pol.get("human_weights")
-            # 环境变量注入（线程数等）
-            for k, v in (pol.get("env") or {}).items():
-                os.environ[str(k)] = str(v)
-            logger.info(f"Auto policy applied: {pol}")
-        except Exception as _e:
-            logger.debug(f"hardware_probe skipped: {_e}")
-
-
-def select_device(args, logger):
-    """选择计算设备"""
-    try:
-        from config.model_config import ModelConfig
-
-        mc = ModelConfig()
-        dev_req = args.device or None
-        device = mc.select_device(requested=dev_req)
-        logger.info(f"Device selected: {device}")
-        return device
-    except Exception as e:
-        logger.error(f"选择设备失败: {e}")
-        return "cpu"
-
-
-def _run_detection_loop(args, logger, pipeline, device):
-    """
-    执行视频检测循环
-
-    Args:
-        args: 命令行参数
-        logger: 日志记录器
-        pipeline: 检测管线实例
-        device: 设备类型 (cpu/cuda/mps)
-    """
-    import asyncio
-    import json
-    import signal
-    from collections import defaultdict
-    from datetime import datetime
-
-    import cv2
-    import redis
-
-    # --- Redis Publisher Setup ---
-    redis_client_stats = None
-    camera_id = getattr(args, "camera_id", "unknown")
-    try:
-        redis_url = os.getenv("REDIS_URL")
-        if not redis_url:
-            host = os.getenv("REDIS_HOST", "localhost")
-            port = int(os.getenv("REDIS_PORT", "6379"))
-            db = int(os.getenv("REDIS_DB", "0"))
-            password = os.getenv("REDIS_PASSWORD")
-            redis_client_stats = redis.Redis(
-                host=host, port=port, db=db, password=password
-            )
-        else:
-            redis_client_stats = redis.Redis.from_url(redis_url)
-
-        redis_client_stats.ping()  # Test connection
-        logger.info("[STATS] Redis publisher for stats connected on channel hbd:stats")
-    except Exception as e:
-        logger.warning(
-            f"[STATS] Could not connect to Redis for stats publishing: {e}. Stats will not be sent."
-        )
-        redis_client_stats = None
-
-    def publish_stats_to_redis(data):
-        if redis_client_stats:
-            try:
-                payload = json.dumps(data)
-                redis_client_stats.publish("hbd:stats", payload)
-            except Exception as e:
-                logger.debug(f"[STATS] Failed to publish stats to Redis: {e}")
-
-    # --- End Redis Publisher Setup ---
-
-    # 导入数据库服务
-    try:
-        from src.services.database_service import DatabaseService
-
-        db_enabled = True
-        logger.info("数据库服务已启用")
-    except ImportError as e:
-        db_enabled = False
-        logger.warning(f"数据库服务未启用: {e}")
-
-    # 导入视频流管理器
-    try:
-        from src.services.video_stream_manager import get_stream_manager
-
-        get_stream_manager()
-        stream_enabled = True
-        logger.info("视频流推送已启用")
-    except ImportError as e:
-        stream_enabled = False
-        logger.warning(f"视频流推送未启用: {e}")
-
-    # 全局标志用于优雅退出
-    shutdown_requested = {"flag": False}
-
-    def signal_handler(signum, frame):
-        """处理退出信号"""
-        logger.info(f"收到信号 {signum}，准备退出...")
-        shutdown_requested["flag"] = True
-
-    # 注册信号处理器
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGINT, signal_handler)
-
-    # 打开视频源
-    source = args.source
-    # 尝试将源转换为整数（摄像头索引）
-    try:
-        source = int(source)
-    except (ValueError, TypeError):
-        pass  # 保持为字符串（文件路径）
-
-    cap = cv2.VideoCapture(source)
-    if not cap.isOpened():
-        logger.error(f"无法打开视频源: {args.source}")
-        return
-
-    # 获取视频信息
-    fps = int(cap.get(cv2.CAP_PROP_FPS)) or 30
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-
-    logger.info(
-        f"视频信息: {width}x{height} @ {fps}FPS, 总帧数: {total_frames if total_frames > 0 else '未知(实时流)'}"
-    )
-
-    # 日志间隔设置（用于跳帧）
-    log_interval = getattr(args, "log_interval", None) or 1
-    if log_interval > 1:
-        logger.info(f"启用帧跳过: 每 {log_interval} 帧处理 1 帧")
-
-    frame_count = 0
-    process_count = 0
-    start_time = time.time()
-    last_log_time = start_time
-
-    # 数据库相关初始化
-    db_service = None
-    save_interval = int(os.getenv("DETECTION_SAVE_INTERVAL", "10"))  # 每10帧保存一次
-
-    # 视频流推送配置
-    STREAM_INTERVAL = int(
-        os.getenv("VIDEO_STREAM_INTERVAL", "3")
-    )  # 每3帧推送一次视频流（约10 FPS）
-    VIDEO_QUALITY = int(os.getenv("VIDEO_STREAM_QUALITY", "70"))  # JPEG质量
-    int(os.getenv("VIDEO_STREAM_WIDTH", "1280"))
-    int(os.getenv("VIDEO_STREAM_HEIGHT", "720"))
-
-    # 小时统计
-    hour_stats = defaultdict(int)
-    current_hour = datetime.now().replace(minute=0, second=0, microsecond=0)
-
-    # 初始化数据库（如果启用）
-    if db_enabled:
-        try:
-            db_service = DatabaseService()
-            asyncio.run(db_service.init())
-            logger.info(f"✅ 数据库服务初始化成功，每 {save_interval} 帧保存一次")
-        except Exception as e:
-            logger.error(f"数据库初始化失败: {e}")
-            db_service = None
-
-    try:
-        logger.info("开始视频处理循环...")
-
-        while not shutdown_requested["flag"]:
-            ret, frame = cap.read()
-            if not ret:
-                if total_frames > 0:
-                    logger.info("视频文件播放完成，重新开始循环播放...")
-                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                    frame_count = 0
-                    continue
-                else:
-                    logger.warning("视频流读取失败")
-                    break
-
-            frame_count += 1
-
-            if log_interval > 1 and frame_count % log_interval != 0:
-                continue
-
-            process_count += 1
-            detection_start = time.time()
-
-            try:
-                result = pipeline.detect_comprehensive(
-                    frame,
-                    enable_hairnet=True,
-                    enable_handwash=True,
-                    enable_sanitize=True,
-                )
-                detection_time = time.time() - detection_start
-
-                person_count = len(result.person_detections)
-                hairnet_count = len(result.hairnet_results)
-                handwash_count = len(result.handwash_results)
-                sanitize_count = len(result.sanitize_results)
-
-                hour_stats["frames"] += 1
-                hour_stats["persons"] += person_count
-                hour_stats["handwash_events"] += handwash_count
-                hour_stats["sanitize_events"] += sanitize_count
-
-                hairnet_violations = sum(
-                    1 for h in result.hairnet_results if not h.get("has_hairnet", True)
-                )
-                hour_stats["hairnet_violations"] += hairnet_violations
-
-                # ===== 智能保存决策 (使用应用服务) =====
-                # 使用应用服务处理检测结果（智能保存）
-                if (
-                    db_service
-                    and hasattr(args, "detection_app_service")
-                    and args.detection_app_service
-                ):
-                    try:
-                        # 使用应用服务进行智能保存
-                        app_result = asyncio.run(
-                            args.detection_app_service.process_realtime_stream(
-                                camera_id=camera_id,
-                                frame=frame,
-                                frame_count=frame_count,
-                            )
-                        )
-
-                        # 记录保存状态（只在保存时记录，避免日志过多）
-                        if app_result.get("saved_to_db"):
-                            save_reason = app_result.get("save_reason", "unknown")
-                            logger.debug(
-                                f"✓ 帧 {frame_count}: 已保存 ({save_reason}), "
-                                f"违规={app_result['result']['has_violations']}, "
-                                f"严重程度={app_result['result']['violation_severity']:.2f}"
-                            )
-                    except Exception as e:
-                        logger.warning(f"智能保存失败: {e}，回退到原有逻辑")
-                        # 回退到原有的保存逻辑
-                        if process_count % save_interval == 0:
-                            try:
-                                elapsed = time.time() - start_time
-                                avg_fps = process_count / elapsed if elapsed > 0 else 0
-                                record_id = asyncio.run(
-                                    db_service.save_detection_record(
-                                        camera_id=camera_id,
-                                        frame_number=frame_count,
-                                        result=result,
-                                        fps=avg_fps,
-                                    )
-                                )
-                                for hairnet_result in result.hairnet_results:
-                                    if not hairnet_result.get("has_hairnet", True):
-                                        asyncio.run(
-                                            db_service.save_violation_event(
-                                                detection_id=record_id,
-                                                camera_id=camera_id,
-                                                violation_type="no_hairnet",
-                                                track_id=hairnet_result.get("track_id"),
-                                                confidence=hairnet_result.get(
-                                                    "confidence", 0.0
-                                                ),
-                                                bbox=hairnet_result.get("bbox"),
-                                            )
-                                        )
-                                logger.debug(f"已保存检测记录（回退逻辑）: {record_id}")
-                            except Exception as save_error:
-                                logger.error(f"保存检测记录失败（回退逻辑）: {save_error}")
-                # 如果没有应用服务，使用原有的保存逻辑
-                elif db_service and process_count % save_interval == 0:
-                    try:
-                        elapsed = time.time() - start_time
-                        avg_fps = process_count / elapsed if elapsed > 0 else 0
-                        record_id = asyncio.run(
-                            db_service.save_detection_record(
-                                camera_id=camera_id,
-                                frame_number=frame_count,
-                                result=result,
-                                fps=avg_fps,
-                            )
-                        )
-                        for hairnet_result in result.hairnet_results:
-                            if not hairnet_result.get("has_hairnet", True):
-                                asyncio.run(
-                                    db_service.save_violation_event(
-                                        detection_id=record_id,
-                                        camera_id=camera_id,
-                                        violation_type="no_hairnet",
-                                        track_id=hairnet_result.get("track_id"),
-                                        confidence=hairnet_result.get(
-                                            "confidence", 0.0
-                                        ),
-                                        bbox=hairnet_result.get("bbox"),
-                                    )
-                                )
-                        logger.debug(f"已保存检测记录（传统逻辑）: {record_id}")
-                    except Exception as e:
-                        logger.error(f"保存检测记录失败（传统逻辑）: {e}")
-
-                now = datetime.now()
-                new_hour = now.replace(minute=0, second=0, microsecond=0)
-                if new_hour > current_hour and db_service:
-                    try:
-                        asyncio.run(
-                            db_service.update_hourly_statistics(
-                                camera_id=camera_id,
-                                hour_start=current_hour,
-                                stats=dict(hour_stats),
-                            )
-                        )
-                        logger.info(f"已保存小时统计: {current_hour}")
-                        hour_stats.clear()
-                        current_hour = new_hour
-                    except Exception as e:
-                        logger.error(f"保存小时统计失败: {e}")
-
-                current_time = time.time()
-                should_log = (
-                    process_count % 10 == 0 or (current_time - last_log_time) >= 5.0
-                )
-
-                if should_log:
-                    elapsed = current_time - start_time
-                    avg_fps = process_count / elapsed if elapsed > 0 else 0
-                    progress = (
-                        f"{frame_count}/{total_frames}"
-                        if total_frames > 0
-                        else str(frame_count)
-                    )
-
-                    logger.info(
-                        f"帧 {progress} | "
-                        f"检测: 人={person_count}, 发网={hairnet_count}, 洗手={handwash_count}, 消毒={sanitize_count} | "
-                        f"耗时: {detection_time:.3f}s | "
-                        f"处理FPS: {avg_fps:.2f}"
-                    )
-                    last_log_time = current_time
-
-                    # --- Publish Stats to Redis ---
-                    stats_data = {
-                        "persons": person_count,
-                        "hairnets": hairnet_count,
-                        "handwash": handwash_count,
-                        "fps": avg_fps,
-                        "processed_frames": process_count,
-                        "total_frames": total_frames
-                        if total_frames > 0
-                        else frame_count,
-                        "avg_detection_time": detection_time,
-                    }
-                    stats_message = {
-                        "type": "stats",
-                        "camera_id": camera_id,
-                        "timestamp": time.time(),
-                        "data": stats_data,
-                    }
-                    publish_stats_to_redis(stats_message)
-                    # --- End Publish Stats ---
-
-                if stream_enabled and frame_count % STREAM_INTERVAL == 0:
-                    # ... (video stream logic remains unchanged)
-                    pass
-
-                if args.output and result.annotated_image is not None:
-                    output_dir = Path(args.output)
-                    output_dir.mkdir(parents=True, exist_ok=True)
-                    output_file = output_dir / f"frame_{frame_count:06d}.jpg"
-                    cv2.imwrite(str(output_file), result.annotated_image)
-
-            except Exception as e:
-                logger.error(f"处理第 {frame_count} 帧时出错: {e}")
-                if args.debug:
-                    import traceback
-
-                    traceback.print_exc()
-                continue
-
-        total_time = time.time() - start_time
-        logger.info("=" * 60)
-        logger.info("检测完成统计:")
-        logger.info(f"  总帧数: {frame_count}")
-        logger.info(f"  处理帧数: {process_count}")
-        logger.info(f"  总耗时: {total_time:.2f}s")
-        logger.info(
-            f"  平均处理FPS: {process_count / total_time:.2f}"
-            if total_time > 0
-            else "  平均处理FPS: N/A"
-        )
-
-        try:
-            if hasattr(pipeline, "get_stats"):
-                pipeline_stats = pipeline.get_stats()
-                logger.info("  管线统计:")
-                logger.info(f"    总检测次数: {pipeline_stats.get('total_detections', 0)}")
-                logger.info(f"    缓存命中: {pipeline_stats.get('cache_hits', 0)}")
-                logger.info(f"    缓存未命中: {pipeline_stats.get('cache_misses', 0)}")
-                logger.info(
-                    f"    平均处理时间: {pipeline_stats.get('avg_processing_time', 0):.3f}s"
-                )
-            elif hasattr(pipeline, "stats"):
-                logger.info(f"  管线统计: {pipeline.stats}")
-        except Exception as e:
-            logger.debug(f"无法获取管线统计: {e}")
-        logger.info("=" * 60)
-
-    except KeyboardInterrupt:
-        logger.info("接收到键盘中断，正在退出...")
-
-    except Exception as e:
-        logger.error(f"检测循环出现异常: {e}")
-        if args.debug:
-            import traceback
-
-            traceback.print_exc()
-
-    finally:
-        if db_service and hour_stats:
-            try:
-                asyncio.run(
-                    db_service.update_hourly_statistics(
-                        camera_id=camera_id,
-                        hour_start=current_hour,
-                        stats=dict(hour_stats),
-                    )
-                )
-                logger.info("已保存最终小时统计")
-            except Exception as e:
-                logger.error(f"保存最终统计失败: {e}")
-
-        if db_service:
-            try:
-                asyncio.run(db_service.close())
-                logger.info("数据库连接已关闭")
-            except Exception as e:
-                logger.error(f"关闭数据库连接失败: {e}")
-
-        logger.info("释放资源...")
-        cap.release()
-        cv2.destroyAllWindows()
-        logger.info("资源释放完成")
+# 配置加载函数已移至 src/config/config_loader.py
+# 使用 ConfigLoader 类的静态方法替代
 
 
 def run_detection(args, logger):
-    """运行检测模式"""
+    """运行检测模式 - 简化版"""
+    import asyncio
+
+    from src.application.detection_initializer import DetectionInitializer
+    from src.application.detection_loop_service import DetectionLoopService
+    from src.config.config_loader import ConfigLoader
+
     logger.info(f"开始检测，输入源: {args.source}")
 
-    # 1) 加载统一参数并应用 profiles/CLI 覆盖
-    effective = load_unified_params(args, logger)
-    if not effective:
+    # 1. 加载配置
+    effective_config = ConfigLoader.load_and_merge(args, logger)
+    if not effective_config:
         return
 
-    # 2) 统一设备选择（结合硬件自适应）
-    # 新增：自适应性能优化
-    if not apply_adaptive_optimizations(args, logger):
-        # 回退到原有的硬件探测逻辑
-        apply_hardware_probe_fallback(args, logger)
+    # 2. 应用优化
+    ConfigLoader.apply_optimizations(args, logger)
 
-    device = select_device(args, logger)
+    # 3. 选择设备
+    device = ConfigLoader.select_device(args, logger)
 
-    # 3) 输出配置摘要
-    hd = effective.get("human_detection", {})
-    imgsz = hd.get("imgsz", None)
-    weights = hd.get("model_path", None)
-    prof = effective.get("inference", {}).get("profile", "fast")
+    # 4. 输出配置摘要
+    hd = effective_config.get("human_detection", {})
+    prof = effective_config.get("inference", {}).get("profile", "fast")
     logger.info(
-        f"配置摘要: device={device}, profile={prof}, imgsz={imgsz}, weights={weights}"
+        f"配置摘要: device={device}, profile={prof}, "
+        f"imgsz={hd.get('imgsz')}, weights={hd.get('model_path')}"
     )
 
-    # 4) 构建"优化综合管线"并运行（启用 YOLO 人体与可选级联）
     try:
-        # 将合并后的关键人检参数回填到全局配置，确保 HumanDetector 读取到
-        from config.unified_params import update_global_param
-
-        for k in [
-            "model_path",
-            "confidence_threshold",
-            "iou_threshold",
-            "min_box_area",
-            "max_box_ratio",
-            "min_width",
-            "min_height",
-            "nms_threshold",
-            "max_detections",
-            "device",
-        ]:
-            if k in hd:
-                update_global_param("human_detection", k, hd[k])
-
-        # 初始化检测器和管线
-        from src.core.behavior import BehaviorRecognizer
-        from src.core.optimized_detection_pipeline import OptimizedDetectionPipeline
-        from src.detection.detector import HumanDetector
-        from src.detection.pose_detector import PoseDetectorFactory
-        from src.detection.yolo_hairnet_detector import YOLOHairnetDetector
-
-        # 权重文件存在性检查与回退
-        wpath = Path(weights) if weights else None
-        if not (wpath and wpath.exists()):
-            alt = Path("models/yolo/yolov8n.pt")
-            logger.warning(f"指定权重不存在: {weights}，回退到 {alt}")
-            weights = str(alt)
-            update_global_param("human_detection", "model_path", weights)
-
-        human_detector = HumanDetector(model_path=weights, device=device)
-
-        # 根据配置和设备选择姿态检测后端
-        from config.unified_params import get_unified_params
-
-        params = get_unified_params()
-
-        # 优先使用配置中的后端设置，如果配置为auto则根据设备选择
-        pose_backend = params.pose_detection.backend
-        if pose_backend == "auto":
-            # 自动选择：CUDA设备优先使用YOLOv8，CPU设备使用MediaPipe
-            pose_backend = "yolov8" if str(device).lower() == "cuda" else "mediapipe"
-
-        pose_detector = PoseDetectorFactory.create(
-            backend=pose_backend,
-            device=params.pose_detection.device
-            if params.pose_detection.device != "auto"
-            else device,
-        )
-        logger.info(f"姿态检测器后端: {pose_backend}, 设备: {device}")
-
-        behavior_recognizer = BehaviorRecognizer()
-        hairnet_detector = YOLOHairnetDetector(device=device)
-        cascade_cfg = effective.get("cascade", {})
-
-        pipeline = OptimizedDetectionPipeline(
-            human_detector=human_detector,
-            hairnet_detector=hairnet_detector,
-            behavior_recognizer=behavior_recognizer,
-            pose_detector=pose_detector,
-            enable_cache=True,
-            cache_size=50,
-            cache_ttl=20.0,
-            cascade_config=cascade_cfg,
+        # 5. 初始化检测管线
+        pipeline = DetectionInitializer.initialize_pipeline(
+            args, logger, effective_config
         )
 
-        logger.info("检测管线初始化完成")
+        # 6. 初始化服务
+        detection_service, stream_service = DetectionInitializer.initialize_services(
+            args, logger, pipeline
+        )
 
-        # 创建应用服务（用于智能保存）
-        try:
-            from src.application.detection_application_service import (
-                DetectionApplicationService,
-                SavePolicy,
-                SaveStrategy,
-            )
-            from src.services.detection_service_domain import (
-                get_detection_service_domain,
-            )
+        if not detection_service:
+            logger.error("检测服务初始化失败")
+            return
 
-            # 从命令行参数创建保存策略
-            save_strategy = SaveStrategy[args.save_strategy.upper()]
-            save_policy = SavePolicy(
-                strategy=save_strategy,
-                save_interval=args.save_interval,
-                normal_sample_interval=args.normal_sample_interval,
-                save_normal_summary=True,
-                violation_severity_threshold=args.violation_threshold,
-            )
+        # 7. 创建检测循环配置
+        loop_config = DetectionInitializer.create_loop_config(args)
 
-            # 获取领域服务
-            domain_service = get_detection_service_domain()
+        # 8. 创建并运行检测循环服务
+        loop_service = DetectionLoopService(
+            config=loop_config,
+            detection_pipeline=pipeline,
+            detection_app_service=detection_service,
+            video_stream_service=stream_service,
+        )
 
-            # 创建应用服务
-            detection_app_service = DetectionApplicationService(
-                detection_pipeline=pipeline,
-                detection_domain_service=domain_service,
-                save_policy=save_policy,
-            )
-
-            # 将应用服务添加到args中，供_run_detection_loop使用
-            args.detection_app_service = detection_app_service
-
-            logger.info(
-                f"✓ 智能保存策略已启用: {save_strategy.value}, "
-                f"违规阈值={args.violation_threshold}, "
-                f"采样间隔={args.normal_sample_interval}"
-            )
-        except Exception as e:
-            logger.warning(f"应用服务初始化失败: {e}，将使用传统保存逻辑")
-            args.detection_app_service = None
-
-        # 实现视频处理循环
-        _run_detection_loop(args, logger, pipeline, device)
+        logger.info("🚀 启动检测循环")
+        asyncio.run(loop_service.run())
 
     except Exception as e:
         logger.error(f"检测过程中出现错误: {e}")

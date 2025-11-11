@@ -41,7 +41,6 @@ dependencies = [
     "pandas>=2.0.0",
     "scikit-learn>=1.3.0",
     "scipy>=1.10.0",
-    "xgboost>=1.7.0",
 
     # Web框架
     "fastapi>=0.100.0",
@@ -55,6 +54,7 @@ dependencies = [
     "asyncpg>=0.29.0",
     "alembic>=1.11.0",
     "psycopg2-binary>=2.9.0",
+    "greenlet>=2.0.0",  # 异步数据库支持
 
     # 任务队列
     "redis>=4.5.0",
@@ -81,6 +81,22 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# 按设备需求安装的依赖
+gpu-nvidia = [
+    # NVIDIA GPU 监控（仅在使用 NVIDIA GPU 时需要）
+    # 注意：AMD GPU、Intel GPU、Apple Silicon、CPU 用户无需安装
+    "pynvml>=11.5.0",
+]
+
+# 按功能需求安装的依赖
+ml = [
+    # XGBoost 机器学习分类器 - 洗手行为识别增强
+    # 用于提升洗手行为识别的准确率，与规则引擎融合使用
+    # 详细说明请参考: docs/XGBOOST_ANALYSIS.md
+    "xgboost>=1.7.0",
+]
+
+# 开发依赖
 dev = [
     # 测试框架
     "pytest>=7.4.0",
@@ -155,6 +171,15 @@ production = [
 
     # 健康检查
     "healthcheck>=1.3.3",
+]
+
+# 组合安装选项（方便用户）
+# 注意：用户可以通过 pip install ".[gpu-nvidia,ml]" 来组合安装
+# 这里提供一个便捷的组合选项
+gpu-nvidia-ml = [
+    # NVIDIA GPU + ML 组合（推荐用于 NVIDIA GPU 用户）
+    "pynvml>=11.5.0",
+    "xgboost>=1.7.0",
 ]
 
 [project.urls]
