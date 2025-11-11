@@ -6,5 +6,6 @@
 from .camera import Camera
 from .detected_object import DetectedObject
 from .detection_record import DetectionRecord
+from .handwash_session import HandwashSession
 
-__all__ = ["DetectionRecord", "Camera", "DetectedObject"]
+__all__ = ["DetectionRecord", "Camera", "DetectedObject", "HandwashSession"]

@@ -3,6 +3,7 @@
 实现各种数据存储的仓储模式
 """
 
+from .file_handwash_session_repository import FileHandwashSessionRepository
 from .postgresql_detection_repository import PostgreSQLDetectionRepository
 from .postgresql_violation_repository import PostgreSQLViolationRepository
 from .redis_detection_repository import RedisDetectionRepository
@@ -12,5 +13,6 @@ __all__ = [
     "PostgreSQLDetectionRepository",
     "PostgreSQLViolationRepository",
     "RedisDetectionRepository",
+    "FileHandwashSessionRepository",
     "RepositoryFactory",
 ]

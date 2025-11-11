@@ -7,15 +7,32 @@ import logging
 import os
 
 from src.application.dataset_generation_service import DatasetGenerationService
+from src.application.handwash_dataset_generation_service import (
+    HandwashDatasetGenerationService,
+)
+from src.application.handwash_training_service import HandwashTrainingService
 from src.application.model_training_service import ModelTrainingService
 from src.config.dataset_config import get_dataset_generation_config
+from src.config.handwash_dataset_config import get_handwash_dataset_config
+from src.config.handwash_training_config import get_handwash_training_config
 from src.config.model_training_config import get_model_training_config
 from src.container.service_container import container
+from src.domain.repositories.handwash_session_repository import (
+    IHandwashSessionRepository,
+)
+from src.infrastructure.pose.mediapipe_pose_extractor import (
+    MediapipePoseExtractor,
+    MediapipePoseExtractorConfig,
+)
+from src.infrastructure.repositories.file_handwash_session_repository import (
+    FileHandwashSessionRepository,
+)
 from src.infrastructure.repositories.repository_factory import RepositoryFactory
 from src.interfaces.detection.detector_interface import IDetector
 from src.interfaces.repositories.detection_repository_interface import (
     IDetectionRepository,
 )
+from src.interfaces.services.pose_extractor import PoseExtractorProtocol
 from src.interfaces.storage import SnapshotStorageProtocol
 from src.interfaces.tracking.tracker_interface import ITracker
 
@@ -235,6 +252,7 @@ def _configure_other_services():
     _configure_storage_services()
     _configure_dataset_services()
     _configure_training_services()
+    _configure_handwash_services()
 
     # 领域服务开关
     use_domain_service = os.getenv("USE_DOMAIN_SERVICE", "false").lower() == "true"
@@ -294,6 +312,37 @@ def _configure_training_services():
         logger.info("模型训练服务已注册")
     except Exception as exc:
         logger.error(f"注册模型训练服务失败: {exc}")
+
+
+def _configure_handwash_services():
+    """配置洗手工作流相关服务"""
+    try:
+        dataset_config = get_handwash_dataset_config()
+        session_repo = FileHandwashSessionRepository(dataset_config.session_base_dir)
+        container.register_instance(IHandwashSessionRepository, session_repo)
+
+        pose_extractor = MediapipePoseExtractor(
+            MediapipePoseExtractorConfig(
+                frame_interval=dataset_config.default_frame_interval
+            )
+        )
+        container.register_instance(PoseExtractorProtocol, pose_extractor)
+
+        handwash_dataset_service = HandwashDatasetGenerationService(
+            session_repository=session_repo,
+            pose_extractor=pose_extractor,
+            config=dataset_config,
+        )
+        container.register_instance(
+            HandwashDatasetGenerationService, handwash_dataset_service
+        )
+
+        handwash_training_config = get_handwash_training_config()
+        handwash_training_service = HandwashTrainingService(handwash_training_config)
+        container.register_instance(HandwashTrainingService, handwash_training_service)
+        logger.info("洗手工作流服务已注册")
+    except Exception as exc:
+        logger.error(f"注册洗手服务失败: {exc}")
 
 
 def _log_registered_services():

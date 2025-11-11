@@ -347,6 +347,26 @@ REDIS_URL=redis://:STRONG_PASSWORD@prod-redis:6379/0
 | `YOLO_TRAIN_DEVICE` | `auto` | 训练设备 (`cuda`, `cpu` 或 `auto`) |
 | `YOLO_TRAIN_PATIENCE` | `10` | 早停策略的容忍轮数 |
 
+### 洗手工作流配置
+
+洗手合规训练工作流依赖额外的会话元数据与时序训练配置，可通过以下环境变量调整：
+
+| 环境变量 | 默认值 | 说明 |
+|----------|--------|------|
+| `HANDWASH_SESSION_DIR` | `data/handwash/sessions` | 洗手会话元数据与视频的根目录 |
+| `HANDWASH_DATASET_OUTPUT_DIR` | `datasets/handwash` | 洗手数据集输出目录 |
+| `HANDWASH_FRAME_INTERVAL` | `0.5` | 姿态采样间隔（秒） |
+| `HANDWASH_MIN_SESSION_DURATION` | `3.0` | 参与训练的最小时长限制（秒） |
+| `HANDWASH_MAX_SESSIONS` | `200` | 单次生成允许的最大会话数 |
+| `HANDWASH_TRAINING_OUTPUT_DIR` | `models/handwash` | 洗手模型权重存储路径 |
+| `HANDWASH_TRAINING_REPORT_DIR` | `models/handwash/reports` | 洗手训练报告目录 |
+| `HANDWASH_TRAINING_EPOCHS` | `20` | 手洗时序模型训练轮数 |
+| `HANDWASH_TRAINING_BATCH_SIZE` | `8` | 训练批大小 |
+| `HANDWASH_TRAINING_LR` | `0.001` | 学习率 |
+| `HANDWASH_TRAINING_DEVICE` | `auto` | 训练设备（`cuda` / `cpu` / `auto`） |
+| `HANDWASH_TRAINING_VAL_SPLIT` | `0.2` | 验证集占比 |
+| `HANDWASH_TRAINING_SEED` | `42` | 随机种子 |
+
 ---
 
 ## 🐳 Docker服务管理

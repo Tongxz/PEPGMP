@@ -5,6 +5,12 @@
 
 from .camera_repository import ICameraRepository
 from .detection_repository import IDetectionRepository
+from .handwash_session_repository import IHandwashSessionRepository
 from .violation_repository import IViolationRepository
 
-__all__ = ["IDetectionRepository", "ICameraRepository", "IViolationRepository"]
+__all__ = [
+    "IDetectionRepository",
+    "ICameraRepository",
+    "IViolationRepository",
+    "IHandwashSessionRepository",
+]
