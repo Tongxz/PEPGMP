@@ -30,6 +30,12 @@
             </template>
             重置
           </n-button>
+          <n-button type="success" @click="exportDetectionRecords" :loading="exporting">
+            <template #icon>
+              <n-icon><DownloadOutline /></n-icon>
+            </template>
+            导出检测记录
+          </n-button>
         </n-space>
 
         <!-- 统计卡片 -->
@@ -101,6 +107,17 @@
           <n-button type="primary" @click="loadViolations" :loading="violationsLoading">
             查询违规
           </n-button>
+          <n-button
+            type="success"
+            @click="exportViolations"
+            :loading="exportingViolations"
+            :disabled="violations.length === 0"
+          >
+            <template #icon>
+              <n-icon><DownloadOutline /></n-icon>
+            </template>
+            导出违规记录
+          </n-button>
         </n-space>
 
         <n-data-table
@@ -114,6 +131,59 @@
         />
       </n-space>
     </n-card>
+
+    <!-- 记录详情弹窗 -->
+    <n-modal
+      v-model:show="showRecordDetail"
+      preset="card"
+      title="检测记录详情"
+      style="max-width: 800px"
+    >
+      <n-descriptions :column="2" bordered v-if="selectedRecord">
+        <n-descriptions-item label="记录ID">{{ selectedRecord.id }}</n-descriptions-item>
+        <n-descriptions-item label="时间">
+          {{ new Date(selectedRecord.timestamp).toLocaleString('zh-CN') }}
+        </n-descriptions-item>
+        <n-descriptions-item label="摄像头ID">{{ selectedRecord.camera_id }}</n-descriptions-item>
+        <n-descriptions-item label="帧号">{{ selectedRecord.frame_id || '-' }}</n-descriptions-item>
+        <n-descriptions-item label="人数">{{ selectedRecord.person_count || 0 }}</n-descriptions-item>
+        <n-descriptions-item label="发网违规">{{ selectedRecord.hairnet_violations || 0 }}</n-descriptions-item>
+        <n-descriptions-item label="洗手事件">{{ selectedRecord.handwash_events || 0 }}</n-descriptions-item>
+        <n-descriptions-item label="消毒事件">{{ selectedRecord.sanitize_events || 0 }}</n-descriptions-item>
+        <n-descriptions-item label="处理时间(ms)">
+          {{ (selectedRecord.processing_time * 1000).toFixed(1) }}
+        </n-descriptions-item>
+        <n-descriptions-item label="置信度">
+          {{ selectedRecord.confidence ? (selectedRecord.confidence.value || selectedRecord.confidence) : '-' }}
+        </n-descriptions-item>
+        <n-descriptions-item label="检测对象" :span="2">
+          <pre style="max-height: 200px; overflow: auto;">
+            {{ JSON.stringify(selectedRecord.objects || [], null, 2) }}
+          </pre>
+        </n-descriptions-item>
+        <n-descriptions-item label="元数据" :span="2" v-if="selectedRecord.metadata">
+          <pre style="max-height: 200px; overflow: auto;">
+            {{ JSON.stringify(selectedRecord.metadata, null, 2) }}
+          </pre>
+        </n-descriptions-item>
+      </n-descriptions>
+    </n-modal>
+
+    <!-- 状态更新弹窗 -->
+    <n-modal
+      v-model:show="showStatusUpdate"
+      preset="dialog"
+      title="更新违规记录状态"
+      positive-text="确认"
+      negative-text="取消"
+      @positive-click="confirmStatusUpdate"
+    >
+      <n-select
+        v-model:value="newStatus"
+        :options="statusOptions.filter((opt: any) => opt.value)"
+        placeholder="选择新状态"
+      />
+    </n-modal>
   </div>
 </template>
 
@@ -131,7 +201,11 @@ import {
   NStatistic,
   NDataTable,
   NTag,
+  NModal,
+  NDescriptions,
+  NDescriptionsItem,
   useMessage,
+  useDialog,
   type DataTableColumns,
 } from 'naive-ui'
 import {
@@ -141,10 +215,23 @@ import {
   PeopleCircleOutline,
   AlertCircleOutline,
   TimerOutline,
+  DownloadOutline,
+  RefreshOutline,
 } from '@vicons/ionicons5'
 import { http } from '@/lib/http'
+import { exportApi, downloadBlob } from '@/api/export'
 
 const message = useMessage()
+const dialog = useDialog()
+
+// 详情弹窗
+const showRecordDetail = ref(false)
+const selectedRecord = ref<any>(null)
+
+// 状态更新弹窗
+const showStatusUpdate = ref(false)
+const selectedViolation = ref<any>(null)
+const newStatus = ref<string>('')
 
 // 摄像头选项
 const cameraOptions = ref([
@@ -155,7 +242,12 @@ const cameraOptions = ref([
 
 // 筛选条件
 const selectedCamera = ref('cam0')
-const dateRange = ref<[number, number] | null>(null)
+// 默认时间范围：最近1小时（优化性能，避免首次加载超时）
+const defaultDateRange: [number, number] = [
+  Date.now() - 60 * 60 * 1000, // 1小时前
+  Date.now() // 当前时间
+]
+const dateRange = ref<[number, number] | null>(defaultDateRange)
 
 // 违规筛选
 const violationStatus = ref<string | undefined>(undefined)
@@ -191,6 +283,8 @@ const statistics = ref({
 
 const loading = ref(false)
 const violationsLoading = ref(false)
+const exporting = ref(false)
+const exportingViolations = ref(false)
 
 // 表格列定义
 const columns: DataTableColumns<any> = [
@@ -256,6 +350,23 @@ const columns: DataTableColumns<any> = [
     width: 120,
     render: (row) => (row.processing_time * 1000).toFixed(1),
   },
+  {
+    title: '操作',
+    key: 'actions',
+    width: 100,
+    fixed: 'right',
+    render: (row) => {
+      return h(
+        NButton,
+        {
+          size: 'small',
+          type: 'primary',
+          onClick: () => viewRecordDetail(row),
+        },
+        { default: () => '详情' }
+      )
+    },
+  },
 ]
 
 const violationColumns: DataTableColumns<any> = [
@@ -315,27 +426,69 @@ const violationColumns: DataTableColumns<any> = [
     key: 'track_id',
     width: 80,
   },
+  {
+    title: '操作',
+    key: 'actions',
+    width: 150,
+    fixed: 'right',
+    render: (row) => {
+      return h(NSpace, { size: 'small' }, () => [
+        h(
+          NButton,
+          {
+            size: 'small',
+            type: 'primary',
+            onClick: () => updateViolationStatus(row),
+          },
+          { default: () => '更新状态' }
+        ),
+      ])
+    },
+  },
 ]
+
+// 分页状态
+const currentPage = ref(1)
+const pageSize = ref(20)
+const totalRecords = ref(0)
+
+const violationCurrentPage = ref(1)
+const violationPageSize = ref(20)
+const violationTotalRecords = ref(0)
 
 // 分页配置
 const pagination = computed(() => ({
-  page: 1,
-  pageSize: 20,
+  page: currentPage.value,
+  pageSize: pageSize.value,
+  itemCount: totalRecords.value,
   showSizePicker: true,
   pageSizes: [10, 20, 50, 100],
   onChange: (page: number) => {
-    // 处理翻页
+    currentPage.value = page
+    loadRecords()
   },
-  onUpdatePageSize: (pageSize: number) => {
-    // 处理页大小变更
+  onUpdatePageSize: (newPageSize: number) => {
+    pageSize.value = newPageSize
+    currentPage.value = 1
+    loadRecords()
   },
 }))
 
 const violationPagination = computed(() => ({
-  page: 1,
-  pageSize: 20,
+  page: violationCurrentPage.value,
+  pageSize: violationPageSize.value,
+  itemCount: violationTotalRecords.value,
   showSizePicker: true,
-  pageSizes: [10, 20, 50],
+  pageSizes: [10, 20, 50, 100],
+  onChange: (page: number) => {
+    violationCurrentPage.value = page
+    loadViolations()
+  },
+  onUpdatePageSize: (newPageSize: number) => {
+    violationPageSize.value = newPageSize
+    violationCurrentPage.value = 1
+    loadViolations()
+  },
 }))
 
 // 加载检测记录
@@ -347,14 +500,23 @@ async function loadRecords() {
 
   loading.value = true
   try {
+    const params: any = {
+      limit: pageSize.value,
+      offset: (currentPage.value - 1) * pageSize.value,
+    }
+
+    // 添加时间范围筛选（用于优化查询性能）
+    if (dateRange.value && dateRange.value.length === 2) {
+      params.start_time = new Date(dateRange.value[0]).toISOString()
+      params.end_time = new Date(dateRange.value[1]).toISOString()
+    }
+
     // 1. 加载检测记录
     const recordsRes = await http.get(`/records/detection-records/${selectedCamera.value}`, {
-      params: {
-        limit: 100,
-        offset: 0,
-      },
+      params,
     })
     records.value = recordsRes.data.records || []
+    totalRecords.value = recordsRes.data.total || records.value.length
 
     // 2. 加载统计数据
     const statsRes = await http.get(`/records/statistics/${selectedCamera.value}`, {
@@ -364,7 +526,19 @@ async function loadRecords() {
     })
     statistics.value = statsRes.data.statistics || {}
 
-    message.success(`加载成功：${records.value.length} 条记录`)
+    if (records.value.length > 0) {
+      message.success(`加载成功：${records.value.length} 条记录`)
+    } else {
+      // 如果没有数据，提示用户调整时间范围
+      // 检查是否是默认时间范围（最近24小时）
+      const isDefaultRange = dateRange.value &&
+        dateRange.value[1] - dateRange.value[0] <= 25 * 60 * 60 * 1000 // 大约24小时
+      if (isDefaultRange) {
+        message.info('默认显示最近24小时的数据，如未找到数据，请尝试选择更长时间范围')
+      } else {
+        message.warning('未找到符合条件的记录')
+      }
+    }
   } catch (error: any) {
     message.error('加载失败: ' + (error.response?.data?.detail || error.message))
     console.error('加载记录失败:', error)
@@ -378,8 +552,8 @@ async function loadViolations() {
   violationsLoading.value = true
   try {
     const params: any = {
-      limit: 100,
-      offset: 0,
+      limit: violationPageSize.value,
+      offset: (violationCurrentPage.value - 1) * violationPageSize.value,
     }
 
     if (selectedCamera.value && selectedCamera.value !== 'all') {
@@ -396,8 +570,11 @@ async function loadViolations() {
 
     const res = await http.get('/records/violations', { params })
     violations.value = res.data.violations || []
+    violationTotalRecords.value = res.data.total || violations.value.length
 
-    message.success(`查询到 ${violations.value.length} 条违规记录`)
+    if (violations.value.length > 0) {
+      message.success(`查询到 ${violations.value.length} 条违规记录`)
+    }
   } catch (error: any) {
     message.error('加载违规记录失败: ' + (error.response?.data?.detail || error.message))
     console.error('加载违规记录失败:', error)
@@ -412,8 +589,104 @@ function resetFilters() {
   dateRange.value = null
   violationStatus.value = undefined
   violationType.value = undefined
+  currentPage.value = 1
+  violationCurrentPage.value = 1
   loadRecords()
   loadViolations()
+}
+
+// 查看记录详情
+function viewRecordDetail(record: any) {
+  selectedRecord.value = record
+  showRecordDetail.value = true
+}
+
+// 更新违规记录状态
+async function updateViolationStatus(violation: any) {
+  selectedViolation.value = violation
+  newStatus.value = violation.status || 'pending'
+  showStatusUpdate.value = true
+}
+
+// 确认更新状态
+async function confirmStatusUpdate() {
+  if (!selectedViolation.value) return
+
+  try {
+    await http.put(`/records/violations/${selectedViolation.value.id}/status`, {
+      status: newStatus.value,
+    })
+    message.success('状态更新成功')
+    showStatusUpdate.value = false
+    await loadViolations()
+  } catch (error: any) {
+    message.error('更新失败: ' + (error.response?.data?.detail || error.message))
+    console.error('更新状态失败:', error)
+  }
+}
+
+// 导出检测记录
+async function exportDetectionRecords() {
+  if (!selectedCamera.value || selectedCamera.value === 'all') {
+    message.warning('请先选择具体的摄像头')
+    return
+  }
+
+  exporting.value = true
+  try {
+    const params: any = {
+      camera_id: selectedCamera.value,
+      format: 'csv',
+      limit: 5000, // 默认5000条，避免超时
+    }
+
+    // 添加时间范围
+    if (dateRange.value && dateRange.value.length === 2) {
+      params.start_time = new Date(dateRange.value[0]).toISOString()
+      params.end_time = new Date(dateRange.value[1]).toISOString()
+    }
+
+    const blob = await exportApi.exportDetectionRecords(params)
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5)
+    downloadBlob(blob, `detection_records_${selectedCamera.value}_${timestamp}.csv`)
+    message.success('导出成功')
+  } catch (error: any) {
+    console.error('导出失败:', error)
+    message.error('导出失败: ' + (error.response?.data?.detail || error.message))
+  } finally {
+    exporting.value = false
+  }
+}
+
+// 导出违规记录
+async function exportViolations() {
+  exportingViolations.value = true
+  try {
+    const params: any = {
+      format: 'csv',
+      limit: 5000, // 默认5000条，避免超时
+    }
+
+    if (selectedCamera.value && selectedCamera.value !== 'all') {
+      params.camera_id = selectedCamera.value
+    }
+    if (violationStatus.value) {
+      params.status = violationStatus.value
+    }
+    if (violationType.value) {
+      params.violation_type = violationType.value
+    }
+
+    const blob = await exportApi.exportViolations(params)
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5)
+    downloadBlob(blob, `violations_${timestamp}.csv`)
+    message.success('导出成功')
+  } catch (error: any) {
+    console.error('导出失败:', error)
+    message.error('导出失败: ' + (error.response?.data?.detail || error.message))
+  } finally {
+    exportingViolations.value = false
+  }
 }
 
 onMounted(() => {
@@ -421,6 +694,7 @@ onMounted(() => {
   loadViolations()
 })
 </script>
+
 
 <style scoped>
 .detection-records-container {

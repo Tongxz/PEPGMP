@@ -8,6 +8,12 @@
           </template>
           刷新
         </n-button>
+        <n-button size="small" type="success" @click="openGenerateDialog">
+          <template #icon>
+            <n-icon><CreateOutline /></n-icon>
+          </template>
+          生成数据集
+        </n-button>
         <n-button size="small" type="primary" @click="showUploadDialog = true">
           <template #icon>
             <n-icon><CloudUploadOutline /></n-icon>
@@ -119,6 +125,79 @@
           </n-p>
         </n-upload-dragger>
       </n-upload>
+    </n-modal>
+
+    <!-- 数据集生成对话框 -->
+    <n-modal
+      v-model:show="showGenerateDialog"
+      preset="dialog"
+      title="生成数据集"
+      style="width: 520px;"
+    >
+      <n-form
+        ref="generateFormRef"
+        :model="generateForm"
+        :rules="generateRules"
+        label-width="100"
+        size="small"
+      >
+        <n-form-item label="数据集名称" path="datasetName">
+          <n-input
+            v-model:value="generateForm.datasetName"
+            placeholder="例如：detection_export_20241105"
+            maxlength="64"
+            show-count
+          />
+        </n-form-item>
+
+        <n-form-item label="摄像头" path="cameraIds">
+          <n-select
+            v-model:value="generateForm.cameraIds"
+            :options="cameraOptions"
+            multiple
+            clearable
+            filterable
+            placeholder="不选择则导出所有摄像头"
+            :loading="cameraLoading"
+          />
+        </n-form-item>
+
+        <n-form-item label="时间范围" path="dateRange">
+          <n-date-picker
+            v-model:value="generateForm.dateRange"
+            type="datetimerange"
+            clearable
+            placeholder="不选择则使用最近24小时"
+          />
+        </n-form-item>
+
+        <n-form-item label="最大记录数" path="maxRecords">
+          <n-input-number
+            v-model:value="generateForm.maxRecords"
+            :min="100"
+            :max="50000"
+            :step="100"
+            style="width: 100%;"
+          />
+        </n-form-item>
+
+        <n-form-item>
+          <n-checkbox v-model:checked="generateForm.includeNormalSamples">
+            包含正常样本（默认仅导出违规样本）
+          </n-checkbox>
+        </n-form-item>
+      </n-form>
+
+      <template #action>
+        <n-space justify="end">
+          <n-button @click="handleGenerateCancel" :disabled="generating">
+            取消
+          </n-button>
+          <n-button type="primary" :loading="generating" @click="submitGenerateDataset">
+            开始生成
+          </n-button>
+        </n-space>
+      </template>
     </n-modal>
 
     <!-- 数据集详情对话框 -->
@@ -257,32 +336,32 @@
             </n-card>
           </n-gi>
         </n-grid>
-        
+
         <n-divider />
-        
+
         <!-- 对比分析 -->
         <n-card title="对比分析" size="small">
           <n-grid :cols="3" :x-gap="16" :y-gap="16">
             <n-gi>
-              <n-statistic 
-                label="大小差异" 
-                :value="getSizeDifference(compareDatasets[0], compareDatasets[1])" 
+              <n-statistic
+                label="大小差异"
+                :value="getSizeDifference(compareDatasets[0], compareDatasets[1])"
                 suffix="%"
                 :value-style="{ color: getSizeDifference(compareDatasets[0], compareDatasets[1]) > 0 ? '#18a058' : '#d03050' }"
               />
             </n-gi>
             <n-gi>
-              <n-statistic 
-                label="样本数差异" 
-                :value="getSampleDifference(compareDatasets[0], compareDatasets[1])" 
+              <n-statistic
+                label="样本数差异"
+                :value="getSampleDifference(compareDatasets[0], compareDatasets[1])"
                 suffix="%"
                 :value-style="{ color: getSampleDifference(compareDatasets[0], compareDatasets[1]) > 0 ? '#18a058' : '#d03050' }"
               />
             </n-gi>
             <n-gi>
-              <n-statistic 
-                label="质量差异" 
-                :value="getQualityDifference(compareDatasets[0], compareDatasets[1])" 
+              <n-statistic
+                label="质量差异"
+                :value="getQualityDifference(compareDatasets[0], compareDatasets[1])"
                 suffix="%"
                 :value-style="{ color: getQualityDifference(compareDatasets[0], compareDatasets[1]) > 0 ? '#18a058' : '#d03050' }"
               />
@@ -301,9 +380,42 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { NCard, NButton, NSpace, NIcon, NEmpty, NList, NListItem, NTag, NDescriptions, NDescriptionsItem, NDivider, NText, NGrid, NGi, NStatistic, NRate, NModal, NUpload, NUploadDragger, NP, useMessage } from 'naive-ui'
-import { RefreshOutline, CloudUploadOutline } from '@vicons/ionicons5'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
+import {
+  NCard,
+  NButton,
+  NSpace,
+  NIcon,
+  NEmpty,
+  NList,
+  NListItem,
+  NTag,
+  NDescriptions,
+  NDescriptionsItem,
+  NDivider,
+  NText,
+  NGrid,
+  NGi,
+  NStatistic,
+  NRate,
+  NModal,
+  NUpload,
+  NUploadDragger,
+  NP,
+  NForm,
+  NFormItem,
+  NInput,
+  NSelect,
+  NCheckbox,
+  NInputNumber,
+  NDatePicker,
+  useMessage,
+  type FormInst,
+  type FormRules
+} from 'naive-ui'
+import { RefreshOutline, CloudUploadOutline, CreateOutline } from '@vicons/ionicons5'
+import { useCameraStore } from '@/stores/camera'
 
 interface Dataset {
   id: string
@@ -335,6 +447,18 @@ const selectedDataset = ref<Dataset | null>(null)
 const compareDatasets = ref<Dataset[]>([])
 const uploadRef = ref()
 const fileList = ref([])
+const showGenerateDialog = ref(false)
+const generateFormRef = ref<FormInst | null>(null)
+const generating = ref(false)
+
+const cameraStore = useCameraStore()
+const { cameras, loading: cameraLoading } = storeToRefs(cameraStore)
+const cameraOptions = computed(() =>
+  cameras.value.map(cam => ({
+    label: cam.name || cam.id,
+    value: cam.id
+  }))
+)
 
 const uploadUrl = '/api/v1/mlops/datasets/upload'
 const uploadHeaders = {
@@ -343,6 +467,28 @@ const uploadHeaders = {
 const uploadData = {
   dataset_type: 'detection',
   description: ''
+}
+
+const generateForm = reactive({
+  datasetName: '',
+  cameraIds: [] as string[],
+  dateRange: null as [number, number] | null,
+  includeNormalSamples: false,
+  maxRecords: 1000
+})
+
+const generateRules: FormRules = {
+  datasetName: [
+    { required: true, message: '请输入数据集名称', trigger: 'blur' }
+  ],
+  maxRecords: [
+    {
+      required: true,
+      type: 'number',
+      message: '请输入最大记录数',
+      trigger: 'blur'
+    }
+  ]
 }
 
 // 获取数据集列表
@@ -446,6 +592,86 @@ function refreshDatasets() {
   fetchDatasets()
 }
 
+function resetGenerateForm() {
+  generateForm.datasetName = ''
+  generateForm.cameraIds = []
+  generateForm.dateRange = null
+  generateForm.includeNormalSamples = false
+  generateForm.maxRecords = 1000
+}
+
+function openGenerateDialog() {
+  showGenerateDialog.value = true
+  if (cameras.value.length === 0 && !cameraLoading.value) {
+    cameraStore.fetchCameras().catch(() => {
+      message.warning('获取摄像头列表失败，请稍后重试')
+    })
+  }
+}
+
+function handleGenerateCancel() {
+  showGenerateDialog.value = false
+  resetGenerateForm()
+}
+
+async function submitGenerateDataset() {
+  if (!generateFormRef.value) return
+  await generateFormRef.value.validate()
+  generating.value = true
+  try {
+    const [start, end] = generateForm.dateRange || []
+    const payload: Record<string, any> = {
+      dataset_name: generateForm.datasetName,
+      include_normal_samples: generateForm.includeNormalSamples,
+      max_records: generateForm.maxRecords
+    }
+    if (generateForm.cameraIds.length > 0) {
+      payload.camera_ids = generateForm.cameraIds
+    }
+    if (start) {
+      payload.start_time = new Date(start).toISOString()
+    }
+    if (end) {
+      payload.end_time = new Date(end).toISOString()
+    }
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const token = localStorage.getItem('token')
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+
+    const response = await fetch('/api/v1/mlops/datasets/generate', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(errorText || '生成数据集失败')
+    }
+
+    const data = await response.json()
+    message.success(`数据集生成成功：${data.dataset_name || generateForm.datasetName}`)
+    showGenerateDialog.value = false
+    resetGenerateForm()
+    refreshDatasets()
+  } catch (error: any) {
+    console.error('生成数据集失败:', error)
+    message.error(error.message || '生成数据集失败')
+  } finally {
+    generating.value = false
+  }
+}
+
+watch(showGenerateDialog, (visible) => {
+  if (!visible) {
+    generating.value = false
+    resetGenerateForm()
+  }
+})
+
 // 获取数据集状态类型
 function getDatasetStatusType(status: string) {
   const statusMap = {
@@ -501,10 +727,10 @@ async function downloadDataset(dataset: Dataset) {
   console.log('下载数据集:', dataset)
   try {
     message.loading('正在准备下载...')
-    
+
     // 调用下载API
     const response = await fetch(`/api/v1/mlops/datasets/${dataset.id}/download?format=zip`)
-    
+
     if (response.ok) {
       // 创建下载链接
       const blob = await response.blob()
@@ -516,7 +742,7 @@ async function downloadDataset(dataset: Dataset) {
       a.click()
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
-      
+
       message.success(`数据集 ${dataset.name} 下载完成`)
     } else {
       throw new Error('下载失败')
@@ -627,6 +853,11 @@ function startNewCompare() {
 
 onMounted(() => {
   fetchDatasets()
+  if (cameras.value.length === 0) {
+    cameraStore.fetchCameras().catch(() => {
+      message.warning('获取摄像头列表失败，可在生成时重试')
+    })
+  }
 })
 </script>
 

@@ -803,9 +803,57 @@ const refreshCameras = async () => {
 }
 
 onMounted(async () => {
-  await cameraStore.fetchCameras()
-  await cameraStore.refreshRuntimeStatus()  // ← 初始加载时查询运行状态
-  if (autoRefresh.value) startStatusInterval()
+  try {
+    // 1. 先获取摄像头列表
+    await cameraStore.fetchCameras()
+
+    // 2. 立即刷新运行状态（确保状态不丢失）
+    let statuses = await cameraStore.refreshRuntimeStatus()
+
+    // 3. 如果刷新失败或返回空数据，再次尝试刷新（最多3次）
+    let retryCount = 0
+    const maxRetries = 3
+
+    // 检查返回的状态数据是否有效（只要返回了数据就认为刷新成功，即使没有运行中的摄像头）
+    const hasValidStatus = statuses && typeof statuses === 'object' && Object.keys(statuses).length > 0
+
+    if (!hasValidStatus) {
+      // 如果第一次刷新没有获取到有效数据，尝试重试
+      while (retryCount < maxRetries) {
+        retryCount++
+        console.debug(`摄像头状态刷新未获取到有效数据，重试 ${retryCount}/${maxRetries}...`)
+        // 等待一小段时间后重试
+        await new Promise(resolve => setTimeout(resolve, 500))
+        statuses = await cameraStore.refreshRuntimeStatus()
+
+        // 再次检查是否获取到有效数据
+        const retryValidStatus = statuses && typeof statuses === 'object' && Object.keys(statuses).length > 0
+        if (retryValidStatus) {
+          console.debug(`摄像头状态刷新成功（重试后），共 ${Object.keys(statuses).length} 个摄像头`)
+          break
+        }
+
+        if (retryCount >= maxRetries) {
+          console.warn('摄像头状态刷新失败，已达到最大重试次数')
+        }
+      }
+    } else {
+      // 如果第一次刷新就获取到有效数据，说明刷新成功
+      const runningCount = Object.values(cameraStore.runtimeStatus).filter((s: any) => s?.running).length
+      console.debug(`摄像头状态刷新成功，运行中的摄像头数: ${runningCount}/${Object.keys(statuses).length}`)
+    }
+
+    // 4. 启动自动刷新
+    if (autoRefresh.value) {
+      startStatusInterval()
+    }
+  } catch (error) {
+    console.error('初始化摄像头状态失败:', error)
+    // 即使失败，也启动自动刷新，让后续刷新能够恢复状态
+    if (autoRefresh.value) {
+      startStatusInterval()
+    }
+  }
 })
 
 onUnmounted(() => {

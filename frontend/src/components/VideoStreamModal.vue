@@ -139,6 +139,8 @@ let lastFrameTime = 0
 let fpsCounter = 0
 let fpsInterval: number | null = null
 let durationInterval: number | null = null
+let frameQueue: string[] = []  // 帧队列，用于优化渲染
+let isRendering = false  // 渲染状态标志
 
 // 质量选项（暂时禁用，后续可扩展）
 const qualityOptions = [
@@ -182,13 +184,21 @@ function connect() {
       const blob = new Blob([event.data], { type: 'image/jpeg' })
       const url = URL.createObjectURL(blob)
 
-      // 释放旧的URL
-      if (currentFrame.value) {
-        URL.revokeObjectURL(currentFrame.value)
+      // 将帧加入队列（最多保留2帧，丢弃旧的）
+      if (frameQueue.length >= 2) {
+        const oldUrl = frameQueue.shift()
+        if (oldUrl) {
+          URL.revokeObjectURL(oldUrl)
+        }
       }
+      frameQueue.push(url)
 
-      currentFrame.value = url
-      frameCount.value++
+      // 使用requestAnimationFrame优化渲染
+      if (!isRendering) {
+        requestAnimationFrame(() => {
+          renderNextFrame()
+        })
+      }
 
       // 计算延迟
       const now = Date.now()
@@ -215,6 +225,45 @@ function connect() {
   } catch (error) {
     console.error('创建WebSocket连接失败:', error)
     message.error('无法连接视频流')
+  }
+}
+
+// 渲染下一帧（优化版本）
+function renderNextFrame() {
+  if (frameQueue.length === 0) {
+    isRendering = false
+    return
+  }
+
+  isRendering = true
+
+  // 释放旧的URL
+  if (currentFrame.value) {
+    URL.revokeObjectURL(currentFrame.value)
+  }
+
+  // 获取最新帧（跳过中间帧以保持流畅）
+  const url = frameQueue.pop() || frameQueue[0]
+  if (url) {
+    // 清空队列，只保留当前帧
+    frameQueue.forEach(oldUrl => {
+      if (oldUrl !== url) {
+        URL.revokeObjectURL(oldUrl)
+      }
+    })
+    frameQueue = [url]
+
+    currentFrame.value = url
+    frameCount.value++
+  }
+
+  isRendering = false
+
+  // 如果还有新帧，继续渲染
+  if (frameQueue.length > 1) {
+    requestAnimationFrame(() => {
+      renderNextFrame()
+    })
   }
 }
 
@@ -309,6 +358,11 @@ onBeforeUnmount(() => {
   if (currentFrame.value) {
     URL.revokeObjectURL(currentFrame.value)
   }
+  // 清理帧队列
+  frameQueue.forEach(url => {
+    URL.revokeObjectURL(url)
+  })
+  frameQueue = []
 })
 </script>
 

@@ -62,7 +62,66 @@
         <!-- 概览标签页 -->
         <n-tab-pane name="overview" tab="📈 概览">
           <div class="overview-content">
-            <!-- 统计卡片 -->
+            <!-- 实时统计卡片 -->
+            <div class="stats-cards" v-if="realtimeStats">
+              <DataCard
+                title="活跃摄像头"
+                :value="realtimeStats.active_cameras"
+                class="stat-card primary-card"
+              >
+                <template #icon>
+                  <n-icon size="24" color="var(--primary-color)">
+                    <StatsChartOutline />
+                  </n-icon>
+                </template>
+              </DataCard>
+              <DataCard
+                title="总检测数"
+                :value="realtimeStats.total_detections"
+                class="stat-card"
+              >
+                <template #icon>
+                  <n-icon size="24" color="var(--info-color)">
+                    <CheckmarkCircleOutline />
+                  </n-icon>
+                </template>
+              </DataCard>
+              <DataCard
+                title="违规次数"
+                :value="realtimeStats.violations_count"
+                class="stat-card"
+              >
+                <template #icon>
+                  <n-icon size="24" color="var(--error-color)">
+                    <CheckmarkCircleOutline />
+                  </n-icon>
+                </template>
+              </DataCard>
+              <DataCard
+                title="合规率"
+                :value="(realtimeStats.compliance_rate * 100).toFixed(1) + '%'"
+                class="stat-card"
+              >
+                <template #icon>
+                  <n-icon size="24" color="var(--success-color)">
+                    <CheckmarkCircleOutline />
+                  </n-icon>
+                </template>
+              </DataCard>
+              <DataCard
+                title="检测准确度"
+                :value="(realtimeStats.detection_accuracy * 100).toFixed(1) + '%'"
+                class="stat-card"
+              >
+                <template #icon>
+                  <n-icon size="24" color="var(--warning-color)">
+                    <CheckmarkCircleOutline />
+                  </n-icon>
+                </template>
+              </DataCard>
+            </div>
+
+            <!-- 统计摘要卡片 -->
             <div class="stats-cards" v-if="summary">
               <DataCard
                 title="总检测次数"
@@ -149,12 +208,24 @@
         <!-- 历史记录标签页 -->
         <n-tab-pane name="history" tab="📋 历史记录">
           <div class="history-content">
-            <DataCard title="检测记录" class="history-card">
+            <DataCard title="近期事件历史" class="history-card">
               <template #extra>
                 <n-space>
+                  <n-select
+                    v-model:value="historyMinutes"
+                    :options="historyMinutesOptions"
+                    style="width: 150px"
+                    @update:value="loadHistoryData"
+                  />
                   <n-tag type="info" size="small">
-                    共 {{ events.length }} 条记录
+                    共 {{ historyEvents.length }} 条记录
                   </n-tag>
+                  <n-button size="small" quaternary @click="loadHistoryData">
+                    <template #icon>
+                      <n-icon><RefreshOutline /></n-icon>
+                    </template>
+                    刷新
+                  </n-button>
                   <n-button size="small" quaternary @click="exportData">
                     <template #icon>
                       <n-icon><DownloadOutline /></n-icon>
@@ -166,9 +237,9 @@
 
               <n-data-table
                 :columns="historyColumns"
-                :data="events"
-                :loading="loading"
-                :pagination="{ pageSize: 20, showSizePicker: true }"
+                :data="historyEvents"
+                :loading="historyLoading"
+                :pagination="{ pageSize: 20, showSizePicker: true, pageSizes: [10, 20, 50, 100] }"
                 striped
                 :bordered="false"
                 size="medium"
@@ -187,7 +258,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import {
   NCard, NButton, NSelect, NTabs, NTabPane, NDataTable,
-  NSpace, NText, NTag, NIcon
+  NSpace, NText, NTag, NIcon, useMessage
 } from 'naive-ui'
 import {
   RefreshOutline,
@@ -207,12 +278,15 @@ Chart.register(...registerables)
 
 const statisticsStore = useStatisticsStore()
 const cameraStore = useCameraStore()
+const message = useMessage()
 
 // 响应式数据
 const activeTab = ref('overview')
 const selectedCamera = ref('')
 const selectedTimeRange = ref('24h')
 const historyLoading = ref(false)
+const historyMinutes = ref(60)
+const realtimeRefreshInterval = ref<NodeJS.Timeout | null>(null)
 const overviewChart = ref<Chart | null>(null)
 const trendChart = ref<Chart | null>(null)
 const complianceChart = ref<Chart | null>(null)
@@ -222,7 +296,17 @@ const cameras = computed(() => cameraStore.cameras)
 const summary = computed(() => statisticsStore.summary)
 const events = computed(() => statisticsStore.events)
 const dailyStats = computed(() => statisticsStore.dailyStats)
+const realtimeStats = computed(() => statisticsStore.realtimeStats)
+const historyEvents = computed(() => statisticsStore.historyEvents)
 const loading = computed(() => statisticsStore.loading)
+
+const historyMinutesOptions = [
+  { label: '最近30分钟', value: 30 },
+  { label: '最近1小时', value: 60 },
+  { label: '最近2小时', value: 120 },
+  { label: '最近6小时', value: 360 },
+  { label: '最近24小时', value: 1440 }
+]
 
 const cameraOptions = computed(() => [
   { label: '全部摄像头', value: '' },
@@ -242,21 +326,49 @@ const historyColumns = [
   {
     title: '时间',
     key: 'timestamp',
+    width: 180,
     render: (row: any) => formatTime(row.timestamp)
   },
   {
-    title: '摄像头',
-    key: 'camera_name'
+    title: '摄像头ID',
+    key: 'camera_id',
+    width: 150
+  },
+  {
+    title: '摄像头名称',
+    key: 'camera_name',
+    width: 150,
+    render: (row: any) => row.camera_name || row.camera_id
   },
   {
     title: '事件类型',
     key: 'event_type',
-    render: (row: any) => getEventTypeText(row.event_type)
+    width: 120,
+    render: (row: any) => {
+      const type = row.event_type || 'unknown'
+      return getEventTypeText(type)
+    }
   },
   {
     title: '置信度',
     key: 'confidence',
-    render: (row: any) => (row.confidence * 100).toFixed(1) + '%'
+    width: 100,
+    render: (row: any) => {
+      if (row.confidence !== undefined) {
+        return (row.confidence * 100).toFixed(1) + '%'
+      }
+      return '-'
+    }
+  },
+  {
+    title: '详细信息',
+    key: 'metadata',
+    render: (row: any) => {
+      if (row.metadata && Object.keys(row.metadata).length > 0) {
+        return JSON.stringify(row.metadata)
+      }
+      return '-'
+    }
   }
 ]
 
@@ -264,10 +376,15 @@ const historyColumns = [
 onMounted(async () => {
   await cameraStore.fetchCameras()
   await loadData()
+  await loadRealtimeStats()
+  await loadHistoryData()
+  // 启动实时统计自动刷新（每30秒）
+  startRealtimeRefresh()
 })
 
 onUnmounted(() => {
   destroyCharts()
+  stopRealtimeRefresh()
 })
 
 // 方法
@@ -288,6 +405,45 @@ async function loadData() {
   }
 }
 
+async function loadRealtimeStats() {
+  try {
+    await statisticsStore.fetchRealtimeStats()
+  } catch (error) {
+    console.error('加载实时统计失败:', error)
+  }
+}
+
+async function loadHistoryData() {
+  historyLoading.value = true
+  try {
+    await statisticsStore.fetchHistory(
+      historyMinutes.value,
+      100,
+      selectedCamera.value || undefined
+    )
+  } catch (error) {
+    console.error('加载历史数据失败:', error)
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+function startRealtimeRefresh() {
+  // 每30秒刷新一次实时统计
+  realtimeRefreshInterval.value = setInterval(() => {
+    if (activeTab.value === 'overview') {
+      loadRealtimeStats()
+    }
+  }, 30000)
+}
+
+function stopRealtimeRefresh() {
+  if (realtimeRefreshInterval.value) {
+    clearInterval(realtimeRefreshInterval.value)
+    realtimeRefreshInterval.value = null
+  }
+}
+
 function onCameraChange() {
   loadData()
 }
@@ -296,11 +452,20 @@ function onTimeRangeChange() {
   loadData()
 }
 
-function onRefresh() {
-  loadData()
+async function onRefresh() {
+  await loadData()
+  await loadRealtimeStats()
+  if (activeTab.value === 'history') {
+    await loadHistoryData()
+  }
 }
 
 async function onTabChange(tab: string) {
+  if (tab === 'history') {
+    await loadHistoryData()
+  } else if (tab === 'overview') {
+    await loadRealtimeStats()
+  }
   activeTab.value = tab
 
   if (tab === 'overview') {
@@ -467,33 +632,7 @@ function getEventTypeText(type: string) {
   return typeMap[type] ?? type
 }
 
-async function loadHistoryData() {
-  historyLoading.value = true
-  try {
-    const timeRange = selectedTimeRange.value
-    let startTime: string
-    const now = new Date()
 
-    if (timeRange === '1h') {
-      startTime = new Date(now.getTime() - 60 * 60 * 1000).toISOString()
-    } else if (timeRange === '24h') {
-      startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
-    } else {
-      startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
-    }
-
-    await statisticsStore.fetchEvents({
-      start_time: startTime,
-      end_time: now.toISOString(),
-      camera_id: selectedCamera.value || undefined,
-      limit: 100
-    })
-  } catch (error) {
-    console.error('加载历史数据失败:', error)
-  } finally {
-    historyLoading.value = false
-  }
-}
 
 const getEventTypeColor = (type: string) => {
   const colors: Record<string, string> = {
@@ -505,9 +644,52 @@ const getEventTypeColor = (type: string) => {
   return colors[type] ?? 'var(--text-color)'
 }
 
-const exportData = () => {
-  // 导出数据逻辑
-  console.log('导出数据')
+// 导出统计数据
+const exporting = ref(false)
+const exportData = async () => {
+  exporting.value = true
+  try {
+    const params: any = {
+      format: 'csv',
+      days: 7,
+    }
+
+    // 添加摄像头筛选
+    if (selectedCamera.value) {
+      params.camera_id = selectedCamera.value
+    }
+
+    // 添加时间范围（如果有）
+    if (selectedTimeRange.value) {
+      const now = new Date()
+      let days = 7
+      if (selectedTimeRange.value === '1h') {
+        days = 1
+        params.start_time = new Date(now.getTime() - 60 * 60 * 1000).toISOString()
+        params.end_time = now.toISOString()
+      } else if (selectedTimeRange.value === '24h') {
+        days = 1
+        params.start_time = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
+        params.end_time = now.toISOString()
+      } else if (selectedTimeRange.value === '7d') {
+        days = 7
+        params.start_time = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+        params.end_time = now.toISOString()
+      }
+      params.days = days
+    }
+
+    const { exportApi, downloadBlob } = await import('@/api/export')
+    const blob = await exportApi.exportStatistics(params)
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5)
+    downloadBlob(blob, `statistics_${timestamp}.csv`)
+    message.success('导出成功')
+  } catch (error: any) {
+    console.error('导出失败:', error)
+    message.error('导出失败: ' + (error.response?.data?.detail || error.message))
+  } finally {
+    exporting.value = false
+  }
 }
 </script>
 

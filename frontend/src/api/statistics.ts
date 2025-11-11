@@ -23,6 +23,26 @@ export interface DailyStatistics {
   counts_by_type: Record<string, number>
 }
 
+export interface RealtimeStatistics {
+  active_cameras: number
+  total_detections: number
+  violations_count: number
+  compliance_rate: number
+  detection_accuracy: number
+  recent_events: EventData[]
+  [key: string]: any
+}
+
+export interface HistoryEvent {
+  id: string
+  timestamp: string
+  camera_id: string
+  camera_name?: string
+  event_type: string
+  confidence?: number
+  metadata?: Record<string, any>
+}
+
 // 统计API接口
 export const statisticsApi = {
   /**
@@ -161,5 +181,33 @@ export const statisticsApi = {
       responseType: 'blob'
     })
     return response.data
+  },
+
+  /**
+   * 获取实时统计数据
+   */
+  async getRealtimeStats(): Promise<RealtimeStatistics> {
+    const response = await http.get('/statistics/realtime')
+    return response.data
+  },
+
+  /**
+   * 获取近期事件历史
+   * @param minutes 要查询的最近分钟数，默认60分钟
+   * @param limit 返回事件的最大数量，默认100
+   * @param cameraId 可选的摄像头ID过滤
+   */
+  async getHistory(
+    minutes: number = 60,
+    limit: number = 100,
+    cameraId?: string
+  ): Promise<HistoryEvent[]> {
+    const params = new URLSearchParams()
+    params.append('minutes', minutes.toString())
+    params.append('limit', limit.toString())
+    if (cameraId) params.append('camera_id', cameraId)
+
+    const response = await http.get(`/statistics/history?${params}`)
+    return response.data || []
   }
 }

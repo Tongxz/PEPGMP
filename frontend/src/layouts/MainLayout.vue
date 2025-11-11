@@ -271,6 +271,11 @@ const menuOptions = computed<MenuOption[]>(() => {
       label: 'MLOps管理',
       key: 'mlops',
       icon: () => h(NIcon, null, { default: () => h(CodeWorkingOutline) })
+    },
+    {
+      label: '实时监控',
+      key: 'realtime-monitor',
+      icon: () => h(NIcon, null, { default: () => h(CameraOutline) })
     }
   ]
   return options
@@ -286,7 +291,8 @@ const breadcrumbs = computed(() => {
     '/detection-records': '历史记录',
     '/system-info': '系统信息',
     '/alerts': '告警中心',
-    '/mlops': 'MLOps管理'
+    '/mlops': 'MLOps管理',
+    '/realtime-monitor': '实时监控'
   }
 
   const currentPath = route.path

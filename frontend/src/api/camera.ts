@@ -161,9 +161,23 @@ export const cameraApi = {
    * @param cameraIds 摄像头ID列表，为空则查询所有
    */
   async batchGetStatus(cameraIds?: string[]) {
-    const response = await http.post('/cameras/batch-status', {
-      camera_ids: cameraIds || []
-    })
-    return response.data
+    try {
+      const response = await http.post('/cameras/batch-status', {
+        camera_ids: cameraIds || []
+      })
+      // 调试：记录响应结构
+      console.debug('batchGetStatus API响应:', {
+        responseType: typeof response,
+        hasData: 'data' in response,
+        dataType: typeof response.data,
+        dataIsArray: Array.isArray(response.data),
+        dataKeys: response.data && typeof response.data === 'object' ? Object.keys(response.data) : [],
+        data: response.data
+      })
+      return response.data
+    } catch (error: any) {
+      console.error('batchGetStatus API调用失败:', error)
+      throw error
+    }
   }
 }

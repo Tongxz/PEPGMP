@@ -1,12 +1,14 @@
+import { statisticsApi, type EventData, type HistoryEvent, type RealtimeStatistics, type StatisticsSummary } from '@/api/statistics'
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import { statisticsApi, type StatisticsSummary, type EventData, type DailyStatistics } from '@/api/statistics'
+import { computed, ref } from 'vue'
 
 export const useStatisticsStore = defineStore('statistics', () => {
   // 状态
   const summary = ref<StatisticsSummary | null>(null)
   const events = ref<EventData[]>([])
   const dailyStats = ref<any[]>([])
+  const realtimeStats = ref<RealtimeStatistics | null>(null)
+  const historyEvents = ref<HistoryEvent[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -90,6 +92,34 @@ export const useStatisticsStore = defineStore('statistics', () => {
     return await statisticsApi.getEventsByCamera(cameraId)
   }
 
+  async function fetchRealtimeStats() {
+    loading.value = true
+    error.value = null
+    try {
+      realtimeStats.value = await statisticsApi.getRealtimeStats()
+      return realtimeStats.value
+    } catch (e: any) {
+      error.value = e.message || '获取实时统计失败'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function fetchHistory(minutes: number = 60, limit: number = 100, cameraId?: string) {
+    loading.value = true
+    error.value = null
+    try {
+      historyEvents.value = await statisticsApi.getHistory(minutes, limit, cameraId)
+      return historyEvents.value
+    } catch (e: any) {
+      error.value = e.message || '获取历史记录失败'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
   function setSelectedEventTypes(types: string[]) {
     selectedEventTypes.value = types
   }
@@ -127,6 +157,8 @@ export const useStatisticsStore = defineStore('statistics', () => {
     summary.value = null
     events.value = []
     dailyStats.value = []
+    realtimeStats.value = null
+    historyEvents.value = []
     loading.value = false
     error.value = null
     selectedTimeRange.value = '24h'
@@ -139,26 +171,29 @@ export const useStatisticsStore = defineStore('statistics', () => {
     summary,
     events,
     dailyStats,
+    realtimeStats,
+    historyEvents,
     loading,
     error,
+    // 筛选条件
     selectedTimeRange,
     selectedCameraId,
     selectedEventTypes,
-
     // 计算属性
     hasData,
     totalEvents,
     eventTypes,
     eventsByType,
     filteredEvents,
-
-    // 操作
+    // 方法
     fetchSummary,
     fetchDailyStats,
     fetchEvents,
     fetchEventsByTimeRange,
     fetchEventsByType,
     fetchEventsByCamera,
+    fetchRealtimeStats,
+    fetchHistory,
     setSelectedEventTypes,
     addSelectedEventType,
     removeSelectedEventType,

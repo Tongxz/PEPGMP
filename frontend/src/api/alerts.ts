@@ -50,4 +50,13 @@ export const alertsApi = {
     async updateRule(ruleId: number, updates: Partial<AlertRuleItem>) {
         return await http.put(`/alerts/rules/${ruleId}`, updates)
     },
+
+    async deleteRule(ruleId: number) {
+        return await http.delete(`/alerts/rules/${ruleId}`)
+    },
+
+    async getRuleDetail(ruleId: number) {
+        const response = await http.get<AlertRuleItem>(`/alerts/rules/${ruleId}`)
+        return response.data
+    },
 }
