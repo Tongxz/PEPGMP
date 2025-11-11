@@ -12,10 +12,16 @@ from src.application.handwash_dataset_generation_service import (
 )
 from src.application.handwash_training_service import HandwashTrainingService
 from src.application.model_training_service import ModelTrainingService
+from src.application.multi_behavior_dataset_service import (
+    MultiBehaviorDatasetGenerationService,
+)
+from src.application.multi_behavior_training_service import MultiBehaviorTrainingService
 from src.config.dataset_config import get_dataset_generation_config
 from src.config.handwash_dataset_config import get_handwash_dataset_config
 from src.config.handwash_training_config import get_handwash_training_config
 from src.config.model_training_config import get_model_training_config
+from src.config.multi_behavior_dataset_config import get_multi_behavior_dataset_config
+from src.config.multi_behavior_training_config import get_multi_behavior_training_config
 from src.container.service_container import container
 from src.domain.repositories.handwash_session_repository import (
     IHandwashSessionRepository,
@@ -253,6 +259,7 @@ def _configure_other_services():
     _configure_dataset_services()
     _configure_training_services()
     _configure_handwash_services()
+    _configure_multi_behavior_services()
 
     # 领域服务开关
     use_domain_service = os.getenv("USE_DOMAIN_SERVICE", "false").lower() == "true"
@@ -343,6 +350,29 @@ def _configure_handwash_services():
         logger.info("洗手工作流服务已注册")
     except Exception as exc:
         logger.error(f"注册洗手服务失败: {exc}")
+
+
+def _configure_multi_behavior_services():
+    """配置多行为工作流相关服务"""
+    try:
+        dataset_config = get_multi_behavior_dataset_config()
+        detection_repository = container.get(IDetectionRepository)
+        multi_dataset_service = MultiBehaviorDatasetGenerationService(
+            detection_repository=detection_repository,
+            config=dataset_config,
+        )
+        container.register_instance(
+            MultiBehaviorDatasetGenerationService, multi_dataset_service
+        )
+
+        multi_training_config = get_multi_behavior_training_config()
+        multi_training_service = MultiBehaviorTrainingService(multi_training_config)
+        container.register_instance(
+            MultiBehaviorTrainingService, multi_training_service
+        )
+        logger.info("多行为工作流服务已注册")
+    except Exception as exc:
+        logger.error(f"注册多行为服务失败: {exc}")
 
 
 def _log_registered_services():

@@ -367,6 +367,24 @@ REDIS_URL=redis://:STRONG_PASSWORD@prod-redis:6379/0
 | `HANDWASH_TRAINING_VAL_SPLIT` | `0.2` | 验证集占比 |
 | `HANDWASH_TRAINING_SEED` | `42` | 随机种子 |
 
+### 多行为检测工作流配置
+
+| 环境变量 | 默认值 | 说明 |
+|----------|--------|------|
+| `MULTI_BEHAVIOR_DATASET_DIR` | `datasets/multi_behavior` | 多行为数据集输出目录 |
+| `MULTI_BEHAVIOR_CLASSES` | `no_hairnet,handwashing,mask_violation` | YOLO 类别名称列表 |
+| `MULTI_BEHAVIOR_INCLUDE_NORMAL` | `false` | 是否保留无标注样本 |
+| `MULTI_BEHAVIOR_MAX_RECORDS` | `3000` | 最大采样记录数 |
+| `MULTI_BEHAVIOR_MODEL_DIR` | `models/multi_behavior` | 模型输出目录 |
+| `MULTI_BEHAVIOR_REPORT_DIR` | `models/multi_behavior/reports` | 训练报告目录 |
+| `MULTI_BEHAVIOR_YOLO_MODEL` | `yolov8n.pt` | 预训练检测权重 |
+| `MULTI_BEHAVIOR_EPOCHS` | `50` | 训练轮数 |
+| `MULTI_BEHAVIOR_IMAGE_SIZE` | `640` | 输入尺寸 |
+| `MULTI_BEHAVIOR_BATCH_SIZE` | `16` | 训练批大小 |
+| `MULTI_BEHAVIOR_DEVICE` | `auto` | 训练设备 |
+| `MULTI_BEHAVIOR_PATIENCE` | `15` | 早停策略容忍轮数 |
+| `MULTI_BEHAVIOR_VAL_SPLIT` | `0.2` | 验证集占比 |
+
 ---
 
 ## 🐳 Docker服务管理

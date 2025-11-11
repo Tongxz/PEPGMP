@@ -21,6 +21,11 @@ from src.application.handwash_dataset_generation_service import (
 )
 from src.application.handwash_training_service import HandwashTrainingService
 from src.application.model_training_service import ModelTrainingService
+from src.application.multi_behavior_dataset_service import (
+    MultiBehaviorDatasetGenerationService,
+    MultiBehaviorDatasetRequest,
+)
+from src.application.multi_behavior_training_service import MultiBehaviorTrainingService
 from src.container.service_container import get_service
 from src.database.connection import AsyncSessionLocal
 
@@ -45,6 +50,8 @@ class StepType(Enum):
     HANDWASH_DATASET = "handwash_dataset"
     MODEL_TRAINING = "model_training"
     HANDWASH_TRAINING = "handwash_training"
+    MULTI_BEHAVIOR_DATASET = "multi_behavior_dataset"
+    MULTI_BEHAVIOR_TRAINING = "multi_behavior_training"
     MODEL_EVALUATION = "model_evaluation"
     MODEL_DEPLOYMENT = "model_deployment"
     NOTIFICATION = "notification"
@@ -61,13 +68,29 @@ class WorkflowEngine:
             StepType.DATA_PROCESSING: self._handle_data_processing,
             StepType.DATASET_GENERATION: self._handle_dataset_generation,
             StepType.HANDWASH_DATASET: self._handle_handwash_dataset_generation,
+            StepType.MULTI_BEHAVIOR_DATASET: self._handle_multi_behavior_dataset_generation,
             StepType.MODEL_TRAINING: self._handle_model_training,
             StepType.HANDWASH_TRAINING: self._handle_handwash_training,
+            StepType.MULTI_BEHAVIOR_TRAINING: self._handle_multi_behavior_training,
             StepType.MODEL_EVALUATION: self._handle_model_evaluation,
             StepType.MODEL_DEPLOYMENT: self._handle_model_deployment,
             StepType.NOTIFICATION: self._handle_notification,
             StepType.CUSTOM: self._handle_custom_step,
         }
+
+    @staticmethod
+    def _parse_datetime(value: Any) -> Optional[datetime]:
+        if not value:
+            return None
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            try:
+                return datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                logger.warning("无法解析时间字符串: %s", value)
+                return None
+        return None
 
     async def create_workflow(self, workflow_config: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -562,6 +585,52 @@ class WorkflowEngine:
             logger.error("洗手数据集生成失败: %s", exc)
             return {"success": False, "error": str(exc)}
 
+    async def _handle_multi_behavior_dataset_generation(
+        self,
+        step_config: Dict[str, Any],
+        workflow_config: Dict[str, Any],
+        context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """处理多行为数据集生成步骤"""
+        try:
+            service = get_service(MultiBehaviorDatasetGenerationService)
+        except Exception as exc:
+            logger.error("获取多行为数据集服务失败: %s", exc)
+            return {"success": False, "error": "多行为数据集服务不可用"}
+
+        config = step_config.get("config") or {}
+        dataset_name = config.get("dataset_name") or (
+            workflow_config.get("name", "multibeh_dataset")
+            + f"_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+        )
+
+        request = MultiBehaviorDatasetRequest(
+            dataset_name=dataset_name,
+            violation_types=config.get("violation_types"),
+            start_time=self._parse_datetime(config.get("start_time")),
+            end_time=self._parse_datetime(config.get("end_time")),
+            camera_ids=config.get("camera_ids"),
+            max_records=config.get("max_records"),
+        )
+
+        try:
+            async with AsyncSessionLocal() as db_session:
+                result = await service.generate_dataset(request, db_session)
+            context["last_multi_behavior_dataset"] = result
+            logger.info(
+                "多行为数据集生成完成: %s (samples=%s)",
+                result.get("dataset_name"),
+                result.get("samples"),
+            )
+            return {
+                "success": True,
+                "message": "多行为数据集生成完成",
+                "output": result,
+            }
+        except Exception as exc:
+            logger.error("多行为数据集生成失败: %s", exc)
+            return {"success": False, "error": str(exc)}
+
     async def _handle_model_training(
         self,
         step_config: Dict[str, Any],
@@ -665,6 +734,54 @@ class WorkflowEngine:
             return {"success": True, "message": "洗手训练完成", "output": output}
         except Exception as exc:
             logger.error("洗手训练步骤失败: %s", exc)
+            return {"success": False, "error": str(exc)}
+
+    async def _handle_multi_behavior_training(
+        self,
+        step_config: Dict[str, Any],
+        workflow_config: Dict[str, Any],
+        context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """处理多行为训练步骤"""
+        try:
+            training_service = get_service(MultiBehaviorTrainingService)
+        except Exception as exc:
+            logger.error("获取多行为训练服务失败: %s", exc)
+            return {"success": False, "error": "多行为训练服务不可用"}
+
+        config = step_config.get("config") or {}
+        dataset_dir = config.get("dataset_dir")
+        data_config = config.get("data_config")
+
+        last_dataset = context.get("last_multi_behavior_dataset") or context.get(
+            "last_dataset_output"
+        )
+        if not dataset_dir and last_dataset:
+            dataset_dir = last_dataset.get("dataset_path")
+        if not data_config and last_dataset:
+            data_config = last_dataset.get("yaml_path")
+
+        if not dataset_dir:
+            return {"success": False, "error": "未提供多行为训练数据集目录"}
+
+        training_params = config.get("training_params", {})
+        try:
+            result = await training_service.train(
+                Path(dataset_dir),
+                data_config=Path(data_config) if data_config else None,
+                training_params=training_params,
+            )
+            output = {
+                "model_path": str(result.model_path),
+                "report_path": str(result.report_path),
+                "metrics": result.metrics,
+                "samples_used": result.samples_used,
+            }
+            context["last_multi_behavior_training"] = output
+            logger.info("多行为训练完成: %s", result.model_path)
+            return {"success": True, "message": "多行为训练完成", "output": output}
+        except Exception as exc:
+            logger.error("多行为训练步骤失败: %s", exc)
             return {"success": False, "error": str(exc)}
 
     async def _handle_model_evaluation(
