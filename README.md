@@ -332,7 +332,7 @@ REDIS_URL=redis://:STRONG_PASSWORD@prod-redis:6379/0
 
 ### 模型训练配置
 
-工作流中的“模型训练”步骤会读取自动生成的数据集并输出轻量级分类模型，可通过以下环境变量调整行为：
+工作流中的“模型训练”步骤会读取自动生成的数据集并输出基于 YOLOv8 的分类模型，可通过以下环境变量调整行为：
 
 | 环境变量 | 默认值 | 说明 |
 |----------|--------|------|
@@ -340,7 +340,12 @@ REDIS_URL=redis://:STRONG_PASSWORD@prod-redis:6379/0
 | `MODEL_TRAINING_REPORT_DIR` | `models/mlops/reports` | 训练报告输出目录 |
 | `MODEL_TRAINING_TEST_SIZE` | `0.2` | 训练/验证集划分比例 |
 | `MODEL_TRAINING_RANDOM_STATE` | `42` | 随机种子，保证可复现 |
-| `MODEL_TRAINING_MAX_ITER` | `200` | 逻辑回归最大迭代次数 |
+| `YOLO_TRAIN_MODEL` | `yolov8n-cls.pt` | YOLO 预训练分类权重 |
+| `YOLO_TRAIN_EPOCHS` | `30` | 训练轮数 |
+| `YOLO_TRAIN_IMAGE_SIZE` | `224` | 输入图像尺寸 |
+| `YOLO_TRAIN_BATCH_SIZE` | `32` | 批大小 |
+| `YOLO_TRAIN_DEVICE` | `auto` | 训练设备 (`cuda`, `cpu` 或 `auto`) |
+| `YOLO_TRAIN_PATIENCE` | `10` | 早停策略的容忍轮数 |
 
 ---
 
