@@ -13,6 +13,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from src.application.model_registry_service import (
+    ModelRegistrationInfo,
+    ModelRegistryService,
+)
 from src.config.multi_behavior_training_config import MultiBehaviorTrainingConfig
 
 logger = logging.getLogger(__name__)
@@ -24,19 +28,27 @@ class MultiBehaviorTrainingResult:
     report_path: Path
     metrics: Dict[str, Any]
     samples_used: int
+    version: str
+    artifacts: Dict[str, Any]
 
 
 class MultiBehaviorTrainingService:
     """调用 YOLOv8 进行多行为检测模型训练。"""
 
-    def __init__(self, config: MultiBehaviorTrainingConfig) -> None:
+    def __init__(
+        self,
+        config: MultiBehaviorTrainingConfig,
+        model_registry_service: Optional[ModelRegistryService] = None,
+    ) -> None:
         self._config = config
+        self._model_registry = model_registry_service
 
     async def train(
         self,
         dataset_dir: Path,
         data_config: Optional[Path] = None,
         training_params: Optional[Dict[str, Any]] = None,
+        dataset_metadata: Optional[Dict[str, Any]] = None,
     ) -> MultiBehaviorTrainingResult:
         dataset_dir = Path(dataset_dir)
         data_config = (
@@ -46,12 +58,36 @@ class MultiBehaviorTrainingService:
             raise FileNotFoundError(f"未找到 data.yaml: {data_config}")
 
         training_params = training_params or {}
-        return await asyncio.to_thread(
+        result = await asyncio.to_thread(
             self._run_training,
             dataset_dir,
             data_config,
             training_params,
         )
+
+        if self._model_registry:
+            try:
+                dataset_info = dataset_metadata or {}
+                registration = ModelRegistrationInfo(
+                    name=training_params.get(
+                        "model_name", f"multi_behavior_{result.version}"
+                    ),
+                    model_type=training_params.get("model_type", "multi_behavior"),
+                    version=result.version,
+                    model_path=result.model_path,
+                    report_path=result.report_path,
+                    dataset_id=dataset_info.get("dataset_id"),
+                    dataset_path=dataset_info.get("dataset_path"),
+                    metrics=result.metrics,
+                    artifacts=result.artifacts,
+                    training_params=training_params,
+                    description=training_params.get("description"),
+                )
+                await self._model_registry.register_model(registration)
+            except Exception as exc:  # pragma: no cover
+                logger.warning("多行为模型注册失败: %s", exc)
+
+        return result
 
     def _run_training(
         self,
@@ -151,6 +187,8 @@ class MultiBehaviorTrainingService:
             report_path=report_path,
             metrics=metrics,
             samples_used=len(dataset_info),
+            version=timestamp,
+            artifacts={"yolo_run_directory": str(save_dir)},
         )
 
     def _extract_metrics(self, trainer: Any, save_dir: Path) -> Dict[str, Any]:

@@ -667,6 +667,7 @@ class WorkflowEngine:
                 Path(dataset_path),
                 annotations_file=Path(annotations_path) if annotations_path else None,
                 training_params=training_params,
+                dataset_metadata=dataset_output,
             )
 
             logger.info(
@@ -682,6 +683,8 @@ class WorkflowEngine:
                     "report_path": str(result.report_path),
                     "metrics": result.metrics,
                     "samples_used": result.samples_used,
+                    "version": result.version,
+                    "artifacts": result.artifacts,
                 },
             }
         except Exception as e:
@@ -722,12 +725,15 @@ class WorkflowEngine:
                 Path(dataset_dir),
                 annotations_file=Path(annotations_file) if annotations_file else None,
                 training_params=training_params,
+                dataset_metadata=last_dataset,
             )
             output = {
                 "model_path": str(result.model_path),
                 "report_path": str(result.report_path),
                 "metrics": result.metrics,
                 "samples_used": result.samples_used,
+                "version": result.version,
+                "artifacts": result.artifacts,
             }
             context["last_handwash_training"] = output
             logger.info("洗手训练完成: %s", result.model_path)
@@ -770,12 +776,15 @@ class WorkflowEngine:
                 Path(dataset_dir),
                 data_config=Path(data_config) if data_config else None,
                 training_params=training_params,
+                dataset_metadata=last_dataset,
             )
             output = {
                 "model_path": str(result.model_path),
                 "report_path": str(result.report_path),
                 "metrics": result.metrics,
                 "samples_used": result.samples_used,
+                "version": result.version,
+                "artifacts": result.artifacts,
             }
             context["last_multi_behavior_training"] = output
             logger.info("多行为训练完成: %s", result.model_path)

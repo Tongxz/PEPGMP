@@ -3,9 +3,19 @@ MLOps数据库模型
 定义数据集、部署、工作流等实体的数据模型
 """
 
-from datetime import datetime
-from typing import Optional, Dict, Any, List
-from sqlalchemy import Column, String, Integer, Float, DateTime, Text, Boolean, JSON, BigInteger
+from typing import Any, Dict
+
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 
@@ -14,12 +24,15 @@ Base = declarative_base()
 
 class Dataset(Base):
     """数据集模型"""
+
     __tablename__ = "datasets"
 
     id = Column(String(50), primary_key=True)
     name = Column(String(100), nullable=False, index=True)
     version = Column(String(20), nullable=False)
-    status = Column(String(20), nullable=False, default="active")  # active, archived, processing, error
+    status = Column(
+        String(20), nullable=False, default="active"
+    )  # active, archived, processing, error
     size = Column(BigInteger, nullable=False, default=0)
     sample_count = Column(Integer, nullable=True)
     label_count = Column(Integer, nullable=True)
@@ -29,7 +42,9 @@ class Dataset(Base):
     tags = Column(JSON, nullable=True)  # 存储标签列表JSON
     file_path = Column(String(500), nullable=True)  # 数据集文件路径
     created_at = Column(DateTime, nullable=False, default=func.now())
-    updated_at = Column(DateTime, nullable=False, default=func.now(), onupdate=func.now())
+    updated_at = Column(
+        DateTime, nullable=False, default=func.now(), onupdate=func.now()
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
@@ -53,13 +68,16 @@ class Dataset(Base):
 
 class Deployment(Base):
     """模型部署模型"""
+
     __tablename__ = "deployments"
 
     id = Column(String(50), primary_key=True)
     name = Column(String(100), nullable=False, index=True)
     model_version = Column(String(50), nullable=False)
     environment = Column(String(20), nullable=False)  # production, staging, development
-    status = Column(String(20), nullable=False, default="stopped")  # running, stopped, deploying, error, scaling
+    status = Column(
+        String(20), nullable=False, default="stopped"
+    )  # running, stopped, deploying, error, scaling
     replicas = Column(Integer, nullable=False, default=1)
     cpu_limit = Column(String(20), nullable=True)  # CPU限制，如 "1" 表示1核
     memory_limit = Column(String(20), nullable=True)  # 内存限制，如 "2Gi" 表示2GB
@@ -68,7 +86,9 @@ class Deployment(Base):
     auto_scaling = Column(Boolean, nullable=False, default=False)
     min_replicas = Column(Integer, nullable=True, default=1)
     max_replicas = Column(Integer, nullable=True, default=5)
-    update_strategy = Column(String(20), nullable=True, default="rolling")  # rolling, recreate, blue_green
+    update_strategy = Column(
+        String(20), nullable=True, default="rolling"
+    )  # rolling, recreate, blue_green
     # 运行时指标
     cpu_usage = Column(Float, nullable=True, default=0.0)
     memory_usage = Column(Float, nullable=True, default=0.0)
@@ -81,7 +101,9 @@ class Deployment(Base):
     # 部署信息
     deployment_config = Column(JSON, nullable=True)  # 存储完整部署配置
     created_at = Column(DateTime, nullable=False, default=func.now())
-    updated_at = Column(DateTime, nullable=False, default=func.now(), onupdate=func.now())
+    updated_at = Column(
+        DateTime, nullable=False, default=func.now(), onupdate=func.now()
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
@@ -116,13 +138,20 @@ class Deployment(Base):
 
 class Workflow(Base):
     """工作流模型"""
+
     __tablename__ = "workflows"
 
     id = Column(String(50), primary_key=True)
     name = Column(String(100), nullable=False, index=True)
-    type = Column(String(20), nullable=False)  # training, evaluation, deployment, data_processing
-    status = Column(String(20), nullable=False, default="inactive")  # active, inactive, error
-    trigger = Column(String(20), nullable=False)  # manual, schedule, webhook, data_change
+    type = Column(
+        String(20), nullable=False
+    )  # training, evaluation, deployment, data_processing
+    status = Column(
+        String(20), nullable=False, default="inactive"
+    )  # active, inactive, error
+    trigger = Column(
+        String(20), nullable=False
+    )  # manual, schedule, webhook, data_change
     schedule = Column(String(100), nullable=True)  # cron表达式
     description = Column(Text, nullable=True)
     steps = Column(JSON, nullable=False)  # 存储工作流步骤配置
@@ -135,7 +164,9 @@ class Workflow(Base):
     # 工作流配置
     workflow_config = Column(JSON, nullable=True)  # 存储完整工作流配置
     created_at = Column(DateTime, nullable=False, default=func.now())
-    updated_at = Column(DateTime, nullable=False, default=func.now(), onupdate=func.now())
+    updated_at = Column(
+        DateTime, nullable=False, default=func.now(), onupdate=func.now()
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
@@ -156,12 +187,13 @@ class Workflow(Base):
             "workflow_config": self.workflow_config,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "recent_runs": []  # 需要单独查询运行记录
+            "recent_runs": [],  # 需要单独查询运行记录
         }
 
 
 class WorkflowRun(Base):
     """工作流运行记录模型"""
+
     __tablename__ = "workflow_runs"
 
     id = Column(String(50), primary_key=True)
@@ -188,4 +220,49 @@ class WorkflowRun(Base):
             "run_log": self.run_log,
             "run_config": self.run_config,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class ModelRegistry(Base):
+    """模型注册表"""
+
+    __tablename__ = "model_registry"
+
+    id = Column(String(60), primary_key=True)
+    name = Column(String(120), nullable=False, index=True)
+    model_type = Column(String(50), nullable=False)
+    version = Column(String(50), nullable=False)
+    status = Column(
+        String(20), nullable=False, default="active"
+    )  # active, archived, deprecated
+    model_path = Column(String(500), nullable=False)
+    report_path = Column(String(500), nullable=True)
+    dataset_id = Column(String(50), nullable=True)
+    dataset_path = Column(String(500), nullable=True)
+    metrics = Column(JSON, nullable=True)
+    artifacts = Column(JSON, nullable=True)
+    training_params = Column(JSON, nullable=True)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=func.now())
+    updated_at = Column(
+        DateTime, nullable=False, default=func.now(), onupdate=func.now()
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "model_type": self.model_type,
+            "version": self.version,
+            "status": self.status,
+            "model_path": self.model_path,
+            "report_path": self.report_path,
+            "dataset_id": self.dataset_id,
+            "dataset_path": self.dataset_path,
+            "metrics": self.metrics,
+            "artifacts": self.artifacts,
+            "training_params": self.training_params,
+            "description": self.description,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

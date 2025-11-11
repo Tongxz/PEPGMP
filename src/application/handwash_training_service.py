@@ -18,6 +18,10 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset, random_split
 
+from src.application.model_registry_service import (
+    ModelRegistrationInfo,
+    ModelRegistryService,
+)
 from src.config.handwash_training_config import HandwashTrainingConfig
 
 logger = logging.getLogger(__name__)
@@ -29,6 +33,8 @@ class HandwashTrainingResult:
     report_path: Path
     metrics: Dict[str, Any]
     samples_used: int
+    version: str
+    artifacts: Dict[str, Any]
 
 
 class _HandwashSequenceDataset(Dataset):
@@ -81,14 +87,20 @@ class _TemporalCNN(nn.Module):
 class HandwashTrainingService:
     """基于姿态序列的洗手合规训练服务。"""
 
-    def __init__(self, config: HandwashTrainingConfig) -> None:
+    def __init__(
+        self,
+        config: HandwashTrainingConfig,
+        model_registry_service: Optional[ModelRegistryService] = None,
+    ) -> None:
         self._config = config
+        self._model_registry = model_registry_service
 
     async def train(
         self,
         dataset_dir: Path,
         annotations_file: Optional[Path] = None,
         training_params: Optional[Dict[str, Any]] = None,
+        dataset_metadata: Optional[Dict[str, Any]] = None,
     ) -> HandwashTrainingResult:
         dataset_dir = Path(dataset_dir)
         annotations_file = (
@@ -100,12 +112,36 @@ class HandwashTrainingService:
             raise FileNotFoundError(f"未找到标注文件: {annotations_file}")
 
         training_params = training_params or {}
-        return await asyncio.to_thread(
+        result = await asyncio.to_thread(
             self._run_training,
             dataset_dir,
             annotations_file,
             training_params,
         )
+
+        if self._model_registry:
+            try:
+                dataset_info = dataset_metadata or {}
+                registration = ModelRegistrationInfo(
+                    name=training_params.get(
+                        "model_name", f"handwash_tcn_{result.version}"
+                    ),
+                    model_type=training_params.get("model_type", "handwash_compliance"),
+                    version=result.version,
+                    model_path=result.model_path,
+                    report_path=result.report_path,
+                    dataset_id=dataset_info.get("dataset_id"),
+                    dataset_path=dataset_info.get("dataset_path"),
+                    metrics=result.metrics,
+                    artifacts=result.artifacts,
+                    training_params=training_params,
+                    description=training_params.get("description"),
+                )
+                await self._model_registry.register_model(registration)
+            except Exception as exc:  # pragma: no cover
+                logger.warning("洗手模型注册失败: %s", exc)
+
+        return result
 
     def _run_training(
         self,
@@ -221,6 +257,8 @@ class HandwashTrainingService:
             report_path=report_path,
             metrics=report_content["metrics"],
             samples_used=len(dataset),
+            version=timestamp,
+            artifacts={"training_history": metrics_log},
         )
 
     @staticmethod

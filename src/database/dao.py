@@ -10,7 +10,13 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database.models import Dataset, Deployment, Workflow, WorkflowRun
+from src.database.models import (
+    Dataset,
+    Deployment,
+    ModelRegistry,
+    Workflow,
+    WorkflowRun,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -365,3 +371,74 @@ class WorkflowRunDAO:
             update_data.update(additional_data)
 
         return await WorkflowRunDAO.update(session, run_id, update_data)
+
+
+class ModelRegistryDAO:
+    """模型注册表 DAO"""
+
+    @staticmethod
+    async def create(
+        session: AsyncSession, model_data: Dict[str, Any]
+    ) -> ModelRegistry:
+        model = ModelRegistry(**model_data)
+        session.add(model)
+        await session.commit()
+        await session.refresh(model)
+        logger.info("注册模型: %s (%s)", model.name, model.model_type)
+        return model
+
+    @staticmethod
+    async def get_by_id(
+        session: AsyncSession, model_id: str
+    ) -> Optional[ModelRegistry]:
+        result = await session.execute(
+            select(ModelRegistry).where(ModelRegistry.id == model_id)
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def list_models(
+        session: AsyncSession,
+        *,
+        model_type: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[ModelRegistry]:
+        query = select(ModelRegistry)
+        if model_type:
+            query = query.where(ModelRegistry.model_type == model_type)
+        if status:
+            query = query.where(ModelRegistry.status == status)
+        query = query.order_by(ModelRegistry.created_at.desc())
+        query = query.offset(offset).limit(limit)
+        result = await session.execute(query)
+        return result.scalars().all()
+
+    @staticmethod
+    async def update(
+        session: AsyncSession, model_id: str, update_data: Dict[str, Any]
+    ) -> Optional[ModelRegistry]:
+        update_data["updated_at"] = datetime.utcnow()
+        result = await session.execute(
+            update(ModelRegistry)
+            .where(ModelRegistry.id == model_id)
+            .values(**update_data)
+            .returning(ModelRegistry)
+        )
+        model = result.scalar_one_or_none()
+        if model:
+            await session.commit()
+            logger.info("更新模型信息: %s", model_id)
+        return model
+
+    @staticmethod
+    async def delete(session: AsyncSession, model_id: str) -> bool:
+        result = await session.execute(
+            delete(ModelRegistry).where(ModelRegistry.id == model_id)
+        )
+        await session.commit()
+        deleted = result.rowcount > 0
+        if deleted:
+            logger.info("删除模型记录: %s", model_id)
+        return deleted

@@ -11,6 +11,7 @@ from src.application.handwash_dataset_generation_service import (
     HandwashDatasetGenerationService,
 )
 from src.application.handwash_training_service import HandwashTrainingService
+from src.application.model_registry_service import ModelRegistryService
 from src.application.model_training_service import ModelTrainingService
 from src.application.multi_behavior_dataset_service import (
     MultiBehaviorDatasetGenerationService,
@@ -257,6 +258,7 @@ def _configure_other_services():
     """配置其他服务"""
     _configure_storage_services()
     _configure_dataset_services()
+    _configure_model_registry_services()
     _configure_training_services()
     _configure_handwash_services()
     _configure_multi_behavior_services()
@@ -314,7 +316,12 @@ def _configure_training_services():
     """配置模型训练服务"""
     try:
         training_config = get_model_training_config()
-        training_service = ModelTrainingService(training_config)
+        model_registry_service = None
+        if container.is_registered(ModelRegistryService):
+            model_registry_service = container.get(ModelRegistryService)
+        training_service = ModelTrainingService(
+            training_config, model_registry_service=model_registry_service
+        )
         container.register_instance(ModelTrainingService, training_service)
         logger.info("模型训练服务已注册")
     except Exception as exc:
@@ -345,7 +352,12 @@ def _configure_handwash_services():
         )
 
         handwash_training_config = get_handwash_training_config()
-        handwash_training_service = HandwashTrainingService(handwash_training_config)
+        model_registry_service = None
+        if container.is_registered(ModelRegistryService):
+            model_registry_service = container.get(ModelRegistryService)
+        handwash_training_service = HandwashTrainingService(
+            handwash_training_config, model_registry_service=model_registry_service
+        )
         container.register_instance(HandwashTrainingService, handwash_training_service)
         logger.info("洗手工作流服务已注册")
     except Exception as exc:
@@ -366,13 +378,28 @@ def _configure_multi_behavior_services():
         )
 
         multi_training_config = get_multi_behavior_training_config()
-        multi_training_service = MultiBehaviorTrainingService(multi_training_config)
+        model_registry_service = None
+        if container.is_registered(ModelRegistryService):
+            model_registry_service = container.get(ModelRegistryService)
+        multi_training_service = MultiBehaviorTrainingService(
+            multi_training_config, model_registry_service=model_registry_service
+        )
         container.register_instance(
             MultiBehaviorTrainingService, multi_training_service
         )
         logger.info("多行为工作流服务已注册")
     except Exception as exc:
         logger.error(f"注册多行为服务失败: {exc}")
+
+
+def _configure_model_registry_services():
+    """配置模型注册服务"""
+    try:
+        model_registry_service = ModelRegistryService()
+        container.register_instance(ModelRegistryService, model_registry_service)
+        logger.info("模型注册服务已注册")
+    except Exception as exc:
+        logger.error(f"注册模型注册服务失败: {exc}")
 
 
 def _log_registered_services():

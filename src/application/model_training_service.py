@@ -17,6 +17,10 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import numpy as np
 from sklearn.model_selection import train_test_split
 
+from src.application.model_registry_service import (
+    ModelRegistrationInfo,
+    ModelRegistryService,
+)
 from src.config.model_training_config import ModelTrainingConfig
 
 logger = logging.getLogger(__name__)
@@ -30,19 +34,27 @@ class ModelTrainingResult:
     report_path: Path
     metrics: Dict[str, Any]
     samples_used: int
+    version: str
+    artifacts: Dict[str, Any]
 
 
 class ModelTrainingService:
     """基于生成数据集的 YOLO 模型训练服务。"""
 
-    def __init__(self, config: ModelTrainingConfig) -> None:
+    def __init__(
+        self,
+        config: ModelTrainingConfig,
+        model_registry_service: Optional[ModelRegistryService] = None,
+    ) -> None:
         self._config = config
+        self._model_registry = model_registry_service
 
     async def train_from_dataset(
         self,
         dataset_dir: Path,
         annotations_file: Optional[Path] = None,
         training_params: Optional[Dict[str, Any]] = None,
+        dataset_metadata: Optional[Dict[str, Any]] = None,
     ) -> ModelTrainingResult:
         """
         从指定数据集目录训练深度学习模型（YOLO 分类）。
@@ -71,7 +83,7 @@ class ModelTrainingService:
             int(labels.sum()),
         )
 
-        return await asyncio.to_thread(
+        result = await asyncio.to_thread(
             self._run_yolo_training,
             dataset_dir,
             annotations_file,
@@ -79,6 +91,32 @@ class ModelTrainingService:
             labels,
             training_params,
         )
+
+        if self._model_registry:
+            try:
+                dataset_info = dataset_metadata or {}
+                registration = ModelRegistrationInfo(
+                    name=training_params.get(
+                        "model_name", f"hairnet_classifier_{result.version}"
+                    ),
+                    model_type=training_params.get(
+                        "model_type", "hairnet_classification"
+                    ),
+                    version=result.version,
+                    model_path=result.model_path,
+                    report_path=result.report_path,
+                    dataset_id=dataset_info.get("dataset_id"),
+                    dataset_path=dataset_info.get("dataset_path"),
+                    metrics=result.metrics,
+                    artifacts=result.artifacts,
+                    training_params=training_params,
+                    description=training_params.get("description"),
+                )
+                await self._model_registry.register_model(registration)
+            except Exception as exc:  # pragma: no cover - 注册失败不影响训练
+                logger.warning("模型注册失败: %s", exc)
+
+        return result
 
     def _load_dataset_entries(
         self,
@@ -251,6 +289,8 @@ class ModelTrainingService:
             report_path=report_path,
             metrics=metrics,
             samples_used=len(image_paths),
+            version=timestamp,
+            artifacts={"yolo_run_directory": str(save_dir)},
         )
 
     def _split_dataset(

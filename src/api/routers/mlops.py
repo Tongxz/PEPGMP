@@ -22,6 +22,10 @@ from src.application.dataset_generation_service import (
     DatasetGenerationRequest,
     DatasetGenerationService,
 )
+from src.application.model_registry_service import (
+    ModelRegistrationInfo,
+    ModelRegistryService,
+)
 from src.container.service_container import get_service
 from src.database.connection import get_async_session
 from src.database.dao import DatasetDAO, DeploymentDAO, WorkflowDAO, WorkflowRunDAO
@@ -159,6 +163,43 @@ class DatasetGenerateRequestModel(BaseModel):
     end_time: Optional[datetime] = None
     include_normal_samples: bool = False
     max_records: int = 2000
+
+
+class ModelInfo(BaseModel):
+    id: str
+    name: str
+    model_type: str
+    version: str
+    status: str
+    model_path: str
+    report_path: Optional[str] = None
+    dataset_id: Optional[str] = None
+    dataset_path: Optional[str] = None
+    metrics: Optional[Dict[str, Any]] = None
+    artifacts: Optional[Dict[str, Any]] = None
+    training_params: Optional[Dict[str, Any]] = None
+    description: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class ModelRegisterRequest(BaseModel):
+    name: str
+    model_type: str
+    model_path: str
+    version: Optional[str] = None
+    report_path: Optional[str] = None
+    dataset_id: Optional[str] = None
+    dataset_path: Optional[str] = None
+    metrics: Optional[Dict[str, Any]] = None
+    artifacts: Optional[Dict[str, Any]] = None
+    training_params: Optional[Dict[str, Any]] = None
+    description: Optional[str] = None
+    status: str = "active"
+
+
+class ModelStatusUpdate(BaseModel):
+    status: str
 
 
 # 数据集管理API
@@ -392,6 +433,106 @@ async def generate_dataset(
     except Exception as e:
         logger.error(f"生成数据集失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"生成数据集失败: {e}")
+
+
+# 模型注册管理 API
+@router.get("/models", response_model=List[ModelInfo])
+async def list_models(
+    model_type: Optional[str] = Query(None, description="模型类型筛选"),
+    status: Optional[str] = Query(None, description="模型状态筛选"),
+    limit: int = Query(100, description="返回数量限制"),
+    offset: int = Query(0, description="偏移量"),
+):
+    try:
+        service = get_service(ModelRegistryService)
+        models = await service.list_models(
+            model_type=model_type, status=status, limit=limit, offset=offset
+        )
+        return models
+    except ValueError:
+        raise HTTPException(status_code=503, detail="模型注册服务不可用")
+    except Exception as exc:
+        logger.error("获取模型列表失败: %s", exc)
+        raise HTTPException(status_code=500, detail="获取模型列表失败")
+
+
+@router.get("/models/{model_id}", response_model=ModelInfo)
+async def get_model(model_id: str):
+    try:
+        service = get_service(ModelRegistryService)
+        model = await service.get_model(model_id)
+        if not model:
+            raise HTTPException(status_code=404, detail="模型不存在")
+        return model
+    except HTTPException:
+        raise
+    except ValueError:
+        raise HTTPException(status_code=503, detail="模型注册服务不可用")
+    except Exception as exc:
+        logger.error("获取模型详情失败: %s", exc)
+        raise HTTPException(status_code=500, detail="获取模型详情失败")
+
+
+@router.post("/models/register", response_model=ModelInfo)
+async def register_model(payload: ModelRegisterRequest):
+    try:
+        service = get_service(ModelRegistryService)
+        version = payload.version or datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        registration = ModelRegistrationInfo(
+            name=payload.name,
+            model_type=payload.model_type,
+            version=version,
+            model_path=Path(payload.model_path),
+            report_path=Path(payload.report_path) if payload.report_path else None,
+            dataset_id=payload.dataset_id,
+            dataset_path=payload.dataset_path,
+            metrics=payload.metrics,
+            artifacts=payload.artifacts,
+            training_params=payload.training_params,
+            description=payload.description,
+            status=payload.status,
+        )
+        model = await service.register_model(registration)
+        return model
+    except ValueError:
+        raise HTTPException(status_code=503, detail="模型注册服务不可用")
+    except Exception as exc:
+        logger.error("注册模型失败: %s", exc)
+        raise HTTPException(status_code=500, detail="注册模型失败")
+
+
+@router.post("/models/{model_id}/status", response_model=ModelInfo)
+async def update_model_status(model_id: str, request: ModelStatusUpdate):
+    try:
+        service = get_service(ModelRegistryService)
+        model = await service.update_status(model_id, request.status)
+        if not model:
+            raise HTTPException(status_code=404, detail="模型不存在")
+        return model
+    except HTTPException:
+        raise
+    except ValueError:
+        raise HTTPException(status_code=503, detail="模型注册服务不可用")
+    except Exception as exc:
+        logger.error("更新模型状态失败: %s", exc)
+        raise HTTPException(status_code=500, detail="更新模型状态失败")
+
+
+@router.delete("/models/{model_id}")
+async def delete_model(model_id: str):
+    try:
+        service = get_service(ModelRegistryService)
+        deleted = await service.delete_model(model_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="模型不存在")
+        return {"message": "模型删除成功"}
+    except HTTPException:
+        raise
+    except ValueError:
+        raise HTTPException(status_code=503, detail="模型注册服务不可用")
+    except Exception as exc:
+        logger.error("删除模型失败: %s", exc)
+        raise HTTPException(status_code=500, detail="删除模型失败")
 
 
 # 模型部署管理API
