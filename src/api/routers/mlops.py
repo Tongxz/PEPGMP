@@ -409,6 +409,103 @@ async def download_dataset_file(
         raise HTTPException(status_code=500, detail="文件下载失败")
 
 
+@router.get("/datasets/{dataset_id}/samples")
+async def get_dataset_samples(
+    dataset_id: str,
+    file_type: Optional[str] = Query("image", description="文件类型筛选: image, all"),
+    limit: int = Query(20, description="返回数量限制"),
+    offset: int = Query(0, description="偏移量"),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """获取数据集中的样本文件列表（用于预览）"""
+    try:
+        import csv
+
+        dataset = await DatasetDAO.get_by_id(session, dataset_id)
+        if not dataset:
+            raise HTTPException(status_code=404, detail="数据集不存在")
+
+        dataset_path = Path(dataset.file_path) if dataset.file_path else None
+        if not dataset_path or not dataset_path.exists():
+            raise HTTPException(status_code=404, detail="数据集文件不存在")
+
+        # 读取标注文件
+        annotations_file = dataset_path / "annotations.csv"
+        annotations_map: Dict[str, Dict[str, Any]] = {}
+        if annotations_file.exists():
+            try:
+                with annotations_file.open("r", encoding="utf-8") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        image_path = row.get("image_path", "")
+                        if image_path:
+                            # 标准化路径（统一使用 / 分隔符）
+                            normalized_path = image_path.replace("\\", "/")
+                            annotations_map[normalized_path] = {
+                                "has_violation": row.get("has_violation", "False").lower()
+                                in ("true", "1", "yes"),
+                                "violation_type": row.get("violation_type", ""),
+                                "camera_id": row.get("camera_id", ""),
+                                "timestamp": row.get("timestamp", ""),
+                                "record_id": row.get("record_id", ""),
+                            }
+            except Exception as e:
+                logger.warning(f"读取标注文件失败: {e}")
+
+        # 支持的图片格式
+        image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp"}
+
+        samples = []
+        for root, dirs, filenames in os.walk(dataset_path):
+            for filename in filenames:
+                file_path = Path(root) / filename
+                relative_path = file_path.relative_to(dataset_path)
+
+                # 筛选文件类型
+                if file_type == "image":
+                    if file_path.suffix.lower() not in image_extensions:
+                        continue
+
+                # 跳过 annotations.csv 等非样本文件
+                if filename in {"annotations.csv", "data.yaml"} or filename.startswith("."):
+                    continue
+
+                # 标准化路径用于匹配标注
+                normalized_path = str(relative_path).replace("\\", "/")
+                annotation = annotations_map.get(normalized_path, {})
+
+                sample_data = {
+                    "name": filename,
+                    "path": normalized_path,
+                    "size": file_path.stat().st_size,
+                    "url": f"/api/v1/mlops/datasets/{dataset_id}/files/{relative_path.as_posix()}",
+                    "has_violation": annotation.get("has_violation", False),
+                    "violation_type": annotation.get("violation_type", ""),
+                    "camera_id": annotation.get("camera_id", ""),
+                    "timestamp": annotation.get("timestamp", ""),
+                    "record_id": annotation.get("record_id", ""),
+                }
+                samples.append(sample_data)
+
+        # 排序并分页
+        samples.sort(key=lambda x: x["name"])
+        total = len(samples)
+        paginated_samples = samples[offset : offset + limit]
+
+        return {
+            "samples": paginated_samples,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取数据集样本失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="获取数据集样本失败")
+
+
 @router.post("/datasets/generate")
 async def generate_dataset(
     request: DatasetGenerateRequestModel,

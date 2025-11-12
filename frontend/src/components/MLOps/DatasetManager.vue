@@ -270,11 +270,89 @@
 
         <!-- 样本预览 -->
         <n-card title="样本预览" size="small" style="margin-bottom: 16px;">
-          <n-empty description="暂无样本预览">
+          <template #header-extra>
+            <n-space>
+              <n-select
+                v-model:value="sampleFilter"
+                :options="sampleFilterOptions"
+                placeholder="筛选样本"
+                size="small"
+                style="width: 120px;"
+                clearable
+                @update:value="handleSampleFilterChange"
+              />
+              <n-button size="small" @click="loadSamplePreview" :loading="loadingSamples">
+                {{ samplePreview.length > 0 ? '刷新' : '加载样本预览' }}
+              </n-button>
+            </n-space>
+          </template>
+          <n-empty v-if="samplePreview.length === 0 && !loadingSamples" description="暂无样本预览">
             <template #extra>
               <n-button size="small" @click="loadSamplePreview">加载样本预览</n-button>
             </template>
           </n-empty>
+          <n-spin v-else-if="loadingSamples" style="min-height: 200px;">
+            <div style="padding: 40px; text-align: center;">
+              <n-text depth="3">正在加载样本...</n-text>
+            </div>
+          </n-spin>
+          <div v-else class="sample-preview-grid">
+            <n-grid :cols="4" :x-gap="12" :y-gap="12">
+              <n-gi v-for="sample in samplePreview" :key="sample.path">
+                <n-card size="small" hoverable class="sample-card">
+                  <div class="sample-image-container">
+                    <img
+                      :src="sample.url"
+                      :alt="sample.name"
+                      class="sample-image"
+                      @error="handleImageError"
+                      @click="viewSampleImage(sample)"
+                    />
+                    <n-tag
+                      :type="sample.has_violation ? 'error' : 'success'"
+                      size="small"
+                      class="sample-label"
+                    >
+                      {{ sample.has_violation ? '违规' : '正常' }}
+                    </n-tag>
+                    <n-tag
+                      v-if="sample.violation_type"
+                      type="warning"
+                      size="tiny"
+                      class="sample-violation-type"
+                    >
+                      {{ formatViolationType(sample.violation_type) }}
+                    </n-tag>
+                  </div>
+                  <template #footer>
+                    <n-space vertical size="small">
+                      <n-text depth="3" style="font-size: 11px; display: block; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+                        {{ sample.name }}
+                      </n-text>
+                      <n-text v-if="sample.timestamp" depth="3" style="font-size: 10px; display: block;">
+                        {{ formatSampleTime(sample.timestamp) }}
+                      </n-text>
+                    </n-space>
+                  </template>
+                </n-card>
+              </n-gi>
+            </n-grid>
+            <n-divider v-if="samplePreviewTotal > samplePreviewLimit" />
+            <n-pagination
+              v-if="samplePreviewTotal > samplePreviewLimit"
+              v-model:page="samplePreviewPage"
+              :page-size="samplePreviewLimit"
+              :item-count="samplePreviewTotal"
+              show-size-picker
+              :page-sizes="[12, 24, 48, 96]"
+              @update:page="handleSamplePageChange"
+              @update:page-size="handleSamplePageSizeChange"
+              style="margin-top: 16px;"
+            />
+            <n-text v-if="samplePreviewTotal > 0" depth="3" style="font-size: 12px; display: block; margin-top: 12px; text-align: center;">
+              共 {{ samplePreviewTotal }} 个样本（正常: {{ normalSampleCount }}，违规: {{ violationSampleCount }}），显示 {{ samplePreview.length }} 个
+            </n-text>
+          </div>
         </n-card>
 
         <!-- 统计信息 -->
@@ -376,6 +454,58 @@
         </n-space>
       </template>
     </n-modal>
+
+    <!-- 样本图片查看对话框 -->
+    <n-modal v-model:show="showSampleImageDialog" preset="card" title="样本图片" style="width: 90%; max-width: 1200px;">
+      <div v-if="currentSampleImage" class="sample-image-viewer">
+        <div style="position: relative; margin-bottom: 16px; text-align: center;">
+          <img
+            :src="currentSampleImage.url"
+            :alt="currentSampleImage.name"
+            style="max-width: 100%; max-height: 60vh; height: auto; display: block; margin: 0 auto; border-radius: 4px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);"
+            @error="handleImageError"
+          />
+          <n-space style="position: absolute; top: 12px; left: 12px; background: rgba(255, 255, 255, 0.9); padding: 4px 8px; border-radius: 4px;" :size="8">
+            <n-tag
+              :type="currentSampleImage.has_violation ? 'error' : 'success'"
+              size="medium"
+            >
+              {{ currentSampleImage.has_violation ? '违规' : '正常' }}
+            </n-tag>
+            <n-tag
+              v-if="currentSampleImage.violation_type"
+              type="warning"
+              size="medium"
+            >
+              {{ formatViolationType(currentSampleImage.violation_type) }}
+            </n-tag>
+          </n-space>
+        </div>
+        <n-divider />
+        <n-descriptions :column="2" size="small" bordered>
+          <n-descriptions-item label="文件名">
+            {{ currentSampleImage.name }}
+          </n-descriptions-item>
+          <n-descriptions-item label="标签">
+            <n-tag :type="currentSampleImage.has_violation ? 'error' : 'success'" size="small">
+              {{ currentSampleImage.has_violation ? '违规' : '正常' }}
+            </n-tag>
+          </n-descriptions-item>
+          <n-descriptions-item v-if="currentSampleImage.violation_type" label="违规类型">
+            {{ formatViolationType(currentSampleImage.violation_type) }}
+          </n-descriptions-item>
+          <n-descriptions-item v-if="currentSampleImage.camera_id" label="摄像头ID">
+            {{ currentSampleImage.camera_id }}
+          </n-descriptions-item>
+          <n-descriptions-item v-if="currentSampleImage.timestamp" label="时间">
+            {{ formatSampleTime(currentSampleImage.timestamp) }}
+          </n-descriptions-item>
+          <n-descriptions-item v-if="currentSampleImage.record_id" label="记录ID">
+            {{ currentSampleImage.record_id }}
+          </n-descriptions-item>
+        </n-descriptions>
+      </div>
+    </n-modal>
   </n-card>
 </template>
 
@@ -410,6 +540,8 @@ import {
   NCheckbox,
   NInputNumber,
   NDatePicker,
+  NPagination,
+  NSpin,
   useMessage,
   type FormInst,
   type FormRules
@@ -450,6 +582,39 @@ const fileList = ref([])
 const showGenerateDialog = ref(false)
 const generateFormRef = ref<FormInst | null>(null)
 const generating = ref(false)
+
+// 样本预览相关状态
+interface SamplePreview {
+  name: string
+  path: string
+  size: number
+  url: string
+  has_violation?: boolean
+  violation_type?: string
+  camera_id?: string
+  timestamp?: string
+  record_id?: string
+}
+
+const samplePreview = ref<SamplePreview[]>([])
+const allSamples = ref<SamplePreview[]>([])
+const loadingSamples = ref(false)
+const samplePreviewPage = ref(1)
+const samplePreviewLimit = ref(24)
+const samplePreviewTotal = ref(0)
+const showSampleImageDialog = ref(false)
+const currentSampleImage = ref<SamplePreview | null>(null)
+const sampleFilter = ref<string | null>(null)
+
+const sampleFilterOptions = [
+  { label: '全部', value: null },
+  { label: '正常样本', value: 'normal' },
+  { label: '违规样本', value: 'violation' },
+]
+
+// 计算正常和违规样本数量
+const normalSampleCount = computed(() => allSamples.value.filter(s => !s.has_violation).length)
+const violationSampleCount = computed(() => allSamples.value.filter(s => s.has_violation).length)
 
 const cameraStore = useCameraStore()
 const { cameras, loading: cameraLoading } = storeToRefs(cameraStore)
@@ -701,6 +866,12 @@ function formatTime(timeString: string) {
 function viewDataset(dataset: Dataset) {
   selectedDataset.value = dataset
   showDetailDialog.value = true
+  // 重置样本预览状态
+  samplePreview.value = []
+  allSamples.value = []
+  samplePreviewPage.value = 1
+  samplePreviewTotal.value = 0
+  sampleFilter.value = null
 }
 
 // 对比数据集
@@ -795,9 +966,118 @@ function onUploadError(data: any) {
 }
 
 // 加载样本预览
-function loadSamplePreview() {
-  message.info('正在加载样本预览...')
-  // TODO: 实现样本预览加载
+async function loadSamplePreview() {
+  if (!selectedDataset.value) {
+    message.warning('请先选择数据集')
+    return
+  }
+
+  loadingSamples.value = true
+  try {
+    const datasetId = selectedDataset.value.id
+    // 加载所有样本（不分页）
+    const response = await fetch(
+      `/api/v1/mlops/datasets/${datasetId}/samples?file_type=image&limit=10000&offset=0`
+    )
+    if (response.ok) {
+      const data = await response.json()
+      allSamples.value = data.samples || []
+      samplePreviewTotal.value = data.total || 0
+      applySampleFilter()
+      if (allSamples.value.length === 0) {
+        message.info('该数据集中没有图片样本')
+      }
+    } else {
+      const errorText = await response.text()
+      console.error('加载样本预览失败:', errorText)
+      message.error('加载样本预览失败')
+    }
+  } catch (error) {
+    console.error('加载样本预览失败:', error)
+    message.error('加载样本预览失败')
+  } finally {
+    loadingSamples.value = false
+  }
+}
+
+// 应用样本筛选
+function applySampleFilter() {
+  let filtered = [...allSamples.value]
+  
+  // 根据筛选条件过滤
+  if (sampleFilter.value === 'normal') {
+    filtered = filtered.filter(sample => !sample.has_violation)
+  } else if (sampleFilter.value === 'violation') {
+    filtered = filtered.filter(sample => sample.has_violation)
+  }
+  
+  // 更新总数
+  samplePreviewTotal.value = filtered.length
+  
+  // 分页
+  const offset = (samplePreviewPage.value - 1) * samplePreviewLimit.value
+  samplePreview.value = filtered.slice(offset, offset + samplePreviewLimit.value)
+}
+
+// 处理样本筛选变化
+function handleSampleFilterChange() {
+  samplePreviewPage.value = 1
+  applySampleFilter()
+}
+
+// 处理样本分页变化
+function handleSamplePageChange(page: number) {
+  samplePreviewPage.value = page
+  applySampleFilter()
+}
+
+// 处理样本分页大小变化
+function handleSamplePageSizeChange(pageSize: number) {
+  samplePreviewLimit.value = pageSize
+  samplePreviewPage.value = 1
+  applySampleFilter()
+}
+
+// 查看样本图片
+function viewSampleImage(sample: SamplePreview) {
+  currentSampleImage.value = sample
+  showSampleImageDialog.value = true
+}
+
+// 处理图片加载错误
+function handleImageError(event: Event) {
+  const img = event.target as HTMLImageElement
+  img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2Y1ZjVmNSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTk5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj7lm77niYfliqDovb3lpLHotKU8L3RleHQ+PC9zdmc+'
+}
+
+// 格式化违规类型
+function formatViolationType(violationType: string): string {
+  const typeMap: Record<string, string> = {
+    no_hairnet: '未戴发网',
+    no_mask: '未戴口罩',
+    no_gloves: '未戴手套',
+    no_protective_clothing: '未穿防护服',
+    unauthorized_entry: '未授权进入',
+    loitering: '逗留',
+    crowding: '聚集',
+  }
+  return typeMap[violationType] || violationType
+}
+
+// 格式化样本时间
+function formatSampleTime(timestamp: string): string {
+  try {
+    const date = new Date(timestamp)
+    return date.toLocaleString('zh-CN', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    })
+  } catch {
+    return timestamp
+  }
 }
 
 // 获取文件数量
@@ -881,5 +1161,62 @@ onMounted(() => {
 .dataset-compare-content {
   max-height: 70vh;
   overflow-y: auto;
+}
+
+.sample-preview-grid {
+  margin-top: 12px;
+}
+
+.sample-card {
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.sample-card:hover {
+  transform: scale(1.02);
+}
+
+.sample-image-container {
+  position: relative;
+  width: 100%;
+  height: 150px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--n-color-target);
+  border-radius: 4px;
+}
+
+.sample-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  cursor: pointer;
+}
+
+.sample-label {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 2;
+  font-weight: 600;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.sample-violation-type {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sample-image-viewer {
+  text-align: center;
 }
 </style>

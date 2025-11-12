@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 class ViolationType(Enum):
     """违规类型枚举"""
 
+    NO_HAIRNET = "no_hairnet"  # 未戴发网
     NO_SAFETY_HELMET = "no_safety_helmet"  # 未戴安全帽
     NO_SAFETY_VEST = "no_safety_vest"  # 未穿安全背心
     UNAUTHORIZED_ACCESS = "unauthorized_access"  # 未授权进入
@@ -181,6 +182,13 @@ class ViolationService:
     def _initialize_violation_rules(self) -> Dict[str, Dict[str, Any]]:
         """初始化违规检测规则"""
         return {
+            "no_hairnet": {
+                "min_confidence": 0.5,
+                "min_hairnet_confidence": 0.5,
+                "required_objects": ["person"],
+                "severity": ViolationSeverity.HIGH,
+                "description": "检测到未戴发网的人员",
+            },
             "no_safety_helmet": {
                 "min_confidence": 0.7,
                 "required_objects": ["person"],
@@ -243,7 +251,9 @@ class ViolationService:
         violations = []
 
         try:
-            if rule_name == "no_safety_helmet":
+            if rule_name == "no_hairnet":
+                violations.extend(self._check_no_hairnet(record, rule_config))
+            elif rule_name == "no_safety_helmet":
                 violations.extend(self._check_no_safety_helmet(record, rule_config))
             elif rule_name == "no_safety_vest":
                 violations.extend(self._check_no_safety_vest(record, rule_config))
@@ -255,6 +265,62 @@ class ViolationService:
                 violations.extend(self._check_speeding(record, rule_config))
         except Exception as e:
             self.logger.error(f"检查违规规则 {rule_name} 时出错: {e}")
+
+        return violations
+
+    def _check_no_hairnet(
+        self, record: DetectionRecord, rule_config: Dict[str, Any]
+    ) -> List[Violation]:
+        """检查未戴发网违规"""
+        violations = []
+
+        for obj in record.objects:
+            if not self._is_person(obj):
+                continue
+
+            conf_value = self._get_confidence_value(obj)
+            if conf_value < rule_config["min_confidence"]:
+                continue
+
+            # 检查检测对象中的发网信息
+            metadata = self._get_metadata(obj, {})
+            has_hairnet = metadata.get("has_hairnet")
+            hairnet_confidence = metadata.get("hairnet_confidence", 0.0)
+            min_hairnet_confidence = rule_config.get("min_hairnet_confidence", 0.5)
+
+            # 只有在明确检测到未佩戴发网（has_hairnet = False）且置信度足够高时，才判定为违规
+            # 如果 has_hairnet 为 None（检测结果不明确），则不判定为违规
+            if has_hairnet is False and hairnet_confidence >= min_hairnet_confidence:
+                # 转换为DetectedObject实例
+                detected_obj = self._to_detected_object(obj)
+                track_id = self._get_track_id(obj) or "unknown"
+
+                violation = Violation(
+                    id=f"violation_{record.id}_{track_id}",
+                    violation_type=ViolationType.NO_HAIRNET,
+                    severity=rule_config["severity"],
+                    camera_id=record.camera_id,
+                    detected_object=detected_obj,
+                    timestamp=record.timestamp.value
+                    if hasattr(record.timestamp, "value")
+                    else record.timestamp,
+                    confidence=detected_obj.confidence,
+                    description=rule_config["description"],
+                    metadata={
+                        "rule_name": "no_hairnet",
+                        "detection_confidence": conf_value,
+                        "hairnet_confidence": hairnet_confidence,
+                    },
+                )
+                violations.append(violation)
+            elif has_hairnet is None:
+                # 如果发网检测结果不明确，记录调试信息但不判定为违规
+                track_id = self._get_track_id(obj) or "unknown"
+                self.logger.debug(
+                    f"发网检测结果不明确: has_hairnet={has_hairnet}, "
+                    f"hairnet_confidence={hairnet_confidence}, "
+                    f"camera_id={record.camera_id}, track_id={track_id}"
+                )
 
         return violations
 

@@ -285,8 +285,13 @@ class YOLOHairnetDetector:
             else:
                 image_array = image
 
-            # 使用基础detect方法获取发网检测结果
-            result = self.detect(image_array)  # type: ignore
+            # 优化：如果提供了人体检测结果，使用ROI检测（任务3.1）
+            if human_detections and len(human_detections) > 0:
+                # 使用ROI检测（只检测头部区域）
+                result = self._detect_hairnet_in_rois(image_array, human_detections)
+            else:
+                # 回退到全帧检测
+                result = self.detect(image_array)  # type: ignore
 
             if result.get("error"):
                 # 如果检测失败，返回默认结果
@@ -311,33 +316,60 @@ class YOLOHairnetDetector:
 
             # 如果有人体检测结果，为每个人创建检测记录
             if human_detections:
+                # 检查是否有发网检测结果
+                # 如果有发网检测结果，则进行重叠检测
+                # 如果没有发网检测结果，则认为检测结果不明确，不判定为违规
+                has_hairnet_detections = len(hairnet_detections) > 0
+                
                 for i, human_det in enumerate(human_detections):
                     human_bbox = human_det.get("bbox", [0, 0, 0, 0])
                     human_confidence = human_det.get("confidence", 0.0)
 
                     # 检查该人是否佩戴发网（通过检查发网检测框是否与人体框重叠）
-                    has_hairnet = False
+                    has_hairnet = None  # None 表示检测结果不明确
                     hairnet_confidence = 0.0
 
-                    for hairnet_det in hairnet_detections:
-                        if hairnet_det.get("class", "").lower() == "hairnet":
-                            hairnet_bbox = hairnet_det.get("bbox", [0, 0, 0, 0])
-                            # 简单的重叠检测：如果发网框与人体框有重叠，认为该人佩戴发网
-                            if self._boxes_overlap(human_bbox, hairnet_bbox):
-                                has_hairnet = True
-                                hairnet_confidence = hairnet_det.get("confidence", 0.0)
-                                break
-
-                    if has_hairnet:
-                        persons_with_hairnet += 1
+                    # 只有在有发网检测结果时，才进行判断
+                    if has_hairnet_detections:
+                        for hairnet_det in hairnet_detections:
+                            if hairnet_det.get("class", "").lower() == "hairnet":
+                                hairnet_bbox = hairnet_det.get("bbox", [0, 0, 0, 0])
+                                hairnet_conf = hairnet_det.get("confidence", 0.0)
+                                # 简单的重叠检测：如果发网框与人体框有重叠，认为该人佩戴发网
+                                if self._boxes_overlap(human_bbox, hairnet_bbox):
+                                    has_hairnet = True
+                                    hairnet_confidence = hairnet_conf
+                                    break
+                        
+                        # 如果检测到发网但没有重叠，则明确判定为未佩戴发网
+                        if has_hairnet is None:
+                            has_hairnet = False
+                            # 使用最高置信度的发网检测结果作为参考
+                            if hairnet_detections:
+                                hairnet_confidence = max(
+                                    det.get("confidence", 0.0)
+                                    for det in hairnet_detections
+                                    if det.get("class", "").lower() == "hairnet"
+                                )
                     else:
+                        # 如果没有发网检测结果，则认为检测结果不明确
+                        # 不判定为违规，避免误判
+                        logger.debug(
+                            f"发网检测模型未检测到发网，检测结果不明确: "
+                            f"human_bbox={human_bbox}, confidence={human_confidence}"
+                        )
+
+                    if has_hairnet is True:
+                        persons_with_hairnet += 1
+                    elif has_hairnet is False:
                         persons_without_hairnet += 1
+                    # 如果 has_hairnet 为 None，则不计入统计，避免误判
 
                     # 构建兼容格式的检测结果
                     compliance_detections.append(
                         {
                             "bbox": human_bbox,
-                            "has_hairnet": has_hairnet,
+                            "has_hairnet": has_hairnet,  # 可能是 True、False 或 None
                             "confidence": human_confidence,
                             "hairnet_confidence": hairnet_confidence,
                         }
@@ -397,6 +429,366 @@ class YOLOHairnetDetector:
                 "average_confidence": 0.0,
                 "error": str(e),
             }
+    
+    def _detect_hairnet_in_rois(
+        self,
+        image: np.ndarray,
+        human_detections: List[Dict],
+        use_batch: bool = True,  # 任务3.3：是否使用批量检测
+    ) -> Dict[str, Any]:
+        """
+        在头部ROI区域进行发网检测（任务3.1：ROI优化 + 任务3.3：批量优化）
+        
+        Args:
+            image: 完整图像
+            human_detections: 人体检测结果列表
+            use_batch: 是否使用批量检测（任务3.3）
+        
+        Returns:
+            检测结果字典（兼容detect_hairnet_compliance格式）
+        """
+        try:
+            # 任务3.3：如果启用批量检测且有多个人，使用批量检测
+            if use_batch and len(human_detections) > 1:
+                return self._batch_detect_hairnet_in_rois(image, human_detections)
+            
+            # 否则使用逐个检测（原有逻辑）
+            compliance_detections = []
+            persons_with_hairnet = 0
+            persons_without_hairnet = 0
+            all_detections = []
+            
+            # 对每个人进行头部ROI检测
+            for i, human_det in enumerate(human_detections):
+                human_bbox = human_det.get("bbox", [0, 0, 0, 0])
+                track_id = human_det.get("track_id", i)
+                human_confidence = human_det.get("confidence", 1.0)
+                
+                # 提取头部ROI（人体高度的30%）
+                x1, y1, x2, y2 = map(int, human_bbox)
+                person_height = y2 - y1
+                head_height = int(person_height * 0.3)  # 头部占人体高度的30%
+                
+                # 确保ROI有效
+                if x2 <= x1 or y2 <= y1 or head_height <= 0:
+                    logger.warning(f"无效的人体边界框: {human_bbox}")
+                    continue
+                
+                # 裁剪头部ROI（添加一些padding）
+                padding = int(head_height * 0.1)  # 10%的padding
+                roi_x1 = max(0, x1 - padding)
+                roi_y1 = max(0, y1 - padding)
+                roi_x2 = min(image.shape[1], x2 + padding)
+                roi_y2 = min(image.shape[0], y1 + head_height + padding)
+                
+                head_roi = image[roi_y1:roi_y2, roi_x1:roi_x2]
+                
+                if head_roi.size == 0:
+                    logger.warning(f"头部ROI为空: {human_bbox}")
+                    continue
+                
+                # 在ROI上运行发网检测
+                conf = self.conf_thres
+                iou = self.iou_thres
+                
+                try:
+                    results = self.model(head_roi, conf=conf, iou=iou, verbose=False)
+                except Exception as e:
+                    logger.error(f"ROI发网检测失败: {e}")
+                    continue
+                
+                # 处理检测结果
+                has_hairnet = None  # None表示检测结果不明确
+                hairnet_confidence = 0.0
+                roi_detections = []
+                
+                for r in results:
+                    boxes = r.boxes
+                    for box in boxes:
+                        # ROI内的坐标
+                        roi_x1_det, roi_y1_det, roi_x2_det, roi_y2_det = box.xyxy[0].cpu().numpy()
+                        conf = float(box.conf[0])
+                        cls = int(box.cls[0])
+                        cls_name = self.model.names[cls]
+                        
+                        # 映射回原图坐标
+                        orig_x1 = float(roi_x1 + roi_x1_det)
+                        orig_y1 = float(roi_y1 + roi_y1_det)
+                        orig_x2 = float(roi_x1 + roi_x2_det)
+                        orig_y2 = float(roi_y1 + roi_y2_det)
+                        
+                        detection = {
+                            "class": str(cls_name),
+                            "confidence": float(conf),
+                            "bbox": [orig_x1, orig_y1, orig_x2, orig_y2],
+                        }
+                        roi_detections.append(detection)
+                        all_detections.append(detection)
+                        
+                        # 检查是否为发网类别
+                        if cls_name.lower() == "hairnet":
+                            if has_hairnet is None:
+                                has_hairnet = True
+                                hairnet_confidence = conf
+                            elif conf > hairnet_confidence:
+                                hairnet_confidence = conf
+                
+                # 判断发网佩戴状态
+                if has_hairnet is None:
+                    # 没有检测到发网，结果不明确
+                    has_hairnet = None
+                    logger.debug(
+                        f"发网检测模型未检测到发网，检测结果不明确: "
+                        f"human_bbox={human_bbox}, confidence={human_confidence}"
+                    )
+                elif has_hairnet is True:
+                    persons_with_hairnet += 1
+                else:
+                    persons_without_hairnet += 1
+                
+                # 创建合规性检测结果（兼容原有格式）
+                compliance_detections.append(
+                    {
+                        "bbox": human_bbox,
+                        "has_hairnet": has_hairnet,
+                        "confidence": human_confidence,
+                        "hairnet_confidence": hairnet_confidence,
+                    }
+                )
+            
+            # 更新统计信息
+            self.total_detections += len(human_detections)
+            self.hairnet_detections += persons_with_hairnet
+            
+            # 计算合规率
+            total_persons = len(human_detections)
+            compliance_rate = (
+                (persons_with_hairnet / total_persons) if total_persons > 0 else 0.0
+            )
+            
+            # 计算平均置信度
+            if compliance_detections:
+                average_confidence = sum(
+                    det["confidence"] for det in compliance_detections
+                ) / len(compliance_detections)
+            else:
+                average_confidence = 0.0
+            
+            logger.info(
+                f"ROI发网检测完成: 检测了 {total_persons} 个人, "
+                f"佩戴={persons_with_hairnet}, 未佩戴={persons_without_hairnet}, "
+                f"合规率={compliance_rate:.2f}"
+            )
+            
+            # 返回兼容格式的结果
+            return {
+                "total_persons": total_persons,
+                "persons_with_hairnet": persons_with_hairnet,
+                "persons_without_hairnet": persons_without_hairnet,
+                "compliance_rate": compliance_rate,
+                "detections": compliance_detections,
+                "average_confidence": average_confidence,
+                "error": None,
+            }
+            
+        except Exception as e:
+            logger.error(f"ROI发网检测失败: {e}", exc_info=True)
+            return {
+                "total_persons": len(human_detections),
+                "persons_with_hairnet": 0,
+                "persons_without_hairnet": len(human_detections),
+                "compliance_rate": 0.0,
+                "detections": [],
+                "average_confidence": 0.0,
+                "error": str(e),
+            }
+    
+    def _batch_detect_hairnet_in_rois(
+        self,
+        image: np.ndarray,
+        human_detections: List[Dict],
+    ) -> Dict[str, Any]:
+        """
+        批量检测多个头部ROI（任务3.3：批量ROI检测优化）
+        
+        Args:
+            image: 完整图像
+            human_detections: 人体检测结果列表
+        
+        Returns:
+            检测结果字典（兼容detect_hairnet_compliance格式）
+        """
+        try:
+            # 步骤1：收集所有头部ROI
+            head_rois = []
+            roi_info = []  # 保存ROI的元信息（用于坐标映射）
+            
+            for i, human_det in enumerate(human_detections):
+                human_bbox = human_det.get("bbox", [0, 0, 0, 0])
+                track_id = human_det.get("track_id", i)
+                human_confidence = human_det.get("confidence", 1.0)
+                
+                # 提取头部ROI（人体高度的30%）
+                x1, y1, x2, y2 = map(int, human_bbox)
+                person_height = y2 - y1
+                head_height = int(person_height * 0.3)
+                
+                # 确保ROI有效
+                if x2 <= x1 or y2 <= y1 or head_height <= 0:
+                    logger.warning(f"无效的人体边界框: {human_bbox}")
+                    continue
+                
+                # 裁剪头部ROI（添加padding）
+                padding = int(head_height * 0.1)
+                roi_x1 = max(0, x1 - padding)
+                roi_y1 = max(0, y1 - padding)
+                roi_x2 = min(image.shape[1], x2 + padding)
+                roi_y2 = min(image.shape[0], y1 + head_height + padding)
+                
+                head_roi = image[roi_y1:roi_y2, roi_x1:roi_x2]
+                
+                if head_roi.size == 0:
+                    logger.warning(f"头部ROI为空: {human_bbox}")
+                    continue
+                
+                head_rois.append(head_roi)
+                roi_info.append({
+                    "index": i,
+                    "human_bbox": human_bbox,
+                    "track_id": track_id,
+                    "human_confidence": human_confidence,
+                    "roi_offset": (roi_x1, roi_y1),  # ROI在原图中的偏移
+                    "roi_size": (roi_x2 - roi_x1, roi_y2 - roi_y1),
+                })
+            
+            if not head_rois:
+                return {
+                    "total_persons": len(human_detections),
+                    "persons_with_hairnet": 0,
+                    "persons_without_hairnet": len(human_detections),
+                    "compliance_rate": 0.0,
+                    "detections": [],
+                    "average_confidence": 0.0,
+                    "error": None,
+                }
+            
+            # 步骤2：批量推理（YOLO支持批量输入）
+            conf = self.conf_thres
+            iou = self.iou_thres
+            
+            try:
+                # YOLO模型支持批量输入（列表形式）
+                batch_results = self.model(head_rois, conf=conf, iou=iou, verbose=False)
+            except Exception as e:
+                logger.error(f"批量ROI发网检测失败: {e}")
+                # 回退到逐个检测
+                return self._detect_hairnet_in_rois(image, human_detections, use_batch=False)
+            
+            # 步骤3：处理批量结果并映射坐标
+            compliance_detections = []
+            persons_with_hairnet = 0
+            persons_without_hairnet = 0
+            all_detections = []
+            
+            for roi_idx, (result, info) in enumerate(zip(batch_results, roi_info)):
+                roi_x1, roi_y1 = info["roi_offset"]
+                
+                # 处理该ROI的检测结果
+                has_hairnet = None
+                hairnet_confidence = 0.0
+                roi_detections = []
+                
+                boxes = result.boxes
+                for box in boxes:
+                    # ROI内的坐标
+                    roi_x1_det, roi_y1_det, roi_x2_det, roi_y2_det = box.xyxy[0].cpu().numpy()
+                    conf = float(box.conf[0])
+                    cls = int(box.cls[0])
+                    cls_name = self.model.names[cls]
+                    
+                    # 映射回原图坐标
+                    orig_x1 = float(roi_x1 + roi_x1_det)
+                    orig_y1 = float(roi_y1 + roi_y1_det)
+                    orig_x2 = float(roi_x1 + roi_x2_det)
+                    orig_y2 = float(roi_y1 + roi_y2_det)
+                    
+                    detection = {
+                        "class": str(cls_name),
+                        "confidence": float(conf),
+                        "bbox": [orig_x1, orig_y1, orig_x2, orig_y2],
+                    }
+                    roi_detections.append(detection)
+                    all_detections.append(detection)
+                    
+                    # 检查是否为发网类别
+                    if cls_name.lower() == "hairnet":
+                        if has_hairnet is None:
+                            has_hairnet = True
+                            hairnet_confidence = conf
+                        elif conf > hairnet_confidence:
+                            hairnet_confidence = conf
+                
+                # 判断发网佩戴状态
+                if has_hairnet is None:
+                    has_hairnet = None
+                    logger.debug(
+                        f"发网检测模型未检测到发网，检测结果不明确: "
+                        f"human_bbox={info['human_bbox']}, confidence={info['human_confidence']}"
+                    )
+                elif has_hairnet is True:
+                    persons_with_hairnet += 1
+                else:
+                    persons_without_hairnet += 1
+                
+                # 创建合规性检测结果
+                compliance_detections.append(
+                    {
+                        "bbox": info["human_bbox"],
+                        "has_hairnet": has_hairnet,
+                        "confidence": info["human_confidence"],
+                        "hairnet_confidence": hairnet_confidence,
+                    }
+                )
+            
+            # 更新统计信息
+            self.total_detections += len(human_detections)
+            self.hairnet_detections += persons_with_hairnet
+            
+            # 计算合规率
+            total_persons = len(human_detections)
+            compliance_rate = (
+                (persons_with_hairnet / total_persons) if total_persons > 0 else 0.0
+            )
+            
+            # 计算平均置信度
+            if compliance_detections:
+                average_confidence = sum(
+                    det["confidence"] for det in compliance_detections
+                ) / len(compliance_detections)
+            else:
+                average_confidence = 0.0
+            
+            logger.info(
+                f"批量ROI发网检测完成: 检测了 {total_persons} 个人, "
+                f"佩戴={persons_with_hairnet}, 未佩戴={persons_without_hairnet}, "
+                f"合规率={compliance_rate:.2f}"
+            )
+            
+            return {
+                "total_persons": total_persons,
+                "persons_with_hairnet": persons_with_hairnet,
+                "persons_without_hairnet": persons_without_hairnet,
+                "compliance_rate": compliance_rate,
+                "detections": compliance_detections,
+                "average_confidence": average_confidence,
+                "error": None,
+            }
+            
+        except Exception as e:
+            logger.error(f"批量ROI发网检测失败: {e}", exc_info=True)
+            # 回退到逐个检测
+            logger.info("回退到逐个ROI检测")
+            return self._detect_hairnet_in_rois(image, human_detections, use_batch=False)
 
     def _boxes_overlap(self, box1: List[float], box2: List[float]) -> bool:
         """

@@ -259,6 +259,48 @@ class BehaviorRecognizer:
         else:
             self.pose_detector = None
             self.motion_analyzer = None
+        
+        # 时间平滑器（任务1.2.1）
+        self.temporal_smoother = None
+        if self.use_advanced_detection:
+            try:
+                from src.core.temporal_smoother import TemporalSmoother
+                temporal_params = getattr(self.params, "temporal_smoothing", None)
+                if temporal_params:
+                    window_size = getattr(temporal_params, "window_size", 5)
+                    alpha = getattr(temporal_params, "alpha", 0.7)
+                else:
+                    window_size = 5
+                    alpha = 0.7
+                
+                self.temporal_smoother = TemporalSmoother(
+                    window_size=window_size,
+                    alpha=alpha,
+                )
+                logger.info("TemporalSmoother initialized")
+            except Exception as e:
+                logger.warning(f"TemporalSmoother initialization failed: {e}")
+                self.temporal_smoother = None
+        
+        # 深度学习行为识别器（Transformer模型，任务1.2.2）
+        self.deep_recognizer = None
+        if self.use_advanced_detection:
+            try:
+                from src.detection.deep_behavior_recognizer import DeepBehaviorRecognizer
+                
+                # 检查是否有预训练模型路径
+                deep_model_path = getattr(self.params, "deep_model_path", None)
+                
+                self.deep_recognizer = DeepBehaviorRecognizer(
+                    model_path=deep_model_path,  # 如果有预训练模型
+                    device="auto",
+                    sequence_length=self.ml_window,
+                    feature_dim=50  # 根据实际特征维度调整
+                )
+                logger.info("DeepBehaviorRecognizer (Transformer) initialized")
+            except Exception as e:
+                logger.warning(f"DeepBehaviorRecognizer initialization failed: {e}")
+                self.deep_recognizer = None
 
         # 行为识别规则配置（使用统一参数）
         self.behavior_rules = {
@@ -523,7 +565,7 @@ class BehaviorRecognizer:
                     )
                     confidence = max(confidence, motion_confidence)
 
-                # 姿态检测增强
+                # 姿态检测增强（使用时间平滑，任务1.2.1）
                 if self.pose_detector and frame is not None:
                     pose_data = self.pose_detector.detect(frame)
                     # 检查是否存在 detect_hands 方法
@@ -532,6 +574,40 @@ class BehaviorRecognizer:
                         hands_data = self.pose_detector.detect_hands(frame)
 
                     if pose_data and hands_data:
+                        # 应用时间平滑（任务1.2.1）
+                        if self.temporal_smoother and track_id is not None:
+                            # 提取关键点
+                            keypoints = None
+                            confidences = None
+                            for detection in pose_data:
+                                if "keypoints" in detection:
+                                    kpts = detection["keypoints"]
+                                    if "xy" in kpts and "conf" in kpts:
+                                        keypoints = np.array(kpts["xy"])
+                                        confidences = np.array(kpts["conf"])
+                                        break
+                            
+                            if keypoints is not None and confidences is not None:
+                                # 平滑关键点
+                                smoothed_keypoints, smoothed_confidences = (
+                                    self.temporal_smoother.smooth_keypoints(
+                                        str(track_id),
+                                        keypoints,
+                                        confidences
+                                    )
+                                )
+                                
+                                # 使用平滑后的关键点更新pose_data
+                                for detection in pose_data:
+                                    if "keypoints" in detection:
+                                        detection["keypoints"]["xy"] = smoothed_keypoints.tolist()
+                                        detection["keypoints"]["conf"] = smoothed_confidences.tolist()
+                                        break
+                                
+                                logger.debug(
+                                    f"Applied temporal smoothing to keypoints for track {track_id}"
+                                )
+                        
                         pose_confidence = self._analyze_handwash_pose(
                             pose_data, hands_data, person_bbox
                         )
@@ -553,7 +629,8 @@ class BehaviorRecognizer:
                 person_bbox, enhanced_hand_regions
             )
 
-        # 可选：ML分类器融合
+        # 可选：ML分类器融合（XGBoost）
+        xgb_confidence = None
         if (
             self.use_ml_classifier
             and self.ml_model is not None
@@ -573,12 +650,57 @@ class BehaviorRecognizer:
                         agg = self._aggregate_features(window_feats)
                         proba = self._predict_proba(agg)
                         if proba is not None:
+                            xgb_confidence = float(proba)
                             confidence = float(
-                                self.ml_fusion_alpha * proba
+                                self.ml_fusion_alpha * xgb_confidence
                                 + (1.0 - self.ml_fusion_alpha) * confidence
                             )
             except Exception as e:
                 logger.debug(f"ML fusion skipped: {e}")
+        
+        # 可选：Transformer模型融合（任务1.2.2）
+        if self.deep_recognizer and track_id is not None and self.motion_analyzer:
+            try:
+                # 获取运动数据摘要
+                motion_summary = self.motion_analyzer.get_enhanced_motion_summary(track_id)
+                
+                if motion_summary:
+                    # 更新特征缓存
+                    self.deep_recognizer.update_features(motion_summary)
+                    
+                    # 预测行为
+                    predictions = self.deep_recognizer.predict_behavior()
+                    transformer_confidence = predictions.get("handwash", 0.0)
+                    
+                    # 融合结果
+                    # 如果XGBoost可用，使用XGBoost和Transformer的加权平均
+                    # 如果XGBoost不可用，使用Transformer和基础检测的加权平均
+                    if xgb_confidence is not None:
+                        # XGBoost + Transformer融合
+                        transformer_weight = 0.3
+                        xgb_weight = 0.4
+                        base_weight = 0.3
+                        confidence = float(
+                            transformer_weight * transformer_confidence +
+                            xgb_weight * xgb_confidence +
+                            base_weight * confidence
+                        )
+                    else:
+                        # Transformer + 基础检测融合
+                        transformer_weight = 0.3
+                        base_weight = 0.7
+                        confidence = float(
+                            transformer_weight * transformer_confidence +
+                            base_weight * confidence
+                        )
+                    
+                    logger.debug(
+                        f"Transformer prediction for track {track_id}: "
+                        f"handwash={transformer_confidence:.3f}, "
+                        f"final={confidence:.3f}"
+                    )
+            except Exception as e:
+                logger.debug(f"Transformer fusion skipped: {e}")
 
         return confidence
 

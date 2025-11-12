@@ -390,7 +390,77 @@
           <n-alert type="error" :title="currentRun.error_message" :bordered="false" />
         </div>
         <n-divider />
-        <n-text depth="3" style="font-size: 12px;">步骤输出</n-text>
+        <div v-if="trainingHighlights.length > 0" class="training-summary">
+          <n-text depth="3" style="font-size: 12px;">训练结果摘要</n-text>
+          <n-card
+            v-for="highlight in trainingHighlights"
+            :key="`${highlight.type}-${highlight.name}`"
+            size="small"
+            :title="`${highlight.name}（${getStepTypeText(highlight.type)}）`"
+            style="margin-top: 12px;"
+          >
+            <n-descriptions :column="2" size="small">
+              <n-descriptions-item label="模型版本">
+                {{ highlight.version || '—' }}
+              </n-descriptions-item>
+              <n-descriptions-item label="使用样本数">
+                {{ highlight.samples ?? '—' }}
+              </n-descriptions-item>
+              <n-descriptions-item v-if="highlight.modelPath" label="模型文件">
+                <n-space align="center">
+                  <n-text>{{ highlight.modelPath }}</n-text>
+                  <n-button
+                    size="tiny"
+                    tertiary
+                    @click="highlight.modelPath && copyToClipboard(highlight.modelPath)"
+                  >
+                    复制
+                  </n-button>
+                </n-space>
+              </n-descriptions-item>
+              <n-descriptions-item v-if="highlight.reportPath" label="训练报告">
+                <n-space align="center">
+                  <n-text>{{ highlight.reportPath }}</n-text>
+                  <n-button
+                    size="tiny"
+                    tertiary
+                    @click="highlight.reportPath && copyToClipboard(highlight.reportPath)"
+                  >
+                    复制
+                  </n-button>
+                </n-space>
+              </n-descriptions-item>
+            </n-descriptions>
+            <n-divider v-if="highlight.metricEntries.length > 0" />
+            <div v-if="highlight.metricEntries.length > 0" class="training-metrics">
+              <n-grid :cols="3" :x-gap="12" :y-gap="12">
+                <n-gi v-for="metric in highlight.metricEntries" :key="metric.key">
+                  <n-statistic :label="metric.label" :value="metric.value" />
+                </n-gi>
+              </n-grid>
+            </div>
+            <n-divider v-if="highlight.artifactEntries.length > 0" />
+            <n-descriptions
+              v-if="highlight.artifactEntries.length > 0"
+              :column="1"
+              size="small"
+            >
+              <n-descriptions-item
+                v-for="artifact in highlight.artifactEntries"
+                :key="artifact.key"
+                :label="artifact.label"
+              >
+                <n-space align="center">
+                  <n-text>{{ artifact.value }}</n-text>
+                  <n-button size="tiny" tertiary @click="copyToClipboard(String(artifact.value))">复制</n-button>
+                </n-space>
+              </n-descriptions-item>
+            </n-descriptions>
+          </n-card>
+        </div>
+        <n-text depth="3" style="font-size: 12px; margin-top: 16px; display: block;">
+          步骤输出
+        </n-text>
         <n-empty v-if="currentRunEntries.length === 0" description="暂无详细输出" style="margin-top: 12px;" />
         <n-collapse v-else style="margin-top: 12px;">
           <n-collapse-item
@@ -570,8 +640,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { NCard, NButton, NSpace, NIcon, NEmpty, NList, NListItem, NTag, NDescriptions, NDescriptionsItem, NDivider, NText, NSteps, NStep, NModal, NForm, NFormItem, NSelect, NInput, NInputNumber, NInputGroup, NInputGroupLabel, NDatePicker, NSwitch, NAlert, NCollapse, NCollapseItem, NCode, useMessage } from 'naive-ui'
+import { computed, ref, onMounted } from 'vue'
+import { NCard, NButton, NSpace, NIcon, NEmpty, NList, NListItem, NTag, NDescriptions, NDescriptionsItem, NDivider, NText, NSteps, NStep, NModal, NForm, NFormItem, NSelect, NInput, NInputNumber, NInputGroup, NInputGroupLabel, NDatePicker, NSwitch, NAlert, NCollapse, NCollapseItem, NCode, NGrid, NGi, NStatistic, useMessage } from 'naive-ui'
 import { RefreshOutline, AddOutline } from '@vicons/ionicons5'
 
 interface WorkflowStep {
@@ -635,6 +705,18 @@ interface Workflow {
 const message = useMessage()
 const workflows = ref<Workflow[]>([])
 const loading = ref(false)
+function copyToClipboard(text: string) {
+  if (!text) return
+  if (!navigator.clipboard) {
+    message.warning('当前环境不支持复制')
+    return
+  }
+  navigator.clipboard.writeText(text).then(
+    () => message.success('已复制到剪贴板'),
+    () => message.error('复制失败'),
+  )
+}
+
 const showCreateDialog = ref(false)
 const showDetailDialog = ref(false)
 const showEditDialog = ref(false)
@@ -644,6 +726,80 @@ const editing = ref(false)
 const showRunLogDialog = ref(false)
 const currentRun = ref<WorkflowRun | null>(null)
 const currentRunEntries = ref<WorkflowStepOutput[]>([])
+const TRAINING_STEP_TYPES = ['model_training', 'handwash_training', 'multi_behavior_training']
+
+function normalizeRecord(value: unknown): Record<string, any> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {}
+  }
+  return value as Record<string, any>
+}
+
+function formatMetricLabel(key: string) {
+  const mapping: Record<string, string> = {
+    accuracy: '准确率',
+    precision: '精确率',
+    recall: '召回率',
+    f1: 'F1 值',
+    loss: 'Loss',
+    map50: 'mAP@0.5',
+    map50_95: 'mAP@0.5:0.95',
+  }
+  return mapping[key] || key
+}
+
+function formatArtifactLabel(key: string) {
+  const mapping: Record<string, string> = {
+    model: '模型文件',
+    report: '训练报告',
+    confusion_matrix: '混淆矩阵',
+  }
+  return mapping[key] || key
+}
+
+function formatMetricValue(value: any) {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return value
+    return Number(value.toFixed(4))
+  }
+  return value
+}
+
+function buildMetricEntries(metrics: Record<string, any>) {
+  return Object.entries(metrics).map(([key, value]) => ({
+    key,
+    label: formatMetricLabel(key),
+    value: formatMetricValue(value),
+  }))
+}
+
+function buildArtifactEntries(artifacts: Record<string, any>) {
+  return Object.entries(artifacts).map(([key, value]) => ({
+    key,
+    label: formatArtifactLabel(key),
+    value,
+  }))
+}
+
+const trainingHighlights = computed(() => {
+  return currentRunEntries.value
+    .filter(entry => TRAINING_STEP_TYPES.includes(entry.type))
+    .map(entry => {
+      const output = normalizeRecord(entry.output)
+      const metrics = normalizeRecord(output.metrics)
+      const artifacts = normalizeRecord(output.artifacts)
+      return {
+        name: entry.name || '模型训练',
+        type: entry.type,
+        version: output.version ?? '',
+        samples: output.samples_used ?? null,
+        modelPath: output.model_path ?? '',
+        reportPath: output.report_path ?? '',
+        metricEntries: buildMetricEntries(metrics),
+        artifactEntries: buildArtifactEntries(artifacts),
+      }
+    })
+})
 
 const workflowForm = ref({
   name: '',
@@ -1438,6 +1594,14 @@ onMounted(() => {
   padding: 8px;
   background-color: var(--n-color-target);
   border-radius: 4px;
+}
+
+.training-summary {
+  margin-top: 8px;
+}
+
+.training-metrics {
+  margin-top: 8px;
 }
 
 .workflow-step-config {

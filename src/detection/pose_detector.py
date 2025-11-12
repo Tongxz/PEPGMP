@@ -246,6 +246,252 @@ class YOLOv8PoseDetector(BaseDetector):
         except Exception as e:
             logger.error(f"YOLOv8姿态检测过程中发生错误: {e}", exc_info=True)
             raise RuntimeError("YOLOv8姿态检测失败") from e
+    
+    def detect_in_rois(
+        self,
+        image: np.ndarray,
+        person_bboxes: List[List[float]],
+        use_batch: bool = True,  # 任务3.3：是否使用批量检测
+    ) -> List[Dict[str, Any]]:
+        """
+        在指定的人体ROI区域进行姿态检测（任务3.2：ROI优化 + 任务3.3：批量优化）
+        
+        Args:
+            image: 完整图像
+            person_bboxes: 人体边界框列表 [x1, y1, x2, y2]
+            use_batch: 是否使用批量检测（任务3.3）
+        
+        Returns:
+            检测结果列表，每个结果包含关键点信息
+        """
+        if self.model is None:
+            raise RuntimeError("YOLOv8姿态模型未正确加载，无法进行检测")
+        
+        if not person_bboxes:
+            return []
+        
+        # 任务3.3：如果启用批量检测且有多个人，使用批量检测
+        if use_batch and len(person_bboxes) > 1:
+            return self._batch_detect_pose_in_rois(image, person_bboxes)
+        
+        # 否则使用逐个检测（原有逻辑）
+        try:
+            all_detections = []
+            
+            # 对每个人体ROI进行检测
+            for person_bbox in person_bboxes:
+                x1, y1, x2, y2 = map(int, person_bbox)
+                
+                # 确保ROI有效
+                if x2 <= x1 or y2 <= y1:
+                    logger.warning(f"无效的人体边界框: {person_bbox}")
+                    continue
+                
+                # 裁剪人体ROI（添加一些padding）
+                padding = int((x2 - x1) * 0.1)  # 10%的padding
+                roi_x1 = max(0, x1 - padding)
+                roi_y1 = max(0, y1 - padding)
+                roi_x2 = min(image.shape[1], x2 + padding)
+                roi_y2 = min(image.shape[0], y2 + padding)
+                
+                person_roi = image[roi_y1:roi_y2, roi_x1:roi_x2]
+                
+                if person_roi.size == 0:
+                    logger.warning(f"人体ROI为空: {person_bbox}")
+                    continue
+                
+                # 在ROI上运行姿态检测
+                try:
+                    results = self.model(
+                        person_roi,
+                        conf=self.confidence_threshold,
+                        iou=self.iou_threshold,
+                        verbose=False,
+                    )
+                except Exception as e:
+                    logger.error(f"ROI姿态检测失败: {e}")
+                    continue
+                
+                # 处理检测结果
+                for result in results:
+                    if result.boxes is None or result.keypoints is None:
+                        continue
+                    
+                    for box, keypoints in zip(result.boxes, result.keypoints):
+                        # 只处理 'person' 类别
+                        if box.cls[0].item() != 0:
+                            continue
+                        
+                        # ROI内的坐标
+                        roi_bbox = box.xyxy[0].cpu().numpy().astype(int)
+                        conf = box.conf[0].item()
+                        
+                        roi_kpts_xy = keypoints.xy[0].cpu().numpy()
+                        roi_kpts_conf = (
+                            keypoints.conf[0].cpu().numpy()
+                            if keypoints.conf is not None
+                            else np.ones(len(roi_kpts_xy))
+                        )
+                        
+                        # 映射回原图坐标
+                        orig_bbox = [
+                            float(roi_x1 + roi_bbox[0]),
+                            float(roi_y1 + roi_bbox[1]),
+                            float(roi_x1 + roi_bbox[2]),
+                            float(roi_y1 + roi_bbox[3]),
+                        ]
+                        
+                        orig_kpts_xy = roi_kpts_xy.copy()
+                        orig_kpts_xy[:, 0] += roi_x1  # x坐标
+                        orig_kpts_xy[:, 1] += roi_y1  # y坐标
+                        
+                        detection = {
+                            "bbox": orig_bbox,
+                            "confidence": conf,
+                            "keypoints": {
+                                "xy": orig_kpts_xy,
+                                "conf": roi_kpts_conf,
+                            },
+                            "class_id": 0,
+                            "class_name": "person",
+                        }
+                        all_detections.append(detection)
+            
+            logger.debug(f"ROI姿态检测完成: 检测了 {len(person_bboxes)} 个人体ROI, 得到 {len(all_detections)} 个检测结果")
+            return all_detections
+            
+        except Exception as e:
+            logger.error(f"ROI姿态检测过程中发生错误: {e}", exc_info=True)
+            return []
+    
+    def _batch_detect_pose_in_rois(
+        self,
+        image: np.ndarray,
+        person_bboxes: List[List[float]],
+    ) -> List[Dict[str, Any]]:
+        """
+        批量检测多个人体ROI的姿态（任务3.3：批量ROI检测优化）
+        
+        Args:
+            image: 完整图像
+            person_bboxes: 人体边界框列表 [x1, y1, x2, y2]
+        
+        Returns:
+            检测结果列表，每个结果包含关键点信息
+        """
+        if self.model is None:
+            raise RuntimeError("YOLOv8姿态模型未正确加载，无法进行检测")
+        
+        try:
+            # 步骤1：收集所有人体ROI
+            person_rois = []
+            roi_info = []  # 保存ROI的元信息（用于坐标映射）
+            
+            for person_bbox in person_bboxes:
+                x1, y1, x2, y2 = map(int, person_bbox)
+                
+                # 确保ROI有效
+                if x2 <= x1 or y2 <= y1:
+                    logger.warning(f"无效的人体边界框: {person_bbox}")
+                    continue
+                
+                # 裁剪人体ROI（添加padding）
+                padding = int((x2 - x1) * 0.1)
+                roi_x1 = max(0, x1 - padding)
+                roi_y1 = max(0, y1 - padding)
+                roi_x2 = min(image.shape[1], x2 + padding)
+                roi_y2 = min(image.shape[0], y2 + padding)
+                
+                person_roi = image[roi_y1:roi_y2, roi_x1:roi_x2]
+                
+                if person_roi.size == 0:
+                    logger.warning(f"人体ROI为空: {person_bbox}")
+                    continue
+                
+                person_rois.append(person_roi)
+                roi_info.append({
+                    "roi_offset": (roi_x1, roi_y1),  # ROI在原图中的偏移
+                    "roi_size": (roi_x2 - roi_x1, roi_y2 - roi_y1),
+                })
+            
+            if not person_rois:
+                return []
+            
+            # 步骤2：批量推理（YOLO支持批量输入）
+            try:
+                batch_results = self.model(
+                    person_rois,
+                    conf=self.confidence_threshold,
+                    iou=self.iou_threshold,
+                    verbose=False,
+                )
+            except Exception as e:
+                logger.error(f"批量ROI姿态检测失败: {e}")
+                # 回退到逐个检测
+                return self.detect_in_rois(image, person_bboxes, use_batch=False)
+            
+            # 步骤3：处理批量结果并映射坐标
+            all_detections = []
+            
+            for roi_idx, (result, info) in enumerate(zip(batch_results, roi_info)):
+                roi_x1, roi_y1 = info["roi_offset"]
+                
+                # 处理该ROI的检测结果
+                for r in result:
+                    if r.boxes is None or r.keypoints is None:
+                        continue
+                    
+                    for box, keypoints in zip(r.boxes, r.keypoints):
+                        # 只处理 'person' 类别
+                        if box.cls[0].item() != 0:
+                            continue
+                        
+                        # ROI内的坐标
+                        roi_bbox = box.xyxy[0].cpu().numpy().astype(int)
+                        conf = box.conf[0].item()
+                        
+                        roi_kpts_xy = keypoints.xy[0].cpu().numpy()
+                        roi_kpts_conf = (
+                            keypoints.conf[0].cpu().numpy()
+                            if keypoints.conf is not None
+                            else np.ones(len(roi_kpts_xy))
+                        )
+                        
+                        # 映射回原图坐标
+                        orig_bbox = [
+                            float(roi_x1 + roi_bbox[0]),
+                            float(roi_y1 + roi_bbox[1]),
+                            float(roi_x1 + roi_bbox[2]),
+                            float(roi_y1 + roi_bbox[3]),
+                        ]
+                        
+                        orig_kpts_xy = roi_kpts_xy.copy()
+                        orig_kpts_xy[:, 0] += roi_x1  # x坐标
+                        orig_kpts_xy[:, 1] += roi_y1  # y坐标
+                        
+                        detection = {
+                            "bbox": orig_bbox,
+                            "confidence": conf,
+                            "keypoints": {
+                                "xy": orig_kpts_xy,
+                                "conf": roi_kpts_conf,
+                            },
+                            "class_id": 0,
+                            "class_name": "person",
+                        }
+                        all_detections.append(detection)
+            
+            logger.debug(
+                f"批量ROI姿态检测完成: 检测了 {len(person_bboxes)} 个人体ROI, "
+                f"得到 {len(all_detections)} 个检测结果"
+            )
+            return all_detections
+            
+        except Exception as e:
+            logger.error(f"批量ROI姿态检测过程中发生错误: {e}", exc_info=True)
+            # 回退到逐个检测
+            logger.info("回退到逐个ROI检测")
+            return self.detect_in_rois(image, person_bboxes, use_batch=False)
 
     def visualize(self, image: np.ndarray, detections: List[Dict]) -> np.ndarray:
         """

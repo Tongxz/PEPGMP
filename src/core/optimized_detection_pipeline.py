@@ -9,6 +9,7 @@
 4. 增加缓存机制，特别是视频流处理
 """
 
+import asyncio
 import logging
 import time
 from collections import OrderedDict
@@ -21,6 +22,21 @@ import numpy as np
 
 from src.config.unified_params import get_unified_params
 from src.detection.pose_detector import PoseDetectorFactory
+
+# 导入FrameMetadata相关类（可选，用于状态管理和异步处理）
+try:
+    from src.core.frame_metadata import FrameMetadata, FrameSource
+    from src.core.frame_metadata_manager import FrameMetadataManager
+    from src.core.state_manager import StateManager
+    from src.core.async_detection_pipeline import AsyncDetectionPipeline
+    FRAME_METADATA_AVAILABLE = True
+except ImportError:
+    FRAME_METADATA_AVAILABLE = False
+    FrameMetadata = None
+    FrameSource = None
+    FrameMetadataManager = None
+    StateManager = None
+    AsyncDetectionPipeline = None
 
 # 级联相关依赖（可选）
 try:
@@ -137,6 +153,10 @@ class OptimizedDetectionPipeline:
         cache_size: int = 100,
         cache_ttl: float = 30.0,
         cascade_config: Optional[Dict[str, Any]] = None,
+        enable_state_management: bool = True,  # 是否启用状态管理
+        frame_metadata_manager: Optional[FrameMetadataManager] = None,  # 可选的FrameMetadataManager
+        enable_async: bool = False,  # 是否启用异步检测（任务1.3）
+        max_workers: int = 2,  # 异步检测的最大工作线程数
     ):
         """
         初始化优化检测管道
@@ -210,6 +230,60 @@ class OptimizedDetectionPipeline:
             "refined": 0,
             "time_total": 0.0,
         }
+        
+        # 状态管理相关（任务1.1）
+        self.enable_state_management = enable_state_management and FRAME_METADATA_AVAILABLE
+        if self.enable_state_management:
+            # 初始化FrameMetadataManager（与任务1.3共享）
+            self.frame_metadata_manager = frame_metadata_manager or FrameMetadataManager(
+                max_history=1000,
+                sync_window=0.1
+            )
+            
+            # 初始化StateManager
+            params = get_unified_params()
+            state_params = getattr(params, "state_management", None)
+            if state_params:
+                stability_frames = getattr(state_params, "stability_frames", 5)
+                confidence_threshold = getattr(state_params, "confidence_threshold", 0.7)
+            else:
+                stability_frames = 5
+                confidence_threshold = 0.7
+            
+            self.state_manager = StateManager(
+                stability_frames=stability_frames,
+                confidence_threshold=confidence_threshold,
+                frame_metadata_manager=self.frame_metadata_manager
+            )
+            logger.info("状态管理已启用")
+        else:
+            self.frame_metadata_manager = None
+            self.state_manager = None
+            if enable_state_management:
+                logger.warning("状态管理被请求但FrameMetadata不可用，已禁用")
+        
+        # 异步检测相关（任务1.3）
+        self.enable_async = enable_async and FRAME_METADATA_AVAILABLE
+        if self.enable_async:
+            if AsyncDetectionPipeline is None:
+                logger.warning("异步检测被请求但AsyncDetectionPipeline不可用，已禁用")
+                self.enable_async = False
+                self.async_pipeline = None
+            else:
+                # 初始化AsyncDetectionPipeline（共享FrameMetadataManager）
+                self.async_pipeline = AsyncDetectionPipeline(
+                    human_detector=self.human_detector,
+                    hairnet_detector=self.hairnet_detector,
+                    pose_detector=self.pose_detector,
+                    behavior_recognizer=self.behavior_recognizer,
+                    frame_metadata_manager=self.frame_metadata_manager,  # 共享
+                    max_workers=max_workers
+                )
+                logger.info(f"异步检测已启用: max_workers={max_workers}")
+        else:
+            self.async_pipeline = None
+            if enable_async:
+                logger.warning("异步检测被请求但FrameMetadata不可用，已禁用")
 
     def detect(self, image: np.ndarray, **kwargs) -> DetectionResult:
         """检测方法 - detect_comprehensive的别名，保持接口兼容性"""
@@ -227,6 +301,7 @@ class OptimizedDetectionPipeline:
         enable_handwash: bool = True,
         enable_sanitize: bool = True,
         force_refresh: bool = False,
+        camera_id: str = "default",  # 用于FrameMetadata
     ) -> DetectionResult:
         """
         综合检测 - 统一入口点
@@ -237,6 +312,7 @@ class OptimizedDetectionPipeline:
             enable_handwash: 是否启用洗手检测
             enable_sanitize: 是否启用消毒检测
             force_refresh: 是否强制刷新（忽略缓存）
+            camera_id: 摄像头ID（用于FrameMetadata）
 
         Returns:
             DetectionResult: 综合检测结果
@@ -253,10 +329,17 @@ class OptimizedDetectionPipeline:
             else:
                 self.stats["cache_misses"] += 1
 
-        # 执行检测流水线
-        result = self._execute_detection_pipeline(
-            image, enable_hairnet, enable_handwash, enable_sanitize
-        )
+        # 执行检测流水线（支持异步和同步两种模式）
+        if self.enable_async and self.async_pipeline:
+            # 使用异步检测（任务1.3）
+            result = self._execute_detection_pipeline_async(
+                image, camera_id, enable_hairnet, enable_handwash, enable_sanitize
+            )
+        else:
+            # 使用同步检测（原有逻辑）
+            result = self._execute_detection_pipeline(
+                image, enable_hairnet, enable_handwash, enable_sanitize
+            )
 
         # 更新统计信息
         total_time = time.time() - start_time
@@ -271,6 +354,92 @@ class OptimizedDetectionPipeline:
             self.frame_cache.put(image, result)
 
         return result
+    
+    def _execute_detection_pipeline_async(
+        self,
+        image: np.ndarray,
+        camera_id: str,
+        enable_hairnet: bool,
+        enable_handwash: bool,
+        enable_sanitize: bool,
+    ) -> DetectionResult:
+        """
+        使用异步检测管道执行检测
+        
+        Args:
+            image: 输入图像
+            camera_id: 摄像头ID
+            enable_hairnet: 是否启用发网检测
+            enable_handwash: 是否启用洗手检测
+            enable_sanitize: 是否启用消毒检测
+        
+        Returns:
+            DetectionResult: 综合检测结果
+        """
+        # 创建FrameMetadata
+        frame_meta = self.frame_metadata_manager.create_frame_metadata(
+            frame=image,
+            camera_id=camera_id,
+            source=FrameSource.REALTIME_STREAM
+        )
+        
+        # 执行异步检测
+        frame_meta = asyncio.run(
+            self.async_pipeline.detect_comprehensive_async(
+                frame_meta,
+                enable_hairnet,
+                enable_handwash,
+                enable_sanitize
+            )
+        )
+        
+        # 应用状态稳定判定（任务1.1）
+        if self.enable_state_management and self.state_manager:
+            for hairnet_result in frame_meta.hairnet_results:
+                hairnet_confidence = hairnet_result.get("hairnet_confidence", 0.0)
+                has_hairnet = hairnet_result.get("has_hairnet", False)
+                
+                # 如果未佩戴发网，使用置信度作为违规置信度
+                if has_hairnet is False:
+                    violation_confidence = hairnet_confidence
+                else:
+                    violation_confidence = 0.0
+                
+                self.state_manager.update_state(
+                    frame_meta,
+                    violation_confidence
+                )
+        
+        # 转换为DetectionResult（向后兼容）
+        return self._frame_meta_to_detection_result(frame_meta)
+    
+    def _frame_meta_to_detection_result(
+        self,
+        frame_meta: FrameMetadata,
+    ) -> DetectionResult:
+        """
+        将FrameMetadata转换为DetectionResult（向后兼容）
+        
+        Args:
+            frame_meta: 帧元数据
+        
+        Returns:
+            DetectionResult: 检测结果
+        """
+        # 计算处理时间
+        processing_times = frame_meta.processing_times.copy()
+        if "total" not in processing_times:
+            processing_times["total"] = sum(processing_times.values())
+        
+        return DetectionResult(
+            person_detections=frame_meta.person_detections,
+            hairnet_results=frame_meta.hairnet_results,
+            handwash_results=frame_meta.handwash_results,
+            sanitize_results=frame_meta.sanitize_results,
+            processing_times=processing_times,
+            annotated_image=None,  # 可以后续添加可视化
+            frame_cache_key=frame_meta.frame_hash,
+        )
 
     def _execute_detection_pipeline(
         self,
@@ -312,6 +481,14 @@ class OptimizedDetectionPipeline:
             hairnet_results = self._detect_hairnet_for_persons(image, person_detections)
             processing_times["hairnet_detection"] = time.time() - hairnet_start
             logger.info(f"发网检测完成: 处理了 {len(hairnet_results)} 个人")
+            
+            # 应用状态稳定判定（任务1.1）
+            if self.enable_state_management and self.state_manager:
+                state_start = time.time()
+                hairnet_results = self._apply_state_management_to_hairnet_results(
+                    hairnet_results, image
+                )
+                processing_times["state_management"] = time.time() - state_start
         else:
             processing_times["hairnet_detection"] = 0.0
 
@@ -361,6 +538,67 @@ class OptimizedDetectionPipeline:
             processing_times=processing_times,
             annotated_image=annotated_image,
         )
+    
+    def _apply_state_management_to_hairnet_results(
+        self,
+        hairnet_results: List[Dict],
+        image: np.ndarray,
+        camera_id: str = "default",
+    ) -> List[Dict]:
+        """
+        对发网检测结果应用状态管理
+        
+        Args:
+            hairnet_results: 发网检测结果列表
+            image: 输入图像
+            camera_id: 摄像头ID
+        
+        Returns:
+            更新后的发网检测结果列表（包含稳定状态信息）
+        """
+        if not self.enable_state_management or not self.state_manager:
+            return hairnet_results
+        
+        updated_results = []
+        
+        for hairnet_result in hairnet_results:
+            # 获取track_id（从hairnet_result或person_id）
+            track_id = hairnet_result.get("track_id") or f"person_{hairnet_result.get('person_id', 0)}"
+            
+            # 创建FrameMetadata（简化处理，实际应该使用统一的frame_meta）
+            from datetime import datetime
+            frame_meta = FrameMetadata(
+                frame_id=f"{camera_id}_{time.time():.6f}",
+                timestamp=datetime.utcnow(),
+                camera_id=camera_id,
+                source=FrameSource.REALTIME_STREAM,
+                frame=image,
+                metadata={"track_id": track_id},
+                hairnet_results=[hairnet_result],
+            )
+            
+            # 获取发网置信度
+            hairnet_confidence = hairnet_result.get("hairnet_confidence", 0.0)
+            has_hairnet = hairnet_result.get("has_hairnet", False)
+            
+            # 如果未佩戴发网，使用置信度作为违规置信度；如果佩戴，违规置信度为0
+            if has_hairnet is False:
+                violation_confidence = hairnet_confidence
+            else:
+                violation_confidence = 0.0
+            
+            # 更新状态
+            stable_state, stable_confidence = self.state_manager.update_state(
+                frame_meta,
+                violation_confidence
+            )
+            
+            # 更新hairnet_result
+            hairnet_result["stable_state"] = stable_state
+            hairnet_result["stable_confidence"] = stable_confidence
+            updated_results.append(hairnet_result)
+        
+        return updated_results
 
     # ----------------------- 级联逻辑 -----------------------
     def _cascade_refine_persons(

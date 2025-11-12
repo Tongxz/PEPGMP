@@ -3,6 +3,7 @@ export * from './system'
 export * from './camera'
 export * from './statistics'
 export * from './region'
+export * from './mlops'
 
 // 重新导出类型
 export type { Camera } from './camera'

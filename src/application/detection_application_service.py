@@ -169,14 +169,27 @@ class DetectionApplicationService:
         violations = []
 
         # 1. 检查发网违规
+        # 只有在有明确的发网检测结果且置信度足够高时，才判定为违规
+        # 避免因为发网检测模型未检测到发网而误判
         for hairnet in detection_result.hairnet_results:
-            if not hairnet.get("has_hairnet", True):
+            has_hairnet = hairnet.get("has_hairnet", None)
+            hairnet_confidence = hairnet.get("hairnet_confidence", 0.0)
+            
+            # 只有在明确检测到未佩戴发网（has_hairnet = False）且置信度足够高时，才判定为违规
+            # 如果 has_hairnet 为 None 或置信度过低，则认为检测结果不明确，不判定为违规
+            if has_hairnet is False and hairnet_confidence > 0.5:
                 violations.append(
                     {
                         "type": "no_hairnet",
                         "confidence": hairnet.get("confidence", 0.0),
                         "severity": 0.8,  # 发网违规严重程度高
                     }
+                )
+            elif has_hairnet is None:
+                # 如果发网检测结果不明确（可能是检测模型未检测到发网），记录警告但不判定为违规
+                self.logger.debug(
+                    f"发网检测结果不明确: has_hairnet={has_hairnet}, "
+                    f"confidence={hairnet_confidence}"
                 )
 
         # 2. 可以扩展更多违规检测规则
@@ -197,7 +210,12 @@ class DetectionApplicationService:
         violations = []
 
         for hairnet in detection_result.hairnet_results:
-            if not hairnet.get("has_hairnet", True):
+            has_hairnet = hairnet.get("has_hairnet", None)
+            hairnet_confidence = hairnet.get("hairnet_confidence", 0.0)
+            
+            # 只有在明确检测到未佩戴发网（has_hairnet = False）且置信度足够高时，才判定为违规
+            # 避免因为发网检测模型未检测到发网而误判
+            if has_hairnet is False and hairnet_confidence > 0.5:
                 violations.append(
                     {
                         "type": "no_hairnet",
@@ -293,38 +311,54 @@ class DetectionApplicationService:
         """将检测结果转换为领域模型格式"""
         objects = []
 
-        # 转换人体检测结果
-        for person in detection_result.person_detections:
+        # 创建发网检测结果映射（按索引或bbox匹配）
+        hairnet_map = {}
+        for i, hairnet in enumerate(detection_result.hairnet_results):
+            person_bbox = hairnet.get("person_bbox", hairnet.get("bbox", [0, 0, 0, 0]))
+            # 使用 bbox 作为键（转换为元组以便哈希）
+            bbox_key = tuple(person_bbox) if len(person_bbox) >= 4 else (i,)
+            hairnet_map[bbox_key] = hairnet
+
+        # 转换人体检测结果，并将发网检测结果关联到对应的人员对象
+        for i, person in enumerate(detection_result.person_detections):
+            person_bbox = person.get("bbox", [0, 0, 0, 0])
+            bbox_key = tuple(person_bbox) if len(person_bbox) >= 4 else (i,)
+            
+            # 查找对应的发网检测结果
+            hairnet_info = None
+            # 首先尝试通过 bbox 匹配
+            if bbox_key in hairnet_map:
+                hairnet_info = hairnet_map[bbox_key]
+            # 如果 bbox 匹配失败，尝试通过索引匹配
+            elif i < len(detection_result.hairnet_results):
+                hairnet_info = detection_result.hairnet_results[i]
+            
+            # 构建人员对象的 metadata
+            person_metadata = {
+                "source": "human_detector",
+                **person.get("metadata", {}),
+            }
+            
+            # 如果有发网检测结果，将发网信息添加到 metadata 中
+            if hairnet_info:
+                has_hairnet = hairnet_info.get("has_hairnet")
+                hairnet_confidence = hairnet_info.get("hairnet_confidence", 0.0)
+                person_metadata["has_hairnet"] = has_hairnet
+                person_metadata["hairnet_confidence"] = hairnet_confidence
+                # 保留其他发网检测信息
+                if "hairnet_bbox" in hairnet_info:
+                    person_metadata["hairnet_bbox"] = hairnet_info["hairnet_bbox"]
+                if "head_bbox" in hairnet_info:
+                    person_metadata["head_bbox"] = hairnet_info["head_bbox"]
+            
             objects.append(
                 {
                     "class_id": 0,
                     "class_name": "person",
                     "confidence": person.get("confidence", 0.0),
-                    "bbox": person.get("bbox", [0, 0, 0, 0]),
+                    "bbox": person_bbox,
                     "track_id": person.get("track_id"),
-                    "metadata": {
-                        "source": "human_detector",
-                        **person.get("metadata", {}),
-                    },
-                }
-            )
-
-        # 转换发网检测结果
-        for hairnet in detection_result.hairnet_results:
-            objects.append(
-                {
-                    "class_id": 1,
-                    "class_name": (
-                        "hairnet" if hairnet.get("has_hairnet") else "no_hairnet"
-                    ),
-                    "confidence": hairnet.get("confidence", 0.0),
-                    "bbox": hairnet.get("bbox", [0, 0, 0, 0]),
-                    "track_id": hairnet.get("track_id"),
-                    "metadata": {
-                        "source": "hairnet_detector",
-                        "has_hairnet": hairnet.get("has_hairnet", False),
-                        **hairnet.get("metadata", {}),
-                    },
+                    "metadata": person_metadata,
                 }
             )
 
@@ -493,16 +527,24 @@ class DetectionApplicationService:
         snapshot_info: Optional[SnapshotInfo] = None
         if should_save:
             detected_objects = self._convert_to_domain_format(detection_result)
+            
+            # 使用 _analyze_violations 的结果获取违规类型（已使用与 ViolationService 相同的逻辑）
+            # 这里使用 _get_primary_violation_type 获取违规类型，该方法已使用与 ViolationService 相同的逻辑
+            primary_violation_type = self._get_primary_violation_type(detection_result)
+            
+            # 保存快照（使用违规类型）
             snapshot_info = await self._save_snapshot_if_possible(
                 frame,
                 camera_id,
-                violation_type=self._get_primary_violation_type(detection_result),
+                violation_type=primary_violation_type,
                 metadata={
                     "mode": DetectionMode.REALTIME_STREAM.value,
                     "frame_count": frame_count,
                     "has_violations": has_violations,
                 },
             )
+            
+            # 保存检测记录（传入快照信息）
             record = await self.detection_domain_service.process_detection(
                 camera_id=camera_id,
                 detected_objects=detected_objects,
@@ -513,7 +555,8 @@ class DetectionApplicationService:
 
             self.logger.info(
                 f"保存检测记录: camera={camera_id}, frame={frame_count}, "
-                f"violations={has_violations}, severity={violation_severity:.2f}"
+                f"violations={has_violations}, severity={violation_severity:.2f}, "
+                f"violation_type={primary_violation_type}"
             )
 
         # 6. 构建轻量级响应
