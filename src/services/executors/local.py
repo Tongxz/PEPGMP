@@ -3,16 +3,20 @@ Local Process Executor: Manages detection processes on the local machine.
 """
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 import signal
 import subprocess
 import sys
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import yaml
 
 from src.services.executors.base import AbstractProcessExecutor
+
+logger = logging.getLogger(__name__)
 
 
 # Helper functions kept internal to this module
@@ -58,8 +62,11 @@ def _pid_file(camera_id: str) -> str:
 
 
 def _log_file(camera_id: str) -> str:
-    os.makedirs(_logs_dir(), exist_ok=True)
-    return os.path.join(_logs_dir(), f"detect_{camera_id}.log")
+    """获取检测日志文件路径（按分类组织）"""
+    logs_base_dir = _logs_dir()
+    detection_log_dir = os.path.join(logs_base_dir, "detection")
+    os.makedirs(detection_log_dir, exist_ok=True)
+    return os.path.join(detection_log_dir, f"detect_{camera_id}.log")
 
 
 def _is_process_alive(pid: int) -> bool:
@@ -84,18 +91,181 @@ class LocalProcessExecutor(AbstractProcessExecutor):
         self.project_root = _project_root()
         self.cameras_path = _cameras_yaml_path()
         self._last_env: Dict[str, str] = {}
+        self._camera_repository: Optional[Any] = None
+
+    def _init_camera_repository(self) -> bool:
+        """初始化相机仓储（从数据库读取）"""
+        if self._camera_repository is not None:
+            return True
+
+        try:
+            import asyncpg
+
+            from src.infrastructure.repositories.postgresql_camera_repository import (
+                PostgreSQLCameraRepository,
+            )
+
+            # 获取数据库连接URL
+            database_url = os.getenv(
+                "DATABASE_URL",
+                "postgresql://pyt_dev:pyt_dev_password@localhost:5432/pyt_development",
+            )
+
+            # 在同步上下文中运行异步代码
+            async def _create_repository():
+                try:
+                    pool = await asyncpg.create_pool(
+                        database_url,
+                        min_size=1,
+                        max_size=5,
+                        command_timeout=10,  # 10秒超时
+                    )
+                    repo = PostgreSQLCameraRepository(pool)
+                    # 确保表存在
+                    await repo._ensure_table_exists()
+                    return repo
+                except Exception as e:
+                    logger.warning(f"创建数据库连接池失败: {e}")
+                    return None
+
+            # 尝试创建仓储（在同步上下文中）
+            try:
+                # 检查是否有正在运行的事件循环
+                try:
+                    asyncio.get_running_loop()
+                    # 如果有事件循环，无法使用asyncio.run，直接返回False
+                    logger.debug("检测到已有事件循环，无法初始化数据库仓储，将使用YAML回退")
+                    return False
+                except RuntimeError:
+                    # 没有事件循环，可以使用asyncio.run
+                    pass
+
+                # 没有事件循环，直接使用 asyncio.run
+                self._camera_repository = asyncio.run(_create_repository())
+
+                if self._camera_repository is not None:
+                    logger.info("相机仓储已从数据库初始化")
+                    return True
+            except Exception as e:
+                logger.warning(f"初始化相机仓储失败: {e}，将使用YAML回退")
+                return False
+
+        except ImportError as e:
+            logger.warning(f"导入数据库依赖失败: {e}，将使用YAML回退")
+            return False
+        except Exception as e:
+            logger.warning(f"初始化相机仓储失败: {e}，将使用YAML回退")
+            return False
+
+        return False
 
     def list_cameras(self) -> List[Dict[str, Any]] | Dict[str, Any]:
+        """列出所有相机配置（优先从数据库读取，失败时回退到YAML）
+
+        注意：
+        - 在FastAPI环境中，应该通过API层传递相机配置给executor，而不是调用此方法
+        - 此方法主要用于命令行启动检测进程时的回退机制
+        - YAML文件仅作为最后的回退选项，不应作为主要配置源
+        """
+        # 尝试从数据库读取（仅在同步上下文中）
+        if self._init_camera_repository() and self._camera_repository is not None:
+            try:
+
+                async def _fetch_cameras():
+                    cameras = await self._camera_repository.find_all()
+                    # 转换为字典格式（兼容旧API）
+                    cameras_dict = []
+                    for camera in cameras:
+                        cam_dict = camera.to_dict()
+                        # 提取metadata中的字段到顶层（兼容API格式）
+                        metadata = cam_dict.get("metadata", {})
+                        if "source" in metadata:
+                            cam_dict["source"] = metadata["source"]
+                        if "log_interval" in metadata:
+                            cam_dict["log_interval"] = metadata["log_interval"]
+                        if "stream_interval" in metadata:
+                            cam_dict["stream_interval"] = metadata["stream_interval"]
+                        if "frame_by_frame" in metadata:
+                            cam_dict["frame_by_frame"] = metadata["frame_by_frame"]
+                        # 提取其他配置字段
+                        for key in [
+                            "regions_file",
+                            "profile",
+                            "device",
+                            "imgsz",
+                            "auto_start",
+                        ]:
+                            if key in metadata:
+                                cam_dict[key] = metadata[key]
+                        # 兼容旧格式：active字段
+                        cam_dict["active"] = camera.is_active
+                        cameras_dict.append(cam_dict)
+                    return cameras_dict
+
+                # 在同步上下文中运行异步代码
+                try:
+                    # 检查是否有正在运行的事件循环
+                    try:
+                        asyncio.get_running_loop()
+                        # 如果有事件循环，无法使用asyncio.run，直接回退到YAML
+                        logger.warning(
+                            "检测到已有事件循环，无法从数据库读取。" "建议：在API层获取相机配置并传递给executor.start()"
+                        )
+                        raise RuntimeError("Event loop already running")
+                    except RuntimeError as e:
+                        # 检查是否是"Event loop already running"异常
+                        if "already running" in str(e):
+                            raise
+                        # 没有事件循环，可以使用asyncio.run
+
+                    # 没有事件循环，直接使用 asyncio.run
+                    cameras = asyncio.run(_fetch_cameras())
+
+                    logger.info(f"从数据库读取到 {len(cameras)} 个相机配置")
+                    return cameras
+                except Exception as e:
+                    logger.warning(f"从数据库读取相机配置失败: {e}，回退到YAML")
+                    # 继续执行YAML回退逻辑
+
+            except Exception as e:
+                logger.warning(f"从数据库读取相机配置时出错: {e}，回退到YAML")
+                # 继续执行YAML回退逻辑
+
+        # YAML回退（仅用于命令行启动或数据库不可用时）
+        # 注意：在FastAPI环境中，应该通过API层传递相机配置给executor，而不是调用list_cameras()
+        # 这个警告通常表示：
+        # 1. executor在FastAPI环境中被直接调用（不推荐）- 应该传递camera_config参数
+        # 2. 或者数据库连接失败，回退到YAML文件
+        # 3. 或者从命令行直接启动检测进程（这是正常情况）
+        import traceback
+
+        stack_trace = "\n".join(traceback.format_stack()[-5:-1])  # 获取调用堆栈的最后几行
+        logger.warning(
+            f"使用YAML回退模式读取相机配置: {self.cameras_path}。"
+            "注意：YAML文件已不再是主要配置源，建议使用数据库配置。"
+            "在FastAPI环境中，应通过API层传递相机配置给executor，而不是调用list_cameras()。"
+            f"\n调用堆栈:\n{stack_trace}"
+        )
         data = _read_yaml(self.cameras_path)
         if "error" in data:
             return data  # Propagate the error dictionary
+        logger.debug(f"从YAML读取到 {len(data.get('cameras', []))} 个相机配置（回退模式）")
         return list(data.get("cameras", []))
 
     def _build_command(self, cam: Dict[str, Any]) -> List[str]:
         python_exe = sys.executable
         main_py = os.path.join(self.project_root, "main.py")
         camera_id = str(cam.get("id"))
-        source = str(cam.get("source"))
+
+        # 获取source字段，如果不存在则抛出异常
+        source = cam.get("source")
+        if not source or source == "None" or source is None:
+            raise ValueError(
+                f"相机配置缺少必填字段 'source': camera_id={camera_id}, "
+                f"请检查数据库中的相机配置是否包含 source 字段"
+            )
+        source = str(source)
+
         regions_file = str(cam.get("regions_file", "config/regions.json"))
         profile = str(cam.get("profile", "accurate"))
         device = str(cam.get("device", "auto"))
@@ -119,7 +289,9 @@ class LocalProcessExecutor(AbstractProcessExecutor):
             cmd += ["--device", device]
         if imgsz and imgsz != "auto":
             cmd += ["--imgsz", str(imgsz)]
-        cmd += ["--log-interval", "120"]
+        # 从相机配置中读取log_interval，如果没有则使用默认值120
+        log_interval = cam.get("log_interval", 120)
+        cmd += ["--log-interval", str(log_interval)]
 
         env = os.environ.copy()
 
@@ -149,26 +321,59 @@ class LocalProcessExecutor(AbstractProcessExecutor):
 
         return cmd
 
-    def start(self, camera_id: str) -> Dict[str, Any]:
-        cams_or_error = self.list_cameras()
-        if isinstance(cams_or_error, dict) and "error" in cams_or_error:
-            # Propagate the detailed error from the file reading operation
-            return {
-                "ok": False,
-                "error": f"Configuration file error: {cams_or_error['error']}",
-            }
+    def start(
+        self, camera_id: str, camera_config: Dict[str, Any] | None = None
+    ) -> Dict[str, Any]:
+        # 如果提供了相机配置，直接使用；否则从列表查找
+        if camera_config is not None:
+            cam = camera_config
+        else:
+            cams_or_error = self.list_cameras()
+            if isinstance(cams_or_error, dict) and "error" in cams_or_error:
+                # Propagate the detailed error from the file reading operation
+                return {
+                    "ok": False,
+                    "error": f"Configuration file error: {cams_or_error['error']}",
+                }
 
-        cams = cams_or_error  # Now we know it's a list
-        cam = next((c for c in cams if str(c.get("id")) == str(camera_id)), None)
-        if not cam:
-            return {
-                "ok": False,
-                "error": f"Camera with id '{camera_id}' not found in the configuration.",
-            }
+            cams = cams_or_error  # Now we know it's a list
+            cam = next((c for c in cams if str(c.get("id")) == str(camera_id)), None)
+            if not cam:
+                return {
+                    "ok": False,
+                    "error": f"Camera with id '{camera_id}' not found in the configuration.",
+                }
 
+        # 检查激活状态
+        # 优先使用 active 字段，其次使用 enabled 字段，最后默认为 True
         is_active = cam.get("active", cam.get("enabled", True))
+
+        # 如果 active 字段明确为 False，检查是否从数据库读取（status 字段）
+        if not is_active and "status" in cam:
+            # 如果 status 是 "active"，则覆盖 active 字段
+            if cam.get("status") == "active":
+                is_active = True
+                cam["active"] = True
+
         if not is_active:
-            return {"ok": False, "error": "摄像头未激活，请先激活后再启动"}
+            camera_id = cam.get("id", camera_id)
+            return {
+                "ok": False,
+                "error": f"摄像头 {camera_id} 未激活，请先激活后再启动。可通过 API /cameras/{camera_id}/activate 激活",
+            }
+
+        # 验证必填字段source
+        source = cam.get("source")
+        if not source or source == "None" or source is None:
+            camera_id = cam.get("id", camera_id)
+            logger.error(
+                f"摄像头 {camera_id} 配置缺少必填字段 'source': "
+                f"cam={cam}, metadata={cam.get('metadata', {})}"
+            )
+            return {
+                "ok": False,
+                "error": f"摄像头 {camera_id} 配置缺少必填字段 'source'，请检查数据库中的相机配置是否包含 source 字段",
+            }
 
         pid_path = _pid_file(camera_id)
         if os.path.exists(pid_path):
@@ -185,7 +390,14 @@ class LocalProcessExecutor(AbstractProcessExecutor):
             except Exception:
                 pass
 
-        cmd = self._build_command(cam)
+        try:
+            cmd = self._build_command(cam)
+        except ValueError as e:
+            logger.error(f"构建启动命令失败: {e}")
+            return {
+                "ok": False,
+                "error": str(e),
+            }
         log_path = _log_file(camera_id)
         stdout = open(log_path, "a", encoding="utf-8")
         stderr = stdout
@@ -246,10 +458,12 @@ class LocalProcessExecutor(AbstractProcessExecutor):
             pass
         return {"ok": True, "running": False}
 
-    def restart(self, camera_id: str) -> Dict[str, Any]:
+    def restart(
+        self, camera_id: str, camera_config: Dict[str, Any] | None = None
+    ) -> Dict[str, Any]:
         self.stop(camera_id)
         time.sleep(0.5)
-        return self.start(camera_id)
+        return self.start(camera_id, camera_config)
 
     def status(self, camera_id: str) -> Dict[str, Any]:
         pid_path = _pid_file(camera_id)
@@ -259,11 +473,23 @@ class LocalProcessExecutor(AbstractProcessExecutor):
         if os.path.exists(pid_path):
             try:
                 with open(pid_path, "r", encoding="utf-8") as f:
-                    pid = int(f.read().strip() or "0")
-                running = _is_process_alive(pid)
-            except Exception:
+                    pid_str = f.read().strip()
+                    if pid_str:
+                        pid = int(pid_str)
+                        running = _is_process_alive(pid)
+            except (ValueError, OSError) as e:
+                logger.warning(
+                    f"读取PID文件失败: camera_id={camera_id}, pid_path={pid_path}, error={e}"
+                )
                 running = False
-        return {"ok": True, "running": running, "pid": pid, "log": log_path}
+        else:
+            logger.debug(f"PID文件不存在: camera_id={camera_id}, pid_path={pid_path}")
+
+        result = {"ok": True, "running": running, "pid": pid, "log": log_path}
+        logger.info(
+            f"获取摄像头状态: camera_id={camera_id}, running={running}, pid={pid}, log={log_path}"
+        )
+        return result
 
     def start_all(self) -> Dict[str, Any]:
         cams = self.list_cameras()

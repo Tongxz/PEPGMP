@@ -24,19 +24,35 @@ class DetectionScheduler:
         """
         self.executor = executor
 
-    def start_detection(self, camera_id: str) -> Dict[str, Any]:
-        """Schedules the start of a detection process."""
+    def start_detection(
+        self, camera_id: str, camera_config: Dict[str, Any] | None = None
+    ) -> Dict[str, Any]:
+        """Schedules the start of a detection process.
+
+        Args:
+            camera_id: The ID of the camera to start.
+            camera_config: Optional camera configuration dictionary.
+                          If provided, will be passed to the executor.
+        """
         # In the future, this method could contain logic to select
         # different executors based on load or camera configuration.
-        return self.executor.start(camera_id)
+        return self.executor.start(camera_id, camera_config)
 
     def stop_detection(self, camera_id: str) -> Dict[str, Any]:
         """Schedules the stop of a detection process."""
         return self.executor.stop(camera_id)
 
-    def restart_detection(self, camera_id: str) -> Dict[str, Any]:
-        """Schedules the restart of a detection process."""
-        return self.executor.restart(camera_id)
+    def restart_detection(
+        self, camera_id: str, camera_config: Dict[str, Any] | None = None
+    ) -> Dict[str, Any]:
+        """Schedules the restart of a detection process.
+
+        Args:
+            camera_id: The ID of the camera to restart.
+            camera_config: Optional camera configuration dictionary.
+                          If provided, will be passed to the executor.
+        """
+        return self.executor.restart(camera_id, camera_config)
 
     def get_status(self, camera_id: str) -> Dict[str, Any]:
         """Gets the status of a scheduled process."""
@@ -47,23 +63,32 @@ class DetectionScheduler:
         return self.get_status(camera_id)
 
     def get_batch_status(self, camera_ids: list[str] | None = None) -> dict[str, Any]:
-        """Gets the status for a batch of cameras."""
-        # This logic currently resides in the router, but could be moved here.
-        # For now, we assume the executor can handle it if needed.
-        # This is a placeholder for future refactoring.
+        """Gets the status for a batch of cameras.
+
+        Args:
+            camera_ids: 相机ID列表。如果为None或空列表，返回空字典。
+                       注意：在FastAPI环境中，应该由API层从数据库获取相机列表
+                       并传递给此方法，而不是让此方法调用executor.list_cameras()。
+
+        Returns:
+            包含每个相机状态的字典，键为相机ID
+        """
+        # 如果executor有batch_status方法，直接使用
         if hasattr(self.executor, "batch_status"):
             return self.executor.batch_status(camera_ids)
 
         # Fallback to iterating if batch_status is not on executor
         results = {}
-        if camera_ids is None:
-            # In a full implementation, the scheduler would know about all cameras
-            # For now, we rely on the executor to have this info.
-            if hasattr(self.executor, "list_cameras"):
-                camera_ids = [str(c.get("id")) for c in self.executor.list_cameras()]
-            else:
-                camera_ids = []
 
+        # 如果camera_ids为None或空列表，返回空字典
+        # 注意：不再调用executor.list_cameras()，因为这会触发YAML回退警告
+        # 在FastAPI环境中，应该由API层从数据库获取相机列表并传递过来
+        if not camera_ids:
+            # 返回空字典，而不是调用list_cameras()
+            # 这样可以避免在FastAPI环境中触发YAML回退警告
+            return results
+
+        # 查询指定相机的状态
         for cam_id in camera_ids:
             results[cam_id] = self.get_status(cam_id)
         return results

@@ -30,14 +30,15 @@ class CameraControlService:
         self.camera_service = camera_service
         self.scheduler = scheduler
 
-    def start_camera(self, camera_id: str) -> Dict[str, Any]:
+    async def start_camera(self, camera_id: str) -> Dict[str, Any]:
         """启动指定摄像头的检测进程.
 
         业务规则：
         1. 检查摄像头是否已在运行（避免重复启动）
         2. 检查系统资源是否足够
-        3. 启动进程
-        4. 发布摄像头启动事件（未来实现）
+        3. 从数据库获取摄像头配置
+        4. 启动进程（传递配置给执行器）
+        5. 发布摄像头启动事件（未来实现）
 
         Args:
             camera_id: 摄像头ID
@@ -56,7 +57,23 @@ class CameraControlService:
                 raise ValueError(f"摄像头 {camera_id} 已在运行（PID: {pid}），" "请先停止后再启动")
 
             # 2. 业务规则：检查系统资源（简化版，检查运行中的摄像头数量）
-            batch_status = self.scheduler.get_batch_status()
+            # 注意：为了避免触发list_cameras()调用，我们先从数据库获取所有相机ID
+            # 然后查询这些相机的状态，而不是调用get_batch_status()而不传参数
+            try:
+                # 从数据库获取所有相机ID
+                all_cameras = await self.camera_service.camera_repository.find_all()
+                all_camera_ids = [c.id for c in all_cameras]
+
+                # 查询所有相机的状态
+                if all_camera_ids:
+                    batch_status = self.scheduler.get_batch_status(all_camera_ids)
+                else:
+                    batch_status = {}
+            except Exception as e:
+                # 如果从数据库获取相机列表失败，跳过资源检查
+                logger.warning(f"获取相机列表失败，跳过资源检查: {e}")
+                batch_status = {}
+
             running_count = sum(1 for s in batch_status.values() if s.get("running"))
             MAX_CONCURRENT_CAMERAS = 10  # 可配置
 
@@ -66,14 +83,39 @@ class CameraControlService:
                     f"已达上限 {MAX_CONCURRENT_CAMERAS}"
                 )
 
-            # 3. 启动进程（委托给执行器）
-            res = self.scheduler.start_detection(camera_id)
+            # 3. 从数据库获取摄像头配置
+            camera = await self.camera_service.camera_repository.find_by_id(camera_id)
+            if not camera:
+                raise ValueError(f"摄像头 {camera_id} 不存在")
+
+            # 转换为字典格式（兼容executor期望的格式）
+            camera_config = camera.to_dict()
+            metadata = camera_config.get("metadata", {})
+
+            # 提取metadata中的字段到顶层（兼容API格式）
+            if "source" in metadata:
+                camera_config["source"] = metadata["source"]
+            if "log_interval" in metadata:
+                camera_config["log_interval"] = metadata["log_interval"]
+            if "stream_interval" in metadata:
+                camera_config["stream_interval"] = metadata["stream_interval"]
+            if "frame_by_frame" in metadata:
+                camera_config["frame_by_frame"] = metadata["frame_by_frame"]
+            # 提取其他配置字段
+            for key in ["regions_file", "profile", "device", "imgsz", "auto_start"]:
+                if key in metadata:
+                    camera_config[key] = metadata[key]
+            # 兼容旧格式：active字段
+            camera_config["active"] = camera.is_active
+
+            # 4. 启动进程（传递配置给执行器）
+            res = self.scheduler.start_detection(camera_id, camera_config)
             if not res.get("ok"):
                 error_msg = res.get("error") or "启动摄像头失败"
                 logger.error(f"启动摄像头失败 {camera_id}: {error_msg}")
                 raise ValueError(error_msg)
 
-            # 4. 记录成功日志
+            # 5. 记录成功日志
             logger.info(
                 f"✓ 摄像头启动成功 {camera_id}: " f"pid={res.get('pid')}, log={res.get('log')}"
             )
@@ -150,8 +192,15 @@ class CameraControlService:
             logger.error(f"停止摄像头异常 {camera_id}: {e}")
             raise ValueError(f"停止摄像头失败: {e}")
 
-    def restart_camera(self, camera_id: str) -> Dict[str, Any]:
+    async def restart_camera(self, camera_id: str) -> Dict[str, Any]:
         """重启指定摄像头的检测进程.
+
+        业务规则：
+        1. 检查摄像头是否正在运行
+        2. 从数据库获取摄像头配置
+        3. 停止进程
+        4. 启动进程（传递配置给执行器）
+        5. 发布摄像头重启事件（未来实现）
 
         Args:
             camera_id: 摄像头ID
@@ -163,14 +212,45 @@ class CameraControlService:
             ValueError: 如果重启失败
         """
         try:
-            res = self.scheduler.restart_detection(camera_id)
-            if not res.get("ok"):
-                logger.error(f"重启摄像头失败 {camera_id}: {res}")
-                raise ValueError(res.get("error") or "重启摄像头失败")
+            # 1. 从数据库获取摄像头配置
+            camera = await self.camera_service.camera_repository.find_by_id(camera_id)
+            if not camera:
+                raise ValueError(f"摄像头 {camera_id} 不存在")
 
+            # 转换为字典格式（兼容executor期望的格式）
+            camera_config = camera.to_dict()
+            metadata = camera_config.get("metadata", {})
+
+            # 提取metadata中的字段到顶层（兼容API格式）
+            if "source" in metadata:
+                camera_config["source"] = metadata["source"]
+            if "log_interval" in metadata:
+                camera_config["log_interval"] = metadata["log_interval"]
+            if "stream_interval" in metadata:
+                camera_config["stream_interval"] = metadata["stream_interval"]
+            if "frame_by_frame" in metadata:
+                camera_config["frame_by_frame"] = metadata["frame_by_frame"]
+            # 提取其他配置字段
+            for key in ["regions_file", "profile", "device", "imgsz", "auto_start"]:
+                if key in metadata:
+                    camera_config[key] = metadata[key]
+            # 兼容旧格式：active字段
+            camera_config["active"] = camera.is_active
+
+            # 2. 重启进程（传递配置给执行器）
+            res = self.scheduler.restart_detection(camera_id, camera_config)
+            if not res.get("ok"):
+                error_msg = res.get("error") or "重启摄像头失败"
+                logger.error(f"重启摄像头失败 {camera_id}: {error_msg}")
+                raise ValueError(error_msg)
+
+            # 3. 记录成功日志
             logger.info(
-                f"摄像头重启成功 {camera_id}: pid={res.get('pid')} log={res.get('log')}"
+                f"✓ 摄像头重启成功 {camera_id}: " f"pid={res.get('pid')}, log={res.get('log')}"
             )
+
+            # TODO: 发布领域事件 CameraRestartedEvent
+
             return res
 
         except ValueError:
@@ -205,12 +285,25 @@ class CameraControlService:
         """批量查询摄像头运行状态.
 
         Args:
-            camera_ids: 摄像头ID列表，None表示查询所有
+            camera_ids: 摄像头ID列表，None或空列表表示查询所有
+                       注意：如果为None或空列表，应该由调用者（API层）从数据库获取相机列表
+                       并传递过来，而不是让scheduler调用executor.list_cameras()
 
         Returns:
             包含所有摄像头状态的字典
         """
         try:
+            # 如果camera_ids为None或空列表，返回空字典
+            # 注意：不再允许camera_ids为None的情况，因为这会触发list_cameras()调用
+            # API层应该从数据库获取相机列表并传递过来
+            if not camera_ids:
+                logger.warning(
+                    "get_batch_status()被调用时camera_ids为None或空列表，"
+                    "应该由调用者（API层）从数据库获取相机列表并传递过来。"
+                    "返回空字典以避免触发list_cameras()调用。"
+                )
+                return {}
+
             result = self.scheduler.get_batch_status(camera_ids)
             logger.debug(f"批量状态查询: {len(result)} 个摄像头")
             return result

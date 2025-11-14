@@ -117,6 +117,33 @@ def _write_yaml(path: str, data: Dict[str, Any]) -> None:
     os.replace(tmp_name, path)
 
 
+def _sync_video_stream_config_to_redis(
+    camera_id: str, camera_config: Dict[str, Any]
+) -> None:
+    """将相机配置中的视频流配置同步到Redis（旧实现回退）
+
+    注意：此函数用于API层的旧实现回退路径。新实现应该使用领域服务的统一函数。
+    """
+    try:
+        from src.infrastructure.notifications.redis_config_sync import (
+            sync_camera_config_to_redis,
+        )
+
+        # 提取需要同步的配置项
+        changed_keys = [
+            key for key in ["log_interval", "stream_interval"] if key in camera_config
+        ]
+
+        if changed_keys:
+            sync_camera_config_to_redis(
+                camera_id=camera_id,
+                camera_config=camera_config,
+                changed_keys=changed_keys,
+            )
+    except Exception as e:
+        logger.warning(f"同步视频流配置到Redis失败: camera_id={camera_id}, error={e}")
+
+
 @router.get("/cameras")
 async def list_cameras(
     active_only: bool = Query(False, description="是否只返回活跃摄像头"),
@@ -139,12 +166,34 @@ async def list_cameras(
                 cameras = await camera_service.camera_repository.find_all()
                 if active_only:
                     cameras = [c for c in cameras if c.is_active]
-                # 转换为字典格式
-                cameras_dict = [c.to_dict() for c in cameras]
-                # 提取metadata中的source等字段到顶层（兼容API格式）
-                for cam_dict in cameras_dict:
-                    if "source" in cam_dict.get("metadata", {}):
-                        cam_dict["source"] = cam_dict["metadata"]["source"]
+                # 转换为字典格式（同时提取metadata字段和active字段）
+                cameras_dict = []
+                for camera in cameras:
+                    cam_dict = camera.to_dict()
+                    metadata = cam_dict.get("metadata", {})
+                    # 提取source字段
+                    if "source" in metadata:
+                        cam_dict["source"] = metadata["source"]
+                    # 提取视频流配置字段
+                    if "log_interval" in metadata:
+                        cam_dict["log_interval"] = metadata["log_interval"]
+                    if "stream_interval" in metadata:
+                        cam_dict["stream_interval"] = metadata["stream_interval"]
+                    if "frame_by_frame" in metadata:
+                        cam_dict["frame_by_frame"] = metadata["frame_by_frame"]
+                    # 提取其他配置字段
+                    for key in [
+                        "regions_file",
+                        "profile",
+                        "device",
+                        "imgsz",
+                        "auto_start",
+                    ]:
+                        if key in metadata:
+                            cam_dict[key] = metadata[key]
+                    # 兼容旧格式：active字段（从Camera实体的is_active属性获取）
+                    cam_dict["active"] = camera.is_active
+                    cameras_dict.append(cam_dict)
                 return {"cameras": cameras_dict}
     except Exception as e:
         logger.warning(f"领域服务获取摄像头列表失败，回退到旧实现: {e}")
@@ -193,6 +242,10 @@ async def create_camera(
     cams.append(payload)
     data["cameras"] = cams
     _write_yaml(_cameras_path(), data)
+
+    # 同步视频流配置到Redis
+    _sync_video_stream_config_to_redis(payload["id"], payload)
+
     return {"ok": True, "camera": payload}
 
 
@@ -230,9 +283,18 @@ async def update_camera(
     cameras = data.get("cameras", [])
     for i, cam in enumerate(cameras):
         if cam.get("id") == camera_id:
+            # 更新配置（使用update方法合并，保留原有字段）
             cameras[i].update(payload)
             _write_yaml(_cameras_path(), data)
-            return {"status": "success"}
+
+            # 同步视频流配置到Redis（使用更新后的完整配置）
+            updated_cam = cameras[i]
+            _sync_video_stream_config_to_redis(camera_id, updated_cam)
+
+            logger.info(
+                f"摄像头配置已更新: camera_id={camera_id}, payload={payload}, updated_config={updated_cam}"
+            )
+            return {"status": "success", "camera": updated_cam}
     raise HTTPException(status_code=404, detail="Camera not found")
 
 
@@ -340,7 +402,7 @@ async def start_camera(
         if should_use_domain(force_domain) and get_camera_control_service is not None:
             control_service = await get_camera_control_service()  # type: ignore
             if control_service:
-                result = control_service.start_camera(camera_id)
+                result = await control_service.start_camera(camera_id)  # 注意：现在是async
                 return result
     except ValueError as e:
         # 业务逻辑错误（如启动失败），直接抛出HTTP异常
@@ -348,18 +410,92 @@ async def start_camera(
     except Exception as e:
         logger.warning(f"摄像头控制服务启动失败，回退到调度器: {e}")
 
-    # 旧实现（回退）
-    scheduler = get_scheduler()
-    res = scheduler.start_detection(camera_id)
-    if not res.get("ok"):
-        logger.error(f"Failed to start camera {camera_id}: {res}")
-        raise HTTPException(
-            status_code=400, detail=res.get("error") or "Failed to start camera"
-        )
-    logger.info(
-        f"Started camera {camera_id}: pid={res.get('pid')} log={res.get('log')}"
+    # 旧实现（回退）：从数据库获取配置后传递给executor
+    try:
+        if get_camera_service is not None:
+            camera_service = await get_camera_service()  # type: ignore
+            if camera_service:
+                camera = await camera_service.camera_repository.find_by_id(camera_id)
+                if camera:
+                    # 转换为字典格式
+                    camera_config = camera.to_dict()
+                    metadata = camera_config.get("metadata", {})
+                    if "source" in metadata:
+                        camera_config["source"] = metadata["source"]
+                    if "log_interval" in metadata:
+                        camera_config["log_interval"] = metadata["log_interval"]
+                    for key in [
+                        "regions_file",
+                        "profile",
+                        "device",
+                        "imgsz",
+                        "auto_start",
+                    ]:
+                        if key in metadata:
+                            camera_config[key] = metadata[key]
+                    camera_config["active"] = camera.is_active
+
+                    scheduler = get_scheduler()
+                    res = scheduler.start_detection(camera_id, camera_config)
+                    if not res.get("ok"):
+                        logger.error(f"Failed to start camera {camera_id}: {res}")
+                        raise HTTPException(
+                            status_code=400,
+                            detail=res.get("error") or "Failed to start camera",
+                        )
+                    logger.info(
+                        f"Started camera {camera_id}: pid={res.get('pid')} log={res.get('log')}"
+                    )
+                    return res
+    except Exception as e:
+        logger.warning(f"从数据库获取相机配置失败: {e}，回退到executor自动查找")
+
+    # 最终回退：从数据库获取配置后传递给executor
+    # 注意：这是最后的回退路径，不应该被执行到，但如果执行到，也要确保传递配置
+    try:
+        if get_camera_service is not None:
+            camera_service = await get_camera_service()  # type: ignore
+            if camera_service:
+                camera = await camera_service.camera_repository.find_by_id(camera_id)
+                if camera:
+                    # 转换为字典格式
+                    camera_config = camera.to_dict()
+                    metadata = camera_config.get("metadata", {})
+                    if "source" in metadata:
+                        camera_config["source"] = metadata["source"]
+                    if "log_interval" in metadata:
+                        camera_config["log_interval"] = metadata["log_interval"]
+                    for key in [
+                        "regions_file",
+                        "profile",
+                        "device",
+                        "imgsz",
+                        "auto_start",
+                    ]:
+                        if key in metadata:
+                            camera_config[key] = metadata[key]
+                    camera_config["active"] = camera.is_active
+
+                    scheduler = get_scheduler()
+                    res = scheduler.start_detection(camera_id, camera_config)
+                    if not res.get("ok"):
+                        logger.error(f"Failed to start camera {camera_id}: {res}")
+                        raise HTTPException(
+                            status_code=400,
+                            detail=res.get("error") or "Failed to start camera",
+                        )
+                    logger.info(
+                        f"Started camera {camera_id}: pid={res.get('pid')} log={res.get('log')}"
+                    )
+                    return res
+    except Exception as e:
+        logger.error(f"最终回退路径也失败: {e}")
+
+    # 如果所有路径都失败，返回错误
+    raise HTTPException(
+        status_code=500,
+        detail="启动摄像头失败: 无法获取摄像头配置。请检查数据库连接和摄像头配置。",
     )
-    return res
 
 
 @router.post("/cameras/{camera_id}/stop")
@@ -404,7 +540,7 @@ async def restart_camera(
         if should_use_domain(force_domain) and get_camera_control_service is not None:
             control_service = await get_camera_control_service()  # type: ignore
             if control_service:
-                result = control_service.restart_camera(camera_id)
+                result = await control_service.restart_camera(camera_id)  # 注意：现在是async
                 return result
     except ValueError as e:
         # 业务逻辑错误（如重启失败），直接抛出HTTP异常
@@ -412,18 +548,92 @@ async def restart_camera(
     except Exception as e:
         logger.warning(f"摄像头控制服务重启失败，回退到调度器: {e}")
 
-    # 旧实现（回退）
-    scheduler = get_scheduler()
-    res = scheduler.restart_detection(camera_id)
-    if not res.get("ok"):
-        logger.error(f"Failed to restart camera {camera_id}: {res}")
-        raise HTTPException(
-            status_code=400, detail=res.get("error") or "Failed to restart camera"
-        )
-    logger.info(
-        f"Restarted camera {camera_id}: pid={res.get('pid')} log={res.get('log')}"
+    # 旧实现（回退）：从数据库获取配置后传递给executor
+    try:
+        if get_camera_service is not None:
+            camera_service = await get_camera_service()  # type: ignore
+            if camera_service:
+                camera = await camera_service.camera_repository.find_by_id(camera_id)
+                if camera:
+                    # 转换为字典格式
+                    camera_config = camera.to_dict()
+                    metadata = camera_config.get("metadata", {})
+                    if "source" in metadata:
+                        camera_config["source"] = metadata["source"]
+                    if "log_interval" in metadata:
+                        camera_config["log_interval"] = metadata["log_interval"]
+                    for key in [
+                        "regions_file",
+                        "profile",
+                        "device",
+                        "imgsz",
+                        "auto_start",
+                    ]:
+                        if key in metadata:
+                            camera_config[key] = metadata[key]
+                    camera_config["active"] = camera.is_active
+
+                    scheduler = get_scheduler()
+                    res = scheduler.restart_detection(camera_id, camera_config)
+                    if not res.get("ok"):
+                        logger.error(f"Failed to restart camera {camera_id}: {res}")
+                        raise HTTPException(
+                            status_code=400,
+                            detail=res.get("error") or "Failed to restart camera",
+                        )
+                    logger.info(
+                        f"Restarted camera {camera_id}: pid={res.get('pid')} log={res.get('log')}"
+                    )
+                    return res
+    except Exception as e:
+        logger.warning(f"从数据库获取相机配置失败: {e}，回退到executor自动查找")
+
+    # 最终回退：从数据库获取配置后传递给executor
+    # 注意：这是最后的回退路径，不应该被执行到，但如果执行到，也要确保传递配置
+    try:
+        if get_camera_service is not None:
+            camera_service = await get_camera_service()  # type: ignore
+            if camera_service:
+                camera = await camera_service.camera_repository.find_by_id(camera_id)
+                if camera:
+                    # 转换为字典格式
+                    camera_config = camera.to_dict()
+                    metadata = camera_config.get("metadata", {})
+                    if "source" in metadata:
+                        camera_config["source"] = metadata["source"]
+                    if "log_interval" in metadata:
+                        camera_config["log_interval"] = metadata["log_interval"]
+                    for key in [
+                        "regions_file",
+                        "profile",
+                        "device",
+                        "imgsz",
+                        "auto_start",
+                    ]:
+                        if key in metadata:
+                            camera_config[key] = metadata[key]
+                    camera_config["active"] = camera.is_active
+
+                    scheduler = get_scheduler()
+                    res = scheduler.restart_detection(camera_id, camera_config)
+                    if not res.get("ok"):
+                        logger.error(f"Failed to restart camera {camera_id}: {res}")
+                        raise HTTPException(
+                            status_code=400,
+                            detail=res.get("error") or "Failed to restart camera",
+                        )
+                    logger.info(
+                        f"Restarted camera {camera_id}: pid={res.get('pid')} log={res.get('log')}"
+                    )
+                    return res
+    except Exception as e:
+        logger.error(f"最终回退路径也失败: {e}")
+
+    # 如果所有路径都失败，返回错误
+    raise HTTPException(
+        status_code=500,
+        detail="重启摄像头失败: 无法获取摄像头配置。请检查数据库连接和摄像头配置。",
     )
-    return res
 
 
 @router.get("/cameras/{camera_id}/status")
@@ -473,6 +683,24 @@ async def batch_camera_status(
                     if camera_ids and len(camera_ids) > 0:
                         camera_ids_to_query = camera_ids
                     # 如果 camera_ids 是空数组或 None，保持为 None（查询所有）
+
+                # 如果camera_ids为None，从数据库获取所有相机ID，避免调用executor.list_cameras()
+                if camera_ids_to_query is None:
+                    try:
+                        if get_camera_service is not None:
+                            camera_service = await get_camera_service()  # type: ignore
+                            if camera_service:
+                                cameras = (
+                                    await camera_service.camera_repository.find_all()
+                                )
+                                camera_ids_to_query = [c.id for c in cameras]
+                                logger.debug(
+                                    f"从数据库获取到 {len(camera_ids_to_query)} 个相机ID（领域服务）"
+                                )
+                    except Exception as e:
+                        logger.warning(f"从数据库获取相机列表失败: {e}，返回空结果")
+                        return {}
+
                 result = control_service.get_batch_status(camera_ids_to_query)
                 return result
     except ValueError as e:
@@ -481,7 +709,7 @@ async def batch_camera_status(
     except Exception as e:
         logger.warning(f"摄像头控制服务批量状态查询失败，回退到调度器: {e}")
 
-    # 旧实现（回退）
+    # 旧实现（回退）：从数据库获取相机列表，而不是调用executor.list_cameras()
     scheduler = get_scheduler()
 
     camera_ids_to_query = None
@@ -493,7 +721,26 @@ async def batch_camera_status(
             camera_ids_to_query = camera_ids
         # 如果 camera_ids 是空数组或 None，保持为 None（查询所有）
 
-    # The scheduler's get_batch_status can handle the None case to query all
+    # 如果camera_ids为None，从数据库获取所有相机ID，避免调用executor.list_cameras()
+    if camera_ids_to_query is None:
+        try:
+            if get_camera_service is not None:
+                camera_service = await get_camera_service()  # type: ignore
+                if camera_service:
+                    cameras = await camera_service.camera_repository.find_all()
+                    camera_ids_to_query = [c.id for c in cameras]
+                    logger.debug(f"从数据库获取到 {len(camera_ids_to_query)} 个相机ID")
+        except Exception as e:
+            logger.warning(f"从数据库获取相机列表失败: {e}，将查询已启动的相机状态")
+            # 如果数据库查询失败，保持为None，让scheduler查询已启动的相机
+            # 但这样不会触发list_cameras()调用，因为scheduler会直接查询状态
+
+    # 如果camera_ids_to_query仍然为None或空列表，则不查询任何相机
+    if not camera_ids_to_query:
+        logger.debug("没有相机ID需要查询，返回空结果")
+        return {}
+
+    # 查询指定相机的状态
     result = scheduler.get_batch_status(camera_ids_to_query)
 
     logger.debug(f"Batch status query for {len(result)} cameras")
@@ -685,6 +932,8 @@ async def get_camera_stats(
     scheduler = get_scheduler()
     status = scheduler.status(camera_id)
 
+    logger.info(f"获取摄像头统计: camera_id={camera_id}, status={status}")
+
     # 1. 从ProcessManager获取基础运行状态
     stats_response = {
         "camera_id": camera_id,
@@ -702,6 +951,10 @@ async def get_camera_stats(
             "last_detection_time": None,
         },
     }
+
+    logger.info(
+        f"摄像头统计响应: running={stats_response['running']}, pid={stats_response['pid']}, log_file={stats_response['log_file']}"
+    )
 
     # 2. 从内存缓存中获取实时的详细统计数据
     latest_stats_msg = CAMERA_STATS_CACHE.get(camera_id)

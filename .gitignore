@@ -1,267 +1,235 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
 
-# C extensions
-*.so
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-cover/
-
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-.pybuilder/
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
-# .python-version
-
-# pipenv
+!assets/images/
+!data/.gitkeep
+!datasets/.gitkeep
+!docs/images/
+!models/.gitkeep
+!tests/fixtures/images/
 #   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
+#   For a library or package, you might want to ignore these files since the code is
 #   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
-
-# poetry
+#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
 #   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
 #   This is especially recommended for binary packages to ensure reproducibility, and is more
 #   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-#poetry.lock
-
-# pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#pdm.lock
-#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
-#   in version control.
+#   having no cross-platform support, pipenv may install dependencies that don't work, or not
 #   https://pdm.fming.dev/#use-with-ide
-.pdm.toml
-
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.env
-.venv
-venv
-env/
-ENV/
-env.bak/
-venv.bak/
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# pytype static type analyzer
-.pytype/
-
-# Cython debug symbols
-cython_debug/
-
-# PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be added to the global gitignore or merged into this project gitignore.  For a PyCharm
-#  project, it is recommended to include the following files:
-#  .idea/
+#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
+#   in version control.
+#   install all needed dependencies.
+#   intended to run in multiple environments; otherwise, check them in:
+#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
 #  *.iml
 #  *.ipr
-
-# Project specific
-# 日志文件
-logs/
-*.log
-
-# 数据文件
-data/
-!data/.gitkeep
-
-# 模型文件 - 允许提交模型目录结构和配置文件
-# models/ - 已移除，允许提交模型目录
-!models/.gitkeep
-
-# 临时文件
-temp/
-tmp/
-
-# 配置文件（包含敏感信息）
-config/local.yaml
-config/production.yaml
-.env.local
-.env.production
-
-# 输出文件
-output/
-results/
-
-# IDE 文件
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# 系统文件
-.DS_Store
-Thumbs.db
-
-# 视频文件（大文件）
-*.mp4
-*.avi
-*.mov
-*.mkv
-
-# 图像文件忽略规则已移除，允许测试图片被版本控制跟踪
-# 注意：禁止创建人工测试图片，必须使用真实的测试数据
-# *.jpg
-# *.jpeg
-# *.png
+#  .idea/
+#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
+#  Usually these files are written by a python script from a template
+#  be added to the global gitignore or merged into this project gitignore.  For a PyCharm
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+#  project, it is recommended to include the following files:
 # *.bmp
-# *.tiff
-!docs/images/
-!assets/images/
-!tests/fixtures/images/
-
-# 模型权重文件
+# *.jpeg
+# *.jpg
+# *.png
 # *.pt  # 允许提交.pt模型文件到版本控制
-*.pth
-*.onnx
-*.trt
-*.engine
-
-# 数据集
-datasets/
-!datasets/.gitkeep
-
-# 实验结果
-experiments/
-runs/
-wandb/
-
-# 缓存文件
-.cache/
-cache/
-
-# 备份文件
-*.bak
-*.backup
-*.old
-
-# 压缩文件
-*.zip
-*.tar.gz
-*.rar
-*.7z
-
+# *.tiff
+# .python-version
+# Byte-compiled / optimized / DLL files
+# C extensions
+# Celery stuff
+# Cython debug symbols
+# Distribution / packaging
+# Django stuff:
+# Environments
+# Flask stuff:
 # Frontend artifacts
-frontend/node_modules/
-frontend/dist/
-frontend/.vite/
-
+# IDE 文件
+# IPython
+# Installer logs
+# Jupyter Notebook
+# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
+# Project specific
+# PyBuilder
+# PyCharm
+# PyInstaller
+# Pyre type checker
+# Rope project settings
+# SageMath parsed files
+# Scrapy stuff:
+# Sphinx documentation
+# Spyder project settings
+# Translations
+# Unit test / coverage reports
+# mkdocs documentation
+# models/ - 已移除，允许提交模型目录
+# mypy
+# pdm
+# pipenv
+# poetry
+# pyenv
+# pytype static type analyzer
+# 临时文件
+# 压缩文件
+# 图像文件忽略规则已移除，允许测试图片被版本控制跟踪
+# 备份文件
+# 实验结果
+# 数据文件
+# 数据集
+# 日志文件
+# 本地开发配置（可能包含敏感信息）
+# 模型文件 - 允许提交模型目录结构和配置文件
+# 模型权重文件
+# 注意：禁止创建人工测试图片，必须使用真实的测试数据
 # 生产环境配置（包含敏感信息）
+# 系统文件
+# 缓存文件
+# 视频文件（大文件）
+# 输出文件
+# 部署相关
+# 配置文件（包含敏感信息）
+#Pipfile.lock
+#pdm.lock
+#poetry.lock
+*$py.class
+*.7z
+*.avi
+*.backup
+*.bak
+*.cover
+*.egg
+*.egg-info/
+*.engine
+*.log
+*.manifest
+*.mkv
+*.mo
+*.mov
+*.mp4
+*.old
+*.onnx
+*.pot
+*.pt
+*.pth
+*.py,cover
+*.py[cod]
+*.rar
+*.sage.py
+*.so
+*.spec
+*.swo
+*.swp
+*.tar  # Docker镜像导出文件
+*.tar.gz
+*.trt
+*.zip
+*~
+.DS_Store
+.Python
+.cache
+.cache/
+.coverage
+.coverage.*
+.dmypy.json
+.eggs/
+.env
+.env.*.local
+.env.local
 .env.production
 .env.production.backup*
 .env.production.credentials
-secrets/
-production_secrets_backup.txt
-
-# 本地开发配置（可能包含敏感信息）
-.env.local
-.env.*.local
-
-# 部署相关
+.hypothesis/
+.idea/
+.installed.cfg
+.ipynb_checkpoints
+.mypy_cache/
+.nox/
+.pdm.toml
+.pybuilder/
+.pyre/
+.pytest_cache/
+.pytype/
+.ropeproject
+.scrapy
+.spyderproject
+.spyproject
+.tox/
+.venv
+.vscode/
+.webassets-cache
+/site
+ENV/
+MANIFEST
+Thumbs.db
+__pycache__/
+__pypackages__/
+build/
+cache/
+celerybeat-schedule
+celerybeat.pid
+config/local.yaml
+config/production.yaml
+cover/
+coverage.xml
+cython_debug/
+data/
+datasets/
+db.sqlite3
+db.sqlite3-journal
+debug/
 deployment_history.log
-*.tar  # Docker镜像导出文件
+develop-eggs/
+dist/
+dmypy.json
+docs/_build/
+downloads/
+eggs/
+env.bak/
+env/
+experiments/
+frontend/.vite/
+frontend/dist/
+frontend/node_modules/
+htmlcov/
+instance/
+ipython_config.py
+lib/
+lib64/
+local_settings.py
+logs/
+models/mlops/*.pt
+models/mlops/reports/*.json
+nosetests.xml
+output/
+parts/
+pip-delete-this-directory.txt
+pip-log.txt
+production_secrets_backup.txt
+profile_default/
+results/
+runs/
+sdist/
+secrets/
+share/python-wheels/
+target/
+temp/
+temp_*.jpg
+temp_*.png
+tmp/
+var/
+venv
+venv.bak/
+wandb/
+wheels/
+
+# 调试文件
+debug/
+temp_*.jpg
+temp_*.png
+temp_*.jpeg
+
+# 模型文件（大文件，不提交）
+models/mlops/*.pt
+models/mlops/reports/*.json
+
+# 临时文件
+*.tmp

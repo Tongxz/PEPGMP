@@ -9,12 +9,16 @@ class AbstractProcessExecutor(ABC):
     """Defines the interface for all process executors."""
 
     @abstractmethod
-    def start(self, camera_id: str) -> Dict[str, Any]:
+    def start(
+        self, camera_id: str, camera_config: Dict[str, Any] | None = None
+    ) -> Dict[str, Any]:
         """
         Starts a detection process for a given camera ID.
 
         Args:
             camera_id: The ID of the camera to start.
+            camera_config: Optional camera configuration dictionary.
+                          If provided, will be used instead of looking up from list_cameras().
 
         Returns:
             A dictionary containing the result of the start operation,
@@ -34,12 +38,16 @@ class AbstractProcessExecutor(ABC):
         """
 
     @abstractmethod
-    def restart(self, camera_id: str) -> Dict[str, Any]:
+    def restart(
+        self, camera_id: str, camera_config: Dict[str, Any] | None = None
+    ) -> Dict[str, Any]:
         """
         Restarts the detection process for a given camera ID.
 
         Args:
             camera_id: The ID of the camera to restart.
+            camera_config: Optional camera configuration dictionary.
+                          If provided, will be used instead of looking up from list_cameras().
 
         Returns:
             A dictionary containing the result of the restart operation.
