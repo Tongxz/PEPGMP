@@ -276,6 +276,11 @@ const menuOptions = computed<MenuOption[]>(() => {
       label: '实时监控',
       key: 'realtime-monitor',
       icon: () => h(NIcon, null, { default: () => h(CameraOutline) })
+    },
+    {
+      label: '检测配置',
+      key: 'detection-config',
+      icon: () => h(NIcon, null, { default: () => h(SettingsOutline) })
     }
   ]
   return options
@@ -292,7 +297,8 @@ const breadcrumbs = computed(() => {
     '/system-info': '系统信息',
     '/alerts': '告警中心',
     '/mlops': 'MLOps管理',
-    '/realtime-monitor': '实时监控'
+    '/realtime-monitor': '实时监控',
+    '/detection-config': '检测配置'
   }
 
   const currentPath = route.path

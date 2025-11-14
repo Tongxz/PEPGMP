@@ -237,6 +237,29 @@
               />
             </n-form-item>
 
+            <!-- 视频流配置 -->
+            <n-divider style="margin: 16px 0">检测与视频流配置</n-divider>
+
+            <n-form-item label="检测频率" path="log_interval">
+              <n-input-number
+                v-model:value="formData.log_interval"
+                :min="1"
+                :max="1000"
+                :step="10"
+                style="width: 100%"
+              />
+              <n-text depth="3" style="margin-left: 12px; font-size: 12px">
+                每 {{ formData.log_interval }} 帧检测一次，视频流将同步显示检测结果
+              </n-text>
+            </n-form-item>
+
+            <n-alert type="info" style="margin-top: 8px">
+              <template #icon>
+                <n-icon><InformationCircleOutline /></n-icon>
+              </template>
+              <strong>说明：</strong>检测频率同时控制检测和视频流推送的频率。视频流将显示检测后的结果（带标注的帧）。
+            </n-alert>
+
             <div class="form-actions">
               <n-space>
                 <n-button type="primary" @click="onSubmitModal" :loading="loading">
@@ -280,7 +303,7 @@
 import { ref, reactive, onMounted, onUnmounted, h, computed, watch } from 'vue'
 import {
   NCard, NForm, NFormItem, NInput, NInputNumber, NButton, NAlert,
-  NDataTable, NText, NTag, NSpace, NPopconfirm, NIcon, NSwitch, NModal, useMessage
+  NDataTable, NText, NTag, NSpace, NPopconfirm, NIcon, NSwitch, NModal, NSlider, NDivider, useMessage
 } from 'naive-ui'
 import type { DataTableColumns, FormInst, FormRules } from 'naive-ui'
 import {
@@ -329,7 +352,9 @@ const formData = reactive({
   source: '',
   resolution: '',
   fps: null as number | null,
-  regions_file: ''
+  regions_file: '',
+  // 检测与视频流配置（简化：只保留检测频率）
+  log_interval: 120,
 })
 
 // 表单验证规则
@@ -595,13 +620,25 @@ async function updateCamera(): Promise<boolean> {
     }
 
     loading.value = true
+    // 编辑模式：只包含非空字段，但确保 log_interval 被包含（即使未修改）
     const payload = collectFormData(false)
+
+    // 确保 log_interval 被包含（如果表单中有值）
+    if (formData.log_interval !== undefined && formData.log_interval !== null) {
+      payload.log_interval = formData.log_interval
+    }
+
+    console.log('[CameraConfig] 更新摄像头:', { id, payload, formData })
     await cameraStore.updateCamera(id, payload)
+
+    // 刷新摄像头列表以显示最新配置
+    await cameraStore.fetchCameras()
 
     clearForm()
     message.success('摄像头更新成功')
     return true
   } catch (error: any) {
+    console.error('[CameraConfig] 更新摄像头失败:', error)
     message.error('更新失败: ' + (error.message || error))
     return false
   } finally {
@@ -762,6 +799,8 @@ function fillForm(camera: any) {
   formData.resolution = camera.resolution || ''
   formData.fps = camera.fps || null
   formData.regions_file = camera.regions_file || ''
+  // 检测与视频流配置（从camera配置或默认值）
+  formData.log_interval = camera.log_interval ?? 120
 }
 
 // 收集表单数据
@@ -775,6 +814,12 @@ function collectFormData(includeEmpty: boolean) {
   if (includeEmpty || formData.fps !== null) payload.fps = formData.fps
   if (includeEmpty || formData.regions_file.trim()) payload.regions_file = formData.regions_file.trim()
 
+  // 检测与视频流配置（简化：只保留检测频率）
+  // 确保 log_interval 被包含（编辑模式下也需要）
+  if (includeEmpty || (formData.log_interval !== undefined && formData.log_interval !== null)) {
+    payload.log_interval = formData.log_interval
+  }
+
   return payload
 }
 
@@ -786,6 +831,8 @@ function clearForm() {
   formData.resolution = ''
   formData.fps = null
   formData.regions_file = ''
+  // 检测与视频流配置重置为默认值
+  formData.log_interval = 120
 }
 
 // 重置表单
@@ -793,6 +840,8 @@ function resetForm() {
   clearForm()
   formRef.value?.restoreValidation()
 }
+
+// 已移除逐帧模式监听（配置已简化）
 
 const refreshCameras = async () => {
   try {

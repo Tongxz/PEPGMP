@@ -3,7 +3,8 @@ MLOps数据库模型
 定义数据集、部署、工作流等实体的数据模型
 """
 
-from typing import Any, Dict
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional
 
 from sqlalchemy import (
     JSON,
@@ -17,7 +18,6 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.sql import func
 
 Base = declarative_base()
 
@@ -41,13 +41,27 @@ class Dataset(Base):
     description = Column(Text, nullable=True)
     tags = Column(JSON, nullable=True)  # 存储标签列表JSON
     file_path = Column(String(500), nullable=True)  # 数据集文件路径
-    created_at = Column(DateTime, nullable=False, default=func.now())
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.utcnow())
     updated_at = Column(
-        DateTime, nullable=False, default=func.now(), onupdate=func.now()
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.utcnow(),
+        onupdate=lambda: datetime.utcnow(),
     )
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
+
+        def format_datetime(dt: Optional[datetime]) -> Optional[str]:
+            """格式化datetime为带时区的ISO格式"""
+            if dt is None:
+                return None
+            # 如果datetime没有时区信息，假设是UTC时间
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            # 生成带时区的ISO格式（如 2025-11-13T01:20:16+00:00）
+            return dt.isoformat()
+
         return {
             "id": self.id,
             "name": self.name,
@@ -61,8 +75,8 @@ class Dataset(Base):
             "description": self.description,
             "tags": self.tags,
             "file_path": self.file_path,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "created_at": format_datetime(self.created_at),
+            "updated_at": format_datetime(self.updated_at),
         }
 
 
@@ -100,13 +114,27 @@ class Deployment(Base):
     success_rate = Column(Float, nullable=True, default=0.0)
     # 部署信息
     deployment_config = Column(JSON, nullable=True)  # 存储完整部署配置
-    created_at = Column(DateTime, nullable=False, default=func.now())
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.utcnow())
     updated_at = Column(
-        DateTime, nullable=False, default=func.now(), onupdate=func.now()
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.utcnow(),
+        onupdate=lambda: datetime.utcnow(),
     )
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
+
+        def format_datetime(dt: Optional[datetime]) -> Optional[str]:
+            """格式化datetime为带时区的ISO格式"""
+            if dt is None:
+                return None
+            # 如果datetime没有时区信息，假设是UTC时间
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            # 生成带时区的ISO格式（如 2025-11-13T01:20:16+00:00）
+            return dt.isoformat()
+
         return {
             "id": self.id,
             "name": self.name,
@@ -131,8 +159,8 @@ class Deployment(Base):
             "total_requests": self.total_requests,
             "success_rate": self.success_rate,
             "deployment_config": self.deployment_config,
-            "deployed_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "deployed_at": format_datetime(self.created_at),
+            "updated_at": format_datetime(self.updated_at),
         }
 
 
@@ -163,13 +191,27 @@ class Workflow(Base):
     next_run = Column(DateTime, nullable=True)
     # 工作流配置
     workflow_config = Column(JSON, nullable=True)  # 存储完整工作流配置
-    created_at = Column(DateTime, nullable=False, default=func.now())
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.utcnow())
     updated_at = Column(
-        DateTime, nullable=False, default=func.now(), onupdate=func.now()
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.utcnow(),
+        onupdate=lambda: datetime.utcnow(),
     )
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
+
+        def format_datetime(dt: Optional[datetime]) -> Optional[str]:
+            """格式化datetime为带时区的ISO格式"""
+            if dt is None:
+                return None
+            # 如果datetime没有时区信息，假设是UTC时间
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            # 生成带时区的ISO格式（如 2025-11-13T01:20:16+00:00）
+            return dt.isoformat()
+
         return {
             "id": self.id,
             "name": self.name,
@@ -182,11 +224,11 @@ class Workflow(Base):
             "run_count": self.run_count,
             "success_rate": self.success_rate,
             "avg_duration": self.avg_duration,
-            "last_run": self.last_run.isoformat() if self.last_run else None,
-            "next_run": self.next_run.isoformat() if self.next_run else None,
+            "last_run": format_datetime(self.last_run),
+            "next_run": format_datetime(self.next_run),
             "workflow_config": self.workflow_config,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "created_at": format_datetime(self.created_at),
+            "updated_at": format_datetime(self.updated_at),
             "recent_runs": [],  # 需要单独查询运行记录
         }
 
@@ -199,27 +241,40 @@ class WorkflowRun(Base):
     id = Column(String(50), primary_key=True)
     workflow_id = Column(String(50), nullable=False, index=True)
     status = Column(String(20), nullable=False)  # success, failed, running, pending
-    started_at = Column(DateTime, nullable=False, default=func.now())
+    started_at = Column(DateTime, nullable=False, default=lambda: datetime.utcnow())
     ended_at = Column(DateTime, nullable=True)
     duration = Column(Integer, nullable=True)  # 运行时长（分钟）
     error_message = Column(Text, nullable=True)
     run_log = Column(Text, nullable=True)  # 运行日志
     run_config = Column(JSON, nullable=True)  # 运行时的配置快照
-    created_at = Column(DateTime, nullable=False, default=func.now())
+    created_at = Column(
+        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
+
+        def format_datetime(dt: Optional[datetime]) -> Optional[str]:
+            """格式化datetime为带时区的ISO格式"""
+            if dt is None:
+                return None
+            # 如果datetime没有时区信息，假设是UTC时间
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            # 生成带时区的ISO格式（如 2025-11-13T01:20:16+00:00）
+            return dt.isoformat()
+
         return {
             "id": self.id,
             "workflow_id": self.workflow_id,
             "status": self.status,
-            "started_at": self.started_at.isoformat() if self.started_at else None,
-            "ended_at": self.ended_at.isoformat() if self.ended_at else None,
+            "started_at": format_datetime(self.started_at),
+            "ended_at": format_datetime(self.ended_at),
             "duration": self.duration,
             "error_message": self.error_message,
             "run_log": self.run_log,
             "run_config": self.run_config,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "created_at": format_datetime(self.created_at),
         }
 
 
@@ -243,12 +298,27 @@ class ModelRegistry(Base):
     artifacts = Column(JSON, nullable=True)
     training_params = Column(JSON, nullable=True)
     description = Column(Text, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=func.now())
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.utcnow())
     updated_at = Column(
-        DateTime, nullable=False, default=func.now(), onupdate=func.now()
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.utcnow(),
+        onupdate=lambda: datetime.utcnow(),
     )
 
     def to_dict(self) -> Dict[str, Any]:
+        """转换为字典格式"""
+
+        def format_datetime(dt: Optional[datetime]) -> Optional[str]:
+            """格式化datetime为带时区的ISO格式"""
+            if dt is None:
+                return None
+            # 如果datetime没有时区信息，假设是UTC时间
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            # 生成带时区的ISO格式（如 2025-11-13T01:20:16+00:00）
+            return dt.isoformat()
+
         return {
             "id": self.id,
             "name": self.name,
@@ -263,6 +333,6 @@ class ModelRegistry(Base):
             "artifacts": self.artifacts,
             "training_params": self.training_params,
             "description": self.description,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "created_at": format_datetime(self.created_at),
+            "updated_at": format_datetime(self.updated_at),
         }

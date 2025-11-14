@@ -192,7 +192,9 @@ class ModelTrainingService:
         batch_size = int(
             training_params.get("batch_size", self._config.yolo_batch_size)
         )
-        device = training_params.get("device", self._config.yolo_device)
+        device_raw = training_params.get("device", self._config.yolo_device)
+        # 智能选择设备：如果device="auto"，使用ModelConfig选择设备，否则使用指定设备
+        device = self._select_device(device_raw)
         patience = int(training_params.get("patience", self._config.yolo_patience))
         run_name = training_params.get("run_name", f"hairnet_{timestamp}")
 
@@ -382,3 +384,48 @@ class ModelTrainingService:
             except Exception:  # pragma: no cover - 安全转换
                 return str(value)
         return value
+
+    def _select_device(self, device_request: str) -> str:
+        """
+        智能选择设备
+
+        Args:
+            device_request: 设备请求（'cpu'|'cuda'|'mps'|'auto'）
+
+        Returns:
+            最终设备字符串：'cpu'|'cuda'|'mps'
+        """
+        # 如果明确指定了设备，直接返回
+        if device_request and device_request.lower() in {"cpu", "cuda", "mps"}:
+            device_req = device_request.lower()
+            # 验证设备是否可用
+            try:
+                import torch
+
+                if device_req == "cuda" and not torch.cuda.is_available():
+                    logger.warning("CUDA 不可用，回退到 CPU")
+                    return "cpu"
+                if device_req == "mps":
+                    mps_available = bool(
+                        getattr(torch.backends, "mps", None)
+                        and torch.backends.mps.is_available()
+                    )
+                    if not mps_available:
+                        logger.warning("MPS 不可用，回退到 CPU")
+                        return "cpu"
+                return device_req
+            except ImportError:
+                logger.warning("PyTorch 未安装，强制使用 CPU")
+                return "cpu"
+
+        # 如果device="auto"或未指定，使用ModelConfig选择设备
+        try:
+            from src.config.model_config import ModelConfig
+
+            model_config = ModelConfig()
+            device = model_config.select_device(requested=device_request)
+            logger.info(f"设备选择: {device_request} -> {device}")
+            return device
+        except Exception as e:
+            logger.warning(f"设备选择失败，使用 CPU: {e}")
+            return "cpu"

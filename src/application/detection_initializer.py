@@ -98,7 +98,16 @@ class DetectionInitializer:
 
         # 6. 初始化其他组件
         behavior_recognizer = BehaviorRecognizer()
-        hairnet_detector = YOLOHairnetDetector(device=device)
+        # 从环境变量读取是否保存调试ROI
+        save_debug_roi = os.getenv("SAVE_DEBUG_ROI", "false").lower() in (
+            "true",
+            "1",
+            "yes",
+        )
+        debug_roi_dir = os.getenv("DEBUG_ROI_DIR", None)
+        hairnet_detector = YOLOHairnetDetector(
+            device=device, save_debug_roi=save_debug_roi, debug_roi_dir=debug_roi_dir
+        )
 
         # 7. 创建管线
         pipeline = OptimizedDetectionPipeline(

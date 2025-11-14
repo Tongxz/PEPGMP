@@ -178,20 +178,59 @@ class DetectionServiceDomain:
 
             # 7. 保存违规事件到violation_events表（如果有违规）
             if violations and self.violation_repository:
+                # 从检测记录的metadata中获取快照路径
+                snapshots = (
+                    record.metadata.get("snapshots", []) if record.metadata else []
+                )
+                logger.info(
+                    f"准备保存违规事件: violations_count={len(violations)}, "
+                    f"snapshots_count={len(snapshots)}"
+                )
+
                 for violation in violations:
                     try:
-                        # 在violation的metadata中添加detection_id（字符串格式，用于记录）
+                        # 为每个违规查找对应的快照路径
+                        snapshot_path = None
+                        if snapshots:
+                            # 优先查找匹配违规类型的快照
+                            for snapshot in snapshots:
+                                snapshot_violation_type = snapshot.get("violation_type")
+                                if (
+                                    snapshot_violation_type
+                                    == violation.violation_type.value
+                                ):
+                                    snapshot_path = snapshot.get("relative_path")
+                                    logger.info(
+                                        f"找到匹配的快照: violation_type={violation.violation_type.value}, "
+                                        f"snapshot_path={snapshot_path}"
+                                    )
+                                    break
+
+                            # 如果没有匹配的违规类型快照，使用第一个快照
+                            if not snapshot_path and snapshots:
+                                snapshot_path = snapshots[0].get("relative_path")
+                                logger.info(f"使用第一个快照: snapshot_path={snapshot_path}")
+
+                        # 在violation的metadata中添加detection_id和snapshot_path
                         if not violation.metadata:
                             violation.metadata = {}
                         violation.metadata["detection_id"] = saved_record_id
+                        if snapshot_path:
+                            violation.metadata["snapshot_path"] = snapshot_path
+                        else:
+                            logger.warning(
+                                f"未找到快照路径: violation_type={violation.violation_type.value}, "
+                                f"camera={violation.camera_id}, snapshots={snapshots}"
+                            )
 
-                        # 保存违规事件（传递detection_id，仓储会处理ID转换）
+                        # 保存违规事件（传递detection_id和snapshot_path，仓储会处理）
                         await self.violation_repository.save(
                             violation, detection_id=saved_record_id
                         )
-                        logger.debug(
+                        logger.info(
                             f"违规事件已保存: type={violation.violation_type.value}, "
-                            f"camera={violation.camera_id}, detection_id={saved_record_id}"
+                            f"camera={violation.camera_id}, detection_id={saved_record_id}, "
+                            f"snapshot_path={snapshot_path}"
                         )
                     except Exception as e:
                         logger.error(f"保存违规事件失败: {e}", exc_info=True)
@@ -1202,17 +1241,71 @@ class DetectionServiceDomain:
             analytics = await self.get_camera_analytics(camera_id)
 
             # 从analytics中提取数据（get_camera_analytics返回的结构）
-            camera_info = analytics.get("camera_info", {})
+            analytics.get("camera_info", {})
+            # 从Redis缓存获取实时统计数据（优先）
+            from src.api.redis_listener import CAMERA_STATS_CACHE
+
+            latest_stats_msg = CAMERA_STATS_CACHE.get(camera_id)
+
             stats_data = {
                 "total_frames": 0,
-                "processed_frames": analytics.get("total_objects_detected", 0),
-                "detected_persons": analytics.get("person_count", 0),
-                "detected_hairnets": analytics.get("total_hairnet_violations", 0),
-                "detected_handwash": analytics.get("total_handwash_events", 0),
+                "processed_frames": 0,
+                "detected_persons": 0,
+                "detected_hairnets": 0,
+                "detected_handwash": 0,
                 "avg_fps": 0.0,
                 "avg_detection_time": 0.0,
                 "last_detection_time": None,
             }
+
+            # 优先使用Redis缓存的实时数据
+            if latest_stats_msg and isinstance(latest_stats_msg, dict):
+                realtime_data = latest_stats_msg.get("data", {})
+                timestamp = latest_stats_msg.get("timestamp")
+                if timestamp:
+                    stats_data["last_detection_time"] = datetime.fromtimestamp(
+                        timestamp
+                    ).strftime("%Y-%m-%d %H:%M:%S")
+                stats_data.update(
+                    {
+                        "detected_persons": realtime_data.get(
+                            "detected_persons", realtime_data.get("persons", 0)
+                        ),
+                        "detected_hairnets": realtime_data.get(
+                            "detected_hairnets", realtime_data.get("hairnets", 0)
+                        ),
+                        "detected_handwash": realtime_data.get(
+                            "detected_handwash", realtime_data.get("handwash", 0)
+                        ),
+                        "avg_fps": realtime_data.get(
+                            "avg_fps", realtime_data.get("fps", 0.0)
+                        ),
+                        "processed_frames": realtime_data.get("processed_frames", 0),
+                        "total_frames": realtime_data.get("total_frames", 0),
+                        "avg_detection_time": realtime_data.get(
+                            "avg_detection_time", 0.0
+                        ),
+                    }
+                )
+                logger.debug(
+                    f"从Redis获取统计数据: camera={camera_id}, "
+                    f"detected_persons={stats_data['detected_persons']}, "
+                    f"detected_hairnets={stats_data['detected_hairnets']}, "
+                    f"detected_handwash={stats_data['detected_handwash']}, "
+                    f"realtime_data_keys={list(realtime_data.keys())}"
+                )
+            else:
+                # 回退到analytics数据
+                stats_data.update(
+                    {
+                        "processed_frames": analytics.get("total_objects_detected", 0),
+                        "detected_persons": analytics.get("person_count", 0),
+                        "detected_hairnets": analytics.get(
+                            "total_hairnet_violations", 0
+                        ),
+                        "detected_handwash": analytics.get("total_handwash_events", 0),
+                    }
+                )
 
             # 如果performance信息存在，更新相关字段
             if "performance" in analytics:
@@ -1220,12 +1313,51 @@ class DetectionServiceDomain:
                 stats_data["avg_fps"] = perf.get("fps_estimate", 0.0)
                 stats_data["avg_detection_time"] = perf.get("avg_processing_time", 0.0)
 
+            # 获取实际运行状态（从scheduler获取）- 必须获取，不能失败
+            # 注意：这里必须同步调用，不能使用async，因为scheduler.status是同步方法
+            running = False
+            pid = 0
+            log_file = ""
+            try:
+                from src.services.scheduler import get_scheduler
+
+                scheduler = get_scheduler()
+                # 使用status方法（同步）
+                status = scheduler.status(camera_id)
+                running = status.get("running", False)
+                pid = status.get("pid", 0)
+                log_file = status.get("log", "")
+                logger.info(
+                    f"领域服务获取摄像头运行状态: camera_id={camera_id}, "
+                    f"running={running}, pid={pid}, log_file={log_file}, status={status}"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"获取摄像头运行状态失败，尝试直接查询: camera_id={camera_id}, error={e}",
+                    exc_info=True,
+                )
+                # 如果scheduler.status失败，尝试使用get_status
+                try:
+                    from src.services.scheduler import get_scheduler
+
+                    scheduler = get_scheduler()
+                    status = scheduler.get_status(camera_id)  # 使用get_status而不是status
+                    running = status.get("running", False)
+                    pid = status.get("pid", 0)
+                    log_file = status.get("log", "")
+                    logger.info(f"通过get_status获取运行状态成功: running={running}, pid={pid}")
+                except Exception as e2:
+                    logger.error(
+                        f"所有方式获取运行状态都失败: camera_id={camera_id}, error={e2}",
+                        exc_info=True,
+                    )
+
             # 转换为旧API响应结构
             stats_response = {
                 "camera_id": camera_id,
-                "running": camera_info.get("is_active", True),
-                "pid": 0,
-                "log_file": "",
+                "running": running,
+                "pid": pid,
+                "log_file": log_file,
                 "stats": stats_data,
             }
 

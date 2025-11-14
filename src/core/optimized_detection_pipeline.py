@@ -25,10 +25,11 @@ from src.detection.pose_detector import PoseDetectorFactory
 
 # 导入FrameMetadata相关类（可选，用于状态管理和异步处理）
 try:
+    from src.core.async_detection_pipeline import AsyncDetectionPipeline
     from src.core.frame_metadata import FrameMetadata, FrameSource
     from src.core.frame_metadata_manager import FrameMetadataManager
     from src.core.state_manager import StateManager
-    from src.core.async_detection_pipeline import AsyncDetectionPipeline
+
     FRAME_METADATA_AVAILABLE = True
 except ImportError:
     FRAME_METADATA_AVAILABLE = False
@@ -154,7 +155,9 @@ class OptimizedDetectionPipeline:
         cache_ttl: float = 30.0,
         cascade_config: Optional[Dict[str, Any]] = None,
         enable_state_management: bool = True,  # 是否启用状态管理
-        frame_metadata_manager: Optional[FrameMetadataManager] = None,  # 可选的FrameMetadataManager
+        frame_metadata_manager: Optional[
+            FrameMetadataManager
+        ] = None,  # 可选的FrameMetadataManager
         enable_async: bool = False,  # 是否启用异步检测（任务1.3）
         max_workers: int = 2,  # 异步检测的最大工作线程数
     ):
@@ -230,30 +233,34 @@ class OptimizedDetectionPipeline:
             "refined": 0,
             "time_total": 0.0,
         }
-        
+
         # 状态管理相关（任务1.1）
-        self.enable_state_management = enable_state_management and FRAME_METADATA_AVAILABLE
+        self.enable_state_management = (
+            enable_state_management and FRAME_METADATA_AVAILABLE
+        )
         if self.enable_state_management:
             # 初始化FrameMetadataManager（与任务1.3共享）
-            self.frame_metadata_manager = frame_metadata_manager or FrameMetadataManager(
-                max_history=1000,
-                sync_window=0.1
+            self.frame_metadata_manager = (
+                frame_metadata_manager
+                or FrameMetadataManager(max_history=1000, sync_window=0.1)
             )
-            
+
             # 初始化StateManager
             params = get_unified_params()
             state_params = getattr(params, "state_management", None)
             if state_params:
                 stability_frames = getattr(state_params, "stability_frames", 5)
-                confidence_threshold = getattr(state_params, "confidence_threshold", 0.7)
+                confidence_threshold = getattr(
+                    state_params, "confidence_threshold", 0.7
+                )
             else:
                 stability_frames = 5
                 confidence_threshold = 0.7
-            
+
             self.state_manager = StateManager(
                 stability_frames=stability_frames,
                 confidence_threshold=confidence_threshold,
-                frame_metadata_manager=self.frame_metadata_manager
+                frame_metadata_manager=self.frame_metadata_manager,
             )
             logger.info("状态管理已启用")
         else:
@@ -261,7 +268,14 @@ class OptimizedDetectionPipeline:
             self.state_manager = None
             if enable_state_management:
                 logger.warning("状态管理被请求但FrameMetadata不可用，已禁用")
-        
+
+        # 保存统一参数配置（用于可视化置信度阈值）
+        try:
+            self.params = get_unified_params()
+        except Exception as e:
+            logger.warning(f"加载统一参数配置失败: {e}，使用默认值")
+            self.params = None
+
         # 异步检测相关（任务1.3）
         self.enable_async = enable_async and FRAME_METADATA_AVAILABLE
         if self.enable_async:
@@ -277,7 +291,7 @@ class OptimizedDetectionPipeline:
                     pose_detector=self.pose_detector,
                     behavior_recognizer=self.behavior_recognizer,
                     frame_metadata_manager=self.frame_metadata_manager,  # 共享
-                    max_workers=max_workers
+                    max_workers=max_workers,
                 )
                 logger.info(f"异步检测已启用: max_workers={max_workers}")
         else:
@@ -354,7 +368,7 @@ class OptimizedDetectionPipeline:
             self.frame_cache.put(image, result)
 
         return result
-    
+
     def _execute_detection_pipeline_async(
         self,
         image: np.ndarray,
@@ -365,64 +379,59 @@ class OptimizedDetectionPipeline:
     ) -> DetectionResult:
         """
         使用异步检测管道执行检测
-        
+
         Args:
             image: 输入图像
             camera_id: 摄像头ID
             enable_hairnet: 是否启用发网检测
             enable_handwash: 是否启用洗手检测
             enable_sanitize: 是否启用消毒检测
-        
+
         Returns:
             DetectionResult: 综合检测结果
         """
         # 创建FrameMetadata
         frame_meta = self.frame_metadata_manager.create_frame_metadata(
-            frame=image,
-            camera_id=camera_id,
-            source=FrameSource.REALTIME_STREAM
+            frame=image, camera_id=camera_id, source=FrameSource.REALTIME_STREAM
         )
-        
+
         # 执行异步检测
         frame_meta = asyncio.run(
             self.async_pipeline.detect_comprehensive_async(
-                frame_meta,
-                enable_hairnet,
-                enable_handwash,
-                enable_sanitize
+                frame_meta, enable_hairnet, enable_handwash, enable_sanitize
             )
         )
-        
+
         # 应用状态稳定判定（任务1.1）
         if self.enable_state_management and self.state_manager:
             for hairnet_result in frame_meta.hairnet_results:
                 hairnet_confidence = hairnet_result.get("hairnet_confidence", 0.0)
                 has_hairnet = hairnet_result.get("has_hairnet", False)
-                
+
                 # 如果未佩戴发网，使用置信度作为违规置信度
                 if has_hairnet is False:
                     violation_confidence = hairnet_confidence
                 else:
                     violation_confidence = 0.0
-                
-                self.state_manager.update_state(
-                    frame_meta,
-                    violation_confidence
-                )
-        
+
+                self.state_manager.update_state(frame_meta, violation_confidence)
+
         # 转换为DetectionResult（向后兼容）
-        return self._frame_meta_to_detection_result(frame_meta)
-    
+        # 传递原始图像用于创建可视化图片
+        return self._frame_meta_to_detection_result(frame_meta, image)
+
     def _frame_meta_to_detection_result(
         self,
         frame_meta: FrameMetadata,
+        image: Optional[np.ndarray] = None,
     ) -> DetectionResult:
         """
         将FrameMetadata转换为DetectionResult（向后兼容）
-        
+
         Args:
             frame_meta: 帧元数据
-        
+            image: 原始图像（用于创建可视化图片，如果frame_meta.frame为None）
+
         Returns:
             DetectionResult: 检测结果
         """
@@ -430,14 +439,37 @@ class OptimizedDetectionPipeline:
         processing_times = frame_meta.processing_times.copy()
         if "total" not in processing_times:
             processing_times["total"] = sum(processing_times.values())
-        
+
+        # 创建可视化图片（如果原始图像可用）
+        annotated_image = None
+        source_image = frame_meta.frame if frame_meta.frame is not None else image
+        if source_image is not None:
+            try:
+                # 从配置中获取可视化最小置信度阈值（默认0.5）
+                min_confidence = 0.5
+                if hasattr(self, "params") and self.params is not None:
+                    # 使用人体检测置信度阈值作为可视化阈值，但不低于0.5
+                    human_conf = self.params.human_detection.confidence_threshold
+                    min_confidence = max(0.5, human_conf)
+
+                annotated_image = self._create_annotated_image(
+                    source_image,
+                    frame_meta.person_detections,
+                    frame_meta.hairnet_results,
+                    frame_meta.handwash_results,
+                    frame_meta.sanitize_results,
+                    min_confidence=min_confidence,  # 传递可视化置信度阈值
+                )
+            except Exception as e:
+                logger.warning(f"创建可视化图片失败: {e}", exc_info=True)
+
         return DetectionResult(
             person_detections=frame_meta.person_detections,
             hairnet_results=frame_meta.hairnet_results,
             handwash_results=frame_meta.handwash_results,
             sanitize_results=frame_meta.sanitize_results,
             processing_times=processing_times,
-            annotated_image=None,  # 可以后续添加可视化
+            annotated_image=annotated_image,
             frame_cache_key=frame_meta.frame_hash,
         )
 
@@ -478,10 +510,18 @@ class OptimizedDetectionPipeline:
         hairnet_results = []
         if enable_hairnet and len(person_detections) > 0:
             hairnet_start = time.time()
+            logger.warning(
+                f"🔵 开始发网检测: 人数={len(person_detections)}, "
+                f"hairnet_detector={'存在' if self.hairnet_detector else '不存在'}, "
+                f"类型={type(self.hairnet_detector).__name__ if self.hairnet_detector else 'None'}"
+            )
             hairnet_results = self._detect_hairnet_for_persons(image, person_detections)
             processing_times["hairnet_detection"] = time.time() - hairnet_start
-            logger.info(f"发网检测完成: 处理了 {len(hairnet_results)} 个人")
-            
+            logger.warning(
+                f"🔵 发网检测完成: 处理了 {len(hairnet_results)} 个人, "
+                f"耗时={processing_times['hairnet_detection']:.3f}s"
+            )
+
             # 应用状态稳定判定（任务1.1）
             if self.enable_state_management and self.state_manager:
                 state_start = time.time()
@@ -511,19 +551,28 @@ class OptimizedDetectionPipeline:
 
             processing_times["behavior_detection"] = time.time() - behavior_start
             logger.info(
-                f"行为检测完成: 洗手={len(handwash_results)}, 消毒={len(sanitize_results)}"
+                f"行为检测完成: 洗手={len(handwash_results)}, 消毒={len(sanitize_results)}, "
+                f"人员数={len(person_detections)}, 耗时={processing_times['behavior_detection']:.3f}s"
             )
         else:
             processing_times["behavior_detection"] = 0.0
 
         # 阶段4: 结果可视化（可选）
         viz_start = time.time()
+        # 从配置中获取可视化最小置信度阈值（默认0.5）
+        min_confidence = 0.5
+        if hasattr(self, "params") and self.params is not None:
+            # 使用人体检测置信度阈值作为可视化阈值，但不低于0.5
+            human_conf = self.params.human_detection.confidence_threshold
+            min_confidence = max(0.5, human_conf)
+
         annotated_image = self._create_annotated_image(
             image,
             person_detections,
             hairnet_results,
             handwash_results,
             sanitize_results,
+            min_confidence=min_confidence,  # 传递可视化置信度阈值
         )
         processing_times["visualization"] = time.time() - viz_start
 
@@ -538,7 +587,7 @@ class OptimizedDetectionPipeline:
             processing_times=processing_times,
             annotated_image=annotated_image,
         )
-    
+
     def _apply_state_management_to_hairnet_results(
         self,
         hairnet_results: List[Dict],
@@ -547,26 +596,30 @@ class OptimizedDetectionPipeline:
     ) -> List[Dict]:
         """
         对发网检测结果应用状态管理
-        
+
         Args:
             hairnet_results: 发网检测结果列表
             image: 输入图像
             camera_id: 摄像头ID
-        
+
         Returns:
             更新后的发网检测结果列表（包含稳定状态信息）
         """
         if not self.enable_state_management or not self.state_manager:
             return hairnet_results
-        
+
         updated_results = []
-        
+
         for hairnet_result in hairnet_results:
             # 获取track_id（从hairnet_result或person_id）
-            track_id = hairnet_result.get("track_id") or f"person_{hairnet_result.get('person_id', 0)}"
-            
+            track_id = (
+                hairnet_result.get("track_id")
+                or f"person_{hairnet_result.get('person_id', 0)}"
+            )
+
             # 创建FrameMetadata（简化处理，实际应该使用统一的frame_meta）
             from datetime import datetime
+
             frame_meta = FrameMetadata(
                 frame_id=f"{camera_id}_{time.time():.6f}",
                 timestamp=datetime.utcnow(),
@@ -576,28 +629,27 @@ class OptimizedDetectionPipeline:
                 metadata={"track_id": track_id},
                 hairnet_results=[hairnet_result],
             )
-            
+
             # 获取发网置信度
             hairnet_confidence = hairnet_result.get("hairnet_confidence", 0.0)
             has_hairnet = hairnet_result.get("has_hairnet", False)
-            
+
             # 如果未佩戴发网，使用置信度作为违规置信度；如果佩戴，违规置信度为0
             if has_hairnet is False:
                 violation_confidence = hairnet_confidence
             else:
                 violation_confidence = 0.0
-            
+
             # 更新状态
             stable_state, stable_confidence = self.state_manager.update_state(
-                frame_meta,
-                violation_confidence
+                frame_meta, violation_confidence
             )
-            
+
             # 更新hairnet_result
             hairnet_result["stable_state"] = stable_state
             hairnet_result["stable_confidence"] = stable_confidence
             updated_results.append(hairnet_result)
-        
+
         return updated_results
 
     # ----------------------- 级联逻辑 -----------------------
@@ -797,9 +849,19 @@ class OptimizedDetectionPipeline:
         try:
             # 对于YOLOHairnetDetector，直接传递完整图像进行检测
             if hasattr(self.hairnet_detector, "detect_hairnet_compliance"):
+                logger.warning(
+                    f"🔵 调用YOLOHairnetDetector.detect_hairnet_compliance: "
+                    f"人数={len(person_detections)}, 图像大小={image.shape}"
+                )
                 # 使用YOLOHairnetDetector的detect_hairnet_compliance方法，传递已有的人体检测结果避免重复检测
                 compliance_result = self.hairnet_detector.detect_hairnet_compliance(
                     image, person_detections
+                )
+                logger.warning(
+                    f"🔵 YOLOHairnetDetector返回结果: "
+                    f"total_persons={compliance_result.get('total_persons', 0)}, "
+                    f"persons_with_hairnet={compliance_result.get('persons_with_hairnet', 0)}, "
+                    f"detections数量={len(compliance_result.get('detections', []))}"
                 )
 
                 # 从合规检测结果中提取每个人的发网信息
@@ -823,12 +885,18 @@ class OptimizedDetectionPipeline:
                         hairnet_bbox = detection_info.get("bbox", person_bbox)
 
                     # 计算头部区域坐标（用于显示）
+                    # 优化：使用35%高度，与YOLOHairnetDetector保持一致
                     x1, y1, x2, y2 = map(int, person_bbox)
-                    head_height = int((y2 - y1) * 0.3)
-                    head_y1 = max(0, y1)
-                    head_y2 = min(image.shape[0], y1 + head_height)
-                    head_x1 = max(0, x1)
-                    head_x2 = min(image.shape[1], x2)
+                    person_height = y2 - y1
+                    person_width = x2 - x1
+                    head_height = int(person_height * 0.35)  # 从30%增加到35%
+                    padding_height = int(head_height * 0.2)  # 20%padding
+                    padding_width = int(person_width * 0.1)  # 10%padding宽度
+
+                    head_y1 = max(0, y1 - padding_height)
+                    head_y2 = min(image.shape[0], y1 + head_height + padding_height)
+                    head_x1 = max(0, x1 - padding_width)
+                    head_x2 = min(image.shape[1], x2 + padding_width)
 
                     hairnet_results.append(
                         {
@@ -848,11 +916,17 @@ class OptimizedDetectionPipeline:
                         x1, y1, x2, y2 = map(int, bbox)
 
                         # 提取头部区域
-                        head_height = int((y2 - y1) * 0.3)
-                        head_y1 = max(0, y1)
-                        head_y2 = min(image.shape[0], y1 + head_height)
-                        head_x1 = max(0, x1)
-                        head_x2 = min(image.shape[1], x2)
+                        # 优化：使用35%高度，与YOLOHairnetDetector保持一致
+                        person_height = y2 - y1
+                        person_width = x2 - x1
+                        head_height = int(person_height * 0.35)  # 从30%增加到35%
+                        padding_height = int(head_height * 0.2)  # 20%padding
+                        padding_width = int(person_width * 0.1)  # 10%padding宽度
+
+                        head_y1 = max(0, y1 - padding_height)
+                        head_y2 = min(image.shape[0], y1 + head_height + padding_height)
+                        head_x1 = max(0, x1 - padding_width)
+                        head_x2 = min(image.shape[1], x2 + padding_width)
 
                         if head_y2 > head_y1 and head_x2 > head_x1:
                             head_region = image[head_y1:head_y2, head_x1:head_x2]
@@ -1048,7 +1122,7 @@ class OptimizedDetectionPipeline:
                 # 这里需要完整图像，所以返回估算结果
                 # 实际的手部检测在其他地方进行
             except Exception as e:
-                logger.debug(f"姿态检测器手部检测失败，使用估算方法: {e}")
+                logger.info(f"姿态检测器手部检测失败，使用估算方法: {e}")
 
         # 使用估算方法
         x1, y1, x2, y2 = person_bbox
@@ -1136,8 +1210,19 @@ class OptimizedDetectionPipeline:
                         )
                         scaled_roi = _enhance(scaled_roi)
 
-                        # 调用手部检测（在缩放ROI上）
-                        roi_hands = self.pose_detector.detect_hands(scaled_roi)
+                        # 调用手部检测（在缩放ROI上）- 检查方法是否存在
+                        roi_hands = []
+                        if hasattr(self.pose_detector, "detect_hands"):
+                            try:
+                                roi_hands = self.pose_detector.detect_hands(scaled_roi)
+                            except Exception as e:
+                                logger.debug(f"ROI手部检测失败: {e}")
+                                roi_hands = []
+                        else:
+                            # YOLOv8PoseDetector 没有 detect_hands 方法，使用姿态关键点提取手部区域
+                            roi_hands = self._extract_hand_regions_from_pose(
+                                scaled_roi, person_bbox
+                            )
 
                         for hres in roi_hands:
                             # 读取缩放ROI内的像素bbox，并映射回全图
@@ -1189,11 +1274,24 @@ class OptimizedDetectionPipeline:
                     detected_any = True
 
                     if detected_any:
-                        logger.debug(f"ROI手检检测到 {len(hand_regions)} 个手部区域 (多尺度/增强)")
+                        logger.info(
+                            f"ROI手检检测到 {len(hand_regions)} 个手部区域 (多尺度/增强), person_bbox={person_bbox}"
+                        )
                         return hand_regions
 
                 # ROI为空或未检出时，退回整帧手检并过滤到该人体框
-                full_hands = self.pose_detector.detect_hands(image)
+                full_hands = []
+                if hasattr(self.pose_detector, "detect_hands"):
+                    try:
+                        full_hands = self.pose_detector.detect_hands(image)
+                    except Exception as e:
+                        logger.debug(f"整帧手部检测失败: {e}")
+                        full_hands = []
+                else:
+                    # YOLOv8PoseDetector 没有 detect_hands 方法，使用姿态关键点提取手部区域
+                    full_hands = self._extract_hand_regions_from_pose(
+                        image, person_bbox
+                    )
                 for hres in full_hands:
                     bbox = hres.get("bbox", [0, 0, 0, 0])
                     hx1, hy1, hx2, hy2 = [int(b) for b in bbox]
@@ -1203,16 +1301,162 @@ class OptimizedDetectionPipeline:
                         hand_regions.append(hres)
 
                 if hand_regions:
-                    logger.debug(f"整帧手检过滤到 {len(hand_regions)} 个手部区域")
+                    logger.info(
+                        f"整帧手检过滤到 {len(hand_regions)} 个手部区域, person_bbox={person_bbox}"
+                    )
                     return hand_regions
 
             except Exception as e:
-                logger.debug(f"姿态检测器手部检测失败，使用估算方法: {e}")
+                logger.info(f"姿态检测器手部检测失败，使用估算方法: {e}")
 
         # 回退到估算方法
         estimated_regions = self._estimate_hand_regions(person_bbox)
-        logger.debug("使用估算的手部区域")
+        logger.info(
+            f"使用估算的手部区域, person_bbox={person_bbox}, 估算手部数={len(estimated_regions)}"
+        )
         return estimated_regions
+
+    def _extract_hand_regions_from_pose(
+        self, image: np.ndarray, person_bbox: List[int]
+    ) -> List[Dict]:
+        """
+        从姿态关键点中提取手部区域（适用于YOLOv8PoseDetector）
+
+        Args:
+            image: 输入图像
+            person_bbox: 人体边界框 [x1, y1, x2, y2]
+
+        Returns:
+            手部区域列表
+        """
+        hand_regions = []
+
+        if self.pose_detector is None:
+            return hand_regions
+
+        try:
+            # 使用姿态检测器检测人体关键点
+            pose_detections = self.pose_detector.detect(image)
+
+            x1, y1, x2, y2 = [int(v) for v in person_bbox]
+            cx = (x1 + x2) / 2
+            cy = (y1 + y2) / 2
+
+            # 找到最接近的人体姿态检测结果
+            best_pose = None
+            min_distance = float("inf")
+
+            for pose in pose_detections:
+                pose_bbox = pose.get("bbox", [0, 0, 0, 0])
+                px1, py1, px2, py2 = pose_bbox
+                pcx = (px1 + px2) / 2
+                pcy = (py1 + py2) / 2
+                distance = ((cx - pcx) ** 2 + (cy - pcy) ** 2) ** 0.5
+
+                if distance < min_distance:
+                    min_distance = distance
+                    best_pose = pose
+
+            if best_pose and "keypoints" in best_pose:
+                keypoints = best_pose["keypoints"]
+                if "xy" in keypoints and "conf" in keypoints:
+                    kpts_xy = np.array(keypoints["xy"])
+                    kpts_conf = np.array(keypoints["conf"])
+
+                    # COCO姿态关键点索引：
+                    # 9: 左手腕 (left_wrist)
+                    # 10: 右手腕 (right_wrist)
+                    # 7: 左肘 (left_elbow)
+                    # 8: 右肘 (right_elbow)
+
+                    left_wrist_idx = 9
+                    right_wrist_idx = 10
+                    left_elbow_idx = 7
+                    right_elbow_idx = 8
+
+                    # 提取左手区域
+                    if (
+                        left_wrist_idx < len(kpts_xy)
+                        and left_elbow_idx < len(kpts_xy)
+                        and kpts_conf[left_wrist_idx] > 0.3
+                        and kpts_conf[left_elbow_idx] > 0.3
+                    ):
+                        wrist = kpts_xy[left_wrist_idx]
+                        elbow = kpts_xy[left_elbow_idx]
+
+                        # 估算手部区域（以手腕为中心，大小基于肘部到手腕的距离）
+                        hand_size = np.linalg.norm(wrist - elbow) * 0.8
+                        hand_w = int(hand_size)
+                        hand_h = int(hand_size)
+
+                        hand_x1 = max(0, int(wrist[0] - hand_w / 2))
+                        hand_y1 = max(0, int(wrist[1] - hand_h / 2))
+                        hand_x2 = min(image.shape[1], int(wrist[0] + hand_w / 2))
+                        hand_y2 = min(image.shape[0], int(wrist[1] + hand_h / 2))
+
+                        # 检查手部中心是否在人体框内
+                        if x1 <= wrist[0] <= x2 and y1 <= wrist[1] <= y2:
+                            hand_regions.append(
+                                {
+                                    "bbox": [hand_x1, hand_y1, hand_x2, hand_y2],
+                                    "confidence": float(kpts_conf[left_wrist_idx]),
+                                    "landmarks": [
+                                        {
+                                            "x": wrist[0] / image.shape[1],
+                                            "y": wrist[1] / image.shape[0],
+                                        }
+                                    ],
+                                    "source": "yolov8_pose_keypoints",
+                                    "hand_label": "left",
+                                }
+                            )
+
+                    # 提取右手区域
+                    if (
+                        right_wrist_idx < len(kpts_xy)
+                        and right_elbow_idx < len(kpts_xy)
+                        and kpts_conf[right_wrist_idx] > 0.3
+                        and kpts_conf[right_elbow_idx] > 0.3
+                    ):
+                        wrist = kpts_xy[right_wrist_idx]
+                        elbow = kpts_xy[right_elbow_idx]
+
+                        # 估算手部区域
+                        hand_size = np.linalg.norm(wrist - elbow) * 0.8
+                        hand_w = int(hand_size)
+                        hand_h = int(hand_size)
+
+                        hand_x1 = max(0, int(wrist[0] - hand_w / 2))
+                        hand_y1 = max(0, int(wrist[1] - hand_h / 2))
+                        hand_x2 = min(image.shape[1], int(wrist[0] + hand_w / 2))
+                        hand_y2 = min(image.shape[0], int(wrist[1] + hand_h / 2))
+
+                        # 检查手部中心是否在人体框内
+                        if x1 <= wrist[0] <= x2 and y1 <= wrist[1] <= y2:
+                            hand_regions.append(
+                                {
+                                    "bbox": [hand_x1, hand_y1, hand_x2, hand_y2],
+                                    "confidence": float(kpts_conf[right_wrist_idx]),
+                                    "landmarks": [
+                                        {
+                                            "x": wrist[0] / image.shape[1],
+                                            "y": wrist[1] / image.shape[0],
+                                        }
+                                    ],
+                                    "source": "yolov8_pose_keypoints",
+                                    "hand_label": "right",
+                                }
+                            )
+
+                    if hand_regions:
+                        logger.info(
+                            f"从姿态关键点提取到 {len(hand_regions)} 个手部区域, person_bbox={person_bbox}"
+                        )
+
+        except Exception as e:
+            logger.debug(f"从姿态关键点提取手部区域失败: {e}")
+
+        return hand_regions
 
     # --- Public helper for external callers (e.g., tracking-driven pipelines) ---
     def get_hand_regions_for_person(
@@ -1228,42 +1472,207 @@ class OptimizedDetectionPipeline:
         hairnet_results: List[Dict],
         handwash_results: List[Dict],
         sanitize_results: List[Dict],
+        min_confidence: float = 0.5,  # 可视化最小置信度阈值
     ) -> np.ndarray:
-        """创建带注释的结果图像"""
+        """创建带注释的结果图像
+
+        Args:
+            image: 输入图像
+            person_detections: 人体检测结果列表
+            hairnet_results: 发网检测结果列表
+            handwash_results: 洗手检测结果列表
+            sanitize_results: 消毒检测结果列表
+            min_confidence: 可视化最小置信度阈值（默认0.5，过滤低置信度检测）
+
+        Returns:
+            带注释的图像
+        """
         annotated = image.copy()
 
         try:
+            # 过滤低置信度的人体检测（只显示高置信度的检测）
+            filtered_person_detections = [
+                det
+                for det in person_detections
+                if det.get("confidence", 0.0) >= min_confidence
+            ]
+
             # 绘制人体检测框
-            for detection in person_detections:
+            for detection in filtered_person_detections:
                 bbox = detection.get("bbox", [0, 0, 0, 0])
                 x1, y1, x2, y2 = map(int, bbox)
+                confidence = detection.get("confidence", 0.0)
+                track_id = detection.get("track_id")
+
+                # 绘制人体边界框（绿色）
                 cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                # 留空，由上层统一中文渲染
 
-            # 绘制发网检测结果
-            for result in hairnet_results:
-                head_bbox = result.get("head_bbox", [0, 0, 0, 0])
-                x1, y1, x2, y2 = map(int, head_bbox)
-                color = (0, 255, 0) if result.get("has_hairnet", False) else (0, 0, 255)
-                cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
+                # 绘制标签
+                label = f"Person {confidence:.2f}"
+                if track_id is not None:
+                    label += f" ID:{track_id}"
+                cv2.putText(
+                    annotated,
+                    label,
+                    (x1, y1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (0, 255, 0),
+                    2,
+                )
 
-                # 留空，由上层统一中文渲染
+            # 发网检测使用更低的置信度阈值（因为发网检测本身置信度可能较低）
+            # 使用发网检测的置信度阈值，但不低于0.2（确保能看到更多检测结果）
+            hairnet_min_confidence = 0.2  # 从0.3降低到0.2，提高敏感度
+            if hasattr(self, "params") and self.params is not None:
+                hairnet_conf = self.params.hairnet_detection.confidence_threshold
+                # 使用70%的发网检测阈值，但不低于0.2
+                hairnet_min_confidence = max(0.2, hairnet_conf * 0.7)
+
+            # 为每个检测到的人体绘制头部框（无论是否有发网检测结果）
+            # 创建person_id到发网检测结果的映射
+            hairnet_map = {}
+            filtered_hairnet_results = [
+                result
+                for result in hairnet_results
+                if result.get("hairnet_confidence", 0.0) >= hairnet_min_confidence
+            ]
+            for result in filtered_hairnet_results:
+                person_id = result.get("person_id")
+                if person_id:
+                    hairnet_map[person_id] = result
+
+            # 为每个检测到的人体绘制头部框
+            for i, detection in enumerate(filtered_person_detections):
+                person_bbox = detection.get("bbox", [0, 0, 0, 0])
+                if person_bbox == [0, 0, 0, 0]:
+                    continue
+
+                x1, y1, x2, y2 = map(int, person_bbox)
+                # 计算头部区域（优化：使用35%高度，与YOLOHairnetDetector保持一致）
+                person_height = y2 - y1
+                person_width = x2 - x1
+                head_height = int(person_height * 0.35)  # 从30%增加到35%
+                padding_height = int(head_height * 0.2)  # 20%padding
+                padding_width = int(person_width * 0.1)  # 10%padding宽度
+
+                head_y1 = max(0, y1 - padding_height)
+                head_y2 = min(image.shape[0], y1 + head_height + padding_height)
+                head_x1 = max(0, x1 - padding_width)
+                head_x2 = min(image.shape[1], x2 + padding_width)
+
+                # 查找对应的发网检测结果
+                person_id = i + 1
+                hairnet_result = hairnet_map.get(person_id)
+
+                if hairnet_result:
+                    # 如果有发网检测结果，优先使用检测结果中的head_bbox（更准确）
+                    head_bbox = hairnet_result.get(
+                        "head_bbox", [head_x1, head_y1, head_x2, head_y2]
+                    )
+                    if (
+                        head_bbox == [0, 0, 0, 0]
+                        or (head_bbox[2] - head_bbox[0] <= 0)
+                        or (head_bbox[3] - head_bbox[1] <= 0)
+                    ):
+                        # 如果head_bbox无效，使用计算的head_bbox
+                        head_bbox = [head_x1, head_y1, head_x2, head_y2]
+                    else:
+                        # 使用检测结果中的head_bbox（来自YOLOHairnetDetector，更准确）
+                        head_x1, head_y1, head_x2, head_y2 = map(int, head_bbox)
+
+                    has_hairnet = hairnet_result.get("has_hairnet", False)
+                    confidence = hairnet_result.get("hairnet_confidence", 0.0)
+                else:
+                    # 如果没有发网检测结果，默认显示为无发网（红色）
+                    has_hairnet = False
+                    confidence = 0.0
+
+                # 绿色=有发网，红色=无发网
+                color = (0, 255, 0) if has_hairnet else (0, 0, 255)
+                # 绘制头部框（线条粗细3像素）
+                cv2.rectangle(
+                    annotated, (head_x1, head_y1), (head_x2, head_y2), color, 3
+                )
+
+                # 绘制背景框（提高标签可读性）
+                label = f"{'有发网' if has_hairnet else '无发网'}"
+                if confidence > 0:
+                    label += f" {confidence:.2f}"
+                (label_width, label_height), baseline = cv2.getTextSize(
+                    label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2
+                )
+                # 绘制背景
+                cv2.rectangle(
+                    annotated,
+                    (head_x1, head_y1 - label_height - 10),
+                    (head_x1 + label_width + 4, head_y1),
+                    color,
+                    -1,  # 填充
+                )
+
+                # 绘制标签（使用更大的字体和更粗的线条）
+                cv2.putText(
+                    annotated,
+                    label,
+                    (head_x1 + 2, head_y1 - 5),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,  # 字体大小
+                    (255, 255, 255),  # 白色文字，提高对比度
+                    2,
+                )
+
+            # 过滤低置信度的洗手检测（只显示高置信度的检测）
+            filtered_handwash_results = [
+                result
+                for result in handwash_results
+                if result.get("is_handwashing", False)
+                and result.get("confidence", 0.0) >= min_confidence
+            ]
 
             # 绘制洗手检测结果
-            for result in handwash_results:
-                if result.get("is_handwashing", False):
-                    person_bbox = result.get("person_bbox", [0, 0, 0, 0])
-                    x1, y1, x2, y2 = map(int, person_bbox)
-                    # 在人体框上方绘制洗手标签
-                    # 留空，由上层统一中文渲染
+            for result in filtered_handwash_results:
+                person_bbox = result.get("person_bbox", [0, 0, 0, 0])
+                x1, y1, x2, y2 = map(int, person_bbox)
+                confidence = result.get("confidence", 0.0)
+
+                # 在人体框上方绘制洗手标签（黄色）
+                label = f"洗手中 {confidence:.2f}"
+                cv2.putText(
+                    annotated,
+                    label,
+                    (x1, y1 - 30),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (0, 255, 255),
+                    2,
+                )
+
+            # 过滤低置信度的消毒检测（只显示高置信度的检测）
+            filtered_sanitize_results = [
+                result
+                for result in sanitize_results
+                if result.get("is_sanitizing", False)
+                and result.get("confidence", 0.0) >= min_confidence
+            ]
 
             # 绘制消毒检测结果
-            for result in sanitize_results:
-                if result.get("is_sanitizing", False):
-                    person_bbox = result.get("person_bbox", [0, 0, 0, 0])
-                    x1, y1, x2, y2 = map(int, person_bbox)
-                    # 在人体框上方绘制消毒标签
-                    # 留空，由上层统一中文渲染
+            for result in filtered_sanitize_results:
+                person_bbox = result.get("person_bbox", [0, 0, 0, 0])
+                x1, y1, x2, y2 = map(int, person_bbox)
+                confidence = result.get("confidence", 0.0)
+
+                # 在人体框上方绘制消毒标签（青色）
+                label = f"消毒中 {confidence:.2f}"
+                cv2.putText(
+                    annotated,
+                    label,
+                    (x1, y1 - 50),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (255, 255, 0),
+                    2,
+                )
 
             # 手部可视化：无论是否检测到人体，都尝试绘制手部（便于手部近景视频调试）
             if self.pose_detector is not None:
@@ -1271,24 +1680,48 @@ class OptimizedDetectionPipeline:
                 if hasattr(self.pose_detector, "detect_hands"):
                     hands_results = self.pose_detector.detect_hands(image)
 
-                len(hands_results)
-
                 # 绘制手部：优先绘制bbox与来源标签；如有关键点则再绘制骨架
                 for hand_result in hands_results:
                     bbox = hand_result.get("bbox", [0, 0, 0, 0])
+                    if (
+                        bbox == [0, 0, 0, 0]
+                        or (bbox[2] - bbox[0] <= 0)
+                        or (bbox[3] - bbox[1] <= 0)
+                    ):
+                        continue
+
                     hx1, hy1, hx2, hy2 = map(int, bbox)
                     label = hand_result.get("class_name", "hand")
-                    src = hand_result.get("source", "auto")
+                    hand_result.get("source", "auto")
+                    confidence = hand_result.get("confidence", 0.0)
 
-                    # 绘制手部边界框与来源
-                    cv2.rectangle(annotated, (hx1, hy1), (hx2, hy2), (255, 255, 0), 2)
+                    # 绘制手部边界框（黄色，线条粗细3像素）
+                    cv2.rectangle(annotated, (hx1, hy1), (hx2, hy2), (0, 255, 255), 3)
+
+                    # 绘制标签背景
+                    hand_label = f"手部: {label}"
+                    if confidence > 0:
+                        hand_label += f" {confidence:.2f}"
+                    (label_width, label_height), baseline = cv2.getTextSize(
+                        hand_label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2
+                    )
+                    # 绘制背景
+                    cv2.rectangle(
+                        annotated,
+                        (hx1, hy1 - label_height - 10),
+                        (hx1 + label_width + 4, hy1),
+                        (0, 255, 255),  # 黄色背景
+                        -1,  # 填充
+                    )
+
+                    # 绘制标签
                     cv2.putText(
                         annotated,
-                        f"Hand: {label} [{src}]",
-                        (hx1, hy1 - 10),
+                        hand_label,
+                        (hx1 + 2, hy1 - 5),
                         cv2.FONT_HERSHEY_SIMPLEX,
-                        0.5,
-                        (255, 255, 0),
+                        0.6,  # 字体大小
+                        (0, 0, 0),  # 黑色文字，提高对比度
                         2,
                     )
 

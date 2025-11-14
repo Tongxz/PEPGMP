@@ -8,6 +8,7 @@ from typing import Optional
 
 from fastapi import (
     APIRouter,
+    Body,
     Header,
     HTTPException,
     Request,
@@ -15,10 +16,33 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from loguru import logger
+from pydantic import BaseModel, Field
 
 from src.services.video_stream_manager import get_stream_manager
 
 router = APIRouter(prefix="/video-stream", tags=["视频流"])
+
+
+class VideoStreamConfigRequest(BaseModel):
+    """视频流配置请求"""
+
+    stream_interval: Optional[int] = Field(
+        None, ge=1, le=30, description="视频流推送间隔（帧数），1表示逐帧", example=3
+    )
+    log_interval: Optional[int] = Field(None, ge=1, description="检测间隔（帧数）", example=120)
+    frame_by_frame: Optional[bool] = Field(
+        None, description="是否逐帧模式（stream_interval=1）", example=False
+    )
+
+
+class VideoStreamConfigResponse(BaseModel):
+    """视频流配置响应"""
+
+    camera_id: str
+    stream_interval: int
+    log_interval: int
+    frame_by_frame: bool
+    message: str
 
 
 @router.websocket("/ws/{camera_id}")
@@ -133,3 +157,116 @@ async def receive_frame(
     sm = get_stream_manager()
     await sm.update_frame(camera_id, body)
     return {"ok": True, "camera_id": camera_id, "size": len(body)}
+
+
+@router.post("/config/{camera_id}", summary="配置视频流参数")
+async def update_video_stream_config(
+    camera_id: str,
+    config: VideoStreamConfigRequest = Body(...),
+):
+    """
+    更新视频流配置
+
+    Args:
+        camera_id: 摄像头ID
+        config: 视频流配置
+
+    Returns:
+        配置响应
+    """
+    import os
+
+    import redis
+
+    try:
+        # 处理逐帧模式
+        if config.frame_by_frame is not None:
+            if config.frame_by_frame:
+                stream_interval = 1
+            else:
+                stream_interval = config.stream_interval or 3
+        else:
+            stream_interval = config.stream_interval or 3
+
+        # 保存配置到Redis（用于检测进程读取）
+        redis_url = os.getenv("REDIS_URL")
+        if redis_url:
+            try:
+                r = redis.from_url(redis_url)
+                config_key = f"video_stream:config:{camera_id}"
+                config_data = {
+                    "stream_interval": stream_interval,
+                    "log_interval": config.log_interval,
+                    "frame_by_frame": stream_interval == 1,
+                }
+                # 只保存非None的配置
+                config_data = {k: v for k, v in config_data.items() if v is not None}
+                r.hset(config_key, mapping=config_data)
+                r.expire(config_key, 3600)  # 1小时过期
+                logger.info(f"视频流配置已保存到Redis: camera={camera_id}, config={config_data}")
+            except Exception as e:
+                logger.warning(f"保存配置到Redis失败: {e}，将仅返回配置信息")
+
+        return VideoStreamConfigResponse(
+            camera_id=camera_id,
+            stream_interval=stream_interval,
+            log_interval=config.log_interval or 120,
+            frame_by_frame=stream_interval == 1,
+            message="配置已更新，检测进程将在下次读取时应用新配置",
+        )
+    except Exception as e:
+        logger.error(f"更新视频流配置失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"更新配置失败: {str(e)}")
+
+
+@router.get("/config/{camera_id}", summary="获取视频流配置")
+async def get_video_stream_config(camera_id: str):
+    """
+    获取当前视频流配置
+
+    Args:
+        camera_id: 摄像头ID
+
+    Returns:
+        当前配置
+    """
+    import os
+
+    import redis
+
+    try:
+        # 从Redis读取配置
+        redis_url = os.getenv("REDIS_URL")
+        if redis_url:
+            try:
+                r = redis.from_url(redis_url)
+                config_key = f"video_stream:config:{camera_id}"
+                config_data = r.hgetall(config_key)
+                if config_data:
+                    # 解码bytes为字符串
+                    config_data = {
+                        k.decode(): v.decode() if isinstance(v, bytes) else v
+                        for k, v in config_data.items()
+                    }
+                    return {
+                        "camera_id": camera_id,
+                        "stream_interval": int(config_data.get("stream_interval", 3)),
+                        "log_interval": int(config_data.get("log_interval", 120)),
+                        "frame_by_frame": config_data.get(
+                            "frame_by_frame", "False"
+                        ).lower()
+                        == "true",
+                    }
+            except Exception as e:
+                logger.warning(f"从Redis读取配置失败: {e}")
+
+        # 返回默认配置
+        return {
+            "camera_id": camera_id,
+            "stream_interval": int(os.getenv("VIDEO_STREAM_INTERVAL", "3")),
+            "log_interval": 120,
+            "frame_by_frame": False,
+        }
+    except Exception as e:
+        logger.error(f"获取视频流配置失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"获取配置失败: {str(e)}")

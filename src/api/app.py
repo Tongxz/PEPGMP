@@ -4,10 +4,12 @@
 这个模块包含了FastAPI应用程序的主要配置和路由设置.
 """
 import logging
+import logging.handlers
 import os
 import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -62,6 +64,7 @@ try:
         cameras,
         comprehensive,
         config,
+        detection_config,
         download,
         error_monitoring,
         events,
@@ -92,6 +95,7 @@ except ImportError:
         cameras,
         comprehensive,
         config,
+        detection_config,
         download,
         error_monitoring,
         events,
@@ -111,7 +115,44 @@ except ImportError:
     from src.services import detection_service
     from src.utils.error_monitor import start_error_monitoring, stop_error_monitoring
 
+# 配置日志
 logging.basicConfig(level=logging.INFO)
+
+# 设置API日志到 logs/api/ 目录
+api_log_dir = Path("logs/api")
+api_log_dir.mkdir(parents=True, exist_ok=True)
+api_log_file = api_log_dir / "api.log"
+
+# 配置API日志文件处理器（使用轮转）
+api_file_handler = logging.handlers.RotatingFileHandler(
+    str(api_log_file),
+    maxBytes=50 * 1024 * 1024,  # 50MB
+    backupCount=5,  # 保留5个备份
+    encoding="utf-8",
+)
+api_file_handler.setLevel(logging.INFO)
+api_formatter = logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+api_file_handler.setFormatter(api_formatter)
+
+# 配置API错误日志文件处理器
+api_error_log_file = api_log_dir / "api_error.log"
+api_error_handler = logging.handlers.RotatingFileHandler(
+    str(api_error_log_file),
+    maxBytes=50 * 1024 * 1024,  # 50MB
+    backupCount=5,  # 保留5个备份
+    encoding="utf-8",
+)
+api_error_handler.setLevel(logging.ERROR)
+api_error_handler.setFormatter(api_formatter)
+
+# 获取根日志记录器并添加处理器
+root_logger = logging.getLogger()
+root_logger.addHandler(api_file_handler)
+root_logger.addHandler(api_error_handler)
+
 logger = logging.getLogger(__name__)
 
 # 触发依赖注入容器的服务配置（包括 USE_DOMAIN_SERVICE 开关与仓储绑定）
@@ -344,6 +385,7 @@ app.include_router(records.router, tags=["Records"])
 app.include_router(video_stream.router, prefix="/api/v1", tags=["Video Stream"])
 # 配置管理路由
 app.include_router(config.router, prefix="/api/v1/config", tags=["Config"])
+app.include_router(detection_config.router, tags=["Detection Config"])
 app.include_router(mlops.router)
 
 

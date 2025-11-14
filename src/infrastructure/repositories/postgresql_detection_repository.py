@@ -358,8 +358,12 @@ class PostgreSQLDetectionRepository(IDetectionRepository):
                 # 移除时区信息以匹配数据库 TIMESTAMP WITHOUT TIME ZONE
                 # 数据库表定义为 WITHOUT TIME ZONE，无法接受带时区的datetime
                 if timestamp_value.tzinfo is not None:
-                    # 转换为UTC时间并移除时区信息
-                    timestamp_value = timestamp_value.replace(tzinfo=None)
+                    # 先转换为UTC，再移除时区信息（确保时间值正确）
+                    from datetime import timezone as tz
+
+                    timestamp_value = timestamp_value.astimezone(tz.utc).replace(
+                        tzinfo=None
+                    )
 
                 # 转换 metadata 为可序列化的字典（处理枚举类型）
                 metadata_dict = (
@@ -438,8 +442,12 @@ class PostgreSQLDetectionRepository(IDetectionRepository):
                 # 移除时区信息以匹配数据库 TIMESTAMP WITHOUT TIME ZONE
                 # 数据库表定义为 WITHOUT TIME ZONE，无法接受带时区的datetime
                 if timestamp_value.tzinfo is not None:
-                    # 转换为UTC时间并移除时区信息
-                    timestamp_value = timestamp_value.replace(tzinfo=None)
+                    # 先转换为UTC，再移除时区信息（确保时间值正确）
+                    from datetime import timezone as tz
+
+                    timestamp_value = timestamp_value.astimezone(tz.utc).replace(
+                        tzinfo=None
+                    )
 
                 # 转换 metadata 为可序列化的字典（处理枚举类型）
                 metadata_dict = (
@@ -1001,10 +1009,19 @@ class PostgreSQLDetectionRepository(IDetectionRepository):
                             item["bbox"] = json.loads(item.get("bbox") or "null")
                     except Exception:
                         pass
-                    # 时间格式
+                    # 时间格式转换（添加时区信息）
+                    # 数据库中的时间戳是 TIMESTAMP WITHOUT TIME ZONE，假设为 UTC
+                    # 转换为 ISO 格式时添加 UTC 时区标记，让前端能正确转换为本地时间
+                    from datetime import timezone as tz
+
                     for k in ("timestamp", "handled_at", "created_at", "updated_at"):
                         if item.get(k) is not None and hasattr(item[k], "isoformat"):
-                            item[k] = item[k].isoformat()
+                            dt = item[k]
+                            # 如果是 naive datetime（没有时区信息），假设为 UTC
+                            if dt.tzinfo is None:
+                                # 添加 UTC 时区信息
+                                dt = dt.replace(tzinfo=tz.utc)
+                            item[k] = dt.isoformat()
                     return item
 
                 violations = [_row_to_obj(r) for r in rows]

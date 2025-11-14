@@ -161,6 +161,11 @@ class PostgreSQLViolationRepository(IViolationRepository):
             # 获取置信度
             confidence = violation.confidence.value if violation.confidence else 0.0
 
+            # 获取快照路径（从violation.metadata中获取）
+            snapshot_path = None
+            if violation.metadata:
+                snapshot_path = violation.metadata.get("snapshot_path")
+
             # 转换时间戳（数据库需要naive datetime）
             timestamp_value = violation.timestamp
             if timestamp_value.tzinfo is not None:
@@ -168,13 +173,13 @@ class PostgreSQLViolationRepository(IViolationRepository):
                     tzinfo=None
                 )
 
-            # 保存违规事件
+            # 保存违规事件（包含snapshot_path）
             violation_id = await conn.fetchval(
                 """
                 INSERT INTO violation_events (
                     detection_id, camera_id, timestamp, violation_type,
-                    track_id, confidence, bbox, status
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    track_id, confidence, snapshot_path, bbox, status
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 RETURNING id
                 """,
                 detection_id_int,
@@ -183,6 +188,7 @@ class PostgreSQLViolationRepository(IViolationRepository):
                 violation.violation_type.value,
                 track_id,
                 confidence,
+                snapshot_path,  # 快照路径
                 json.dumps(bbox_dict) if bbox_dict else None,
                 "pending",  # 默认状态
             )
@@ -383,9 +389,16 @@ class PostgreSQLViolationRepository(IViolationRepository):
             except Exception:
                 pass
 
-        # 时间格式转换
+        # 时间格式转换（添加时区信息）
+        # 数据库中的时间戳是 TIMESTAMP WITHOUT TIME ZONE，假设为 UTC
+        # 转换为 ISO 格式时添加 UTC 时区标记，让前端能正确转换为本地时间
         for key in ("timestamp", "handled_at", "created_at", "updated_at"):
             if item.get(key) is not None and hasattr(item[key], "isoformat"):
-                item[key] = item[key].isoformat()
+                dt = item[key]
+                # 如果是 naive datetime（没有时区信息），假设为 UTC
+                if dt.tzinfo is None:
+                    # 添加 UTC 时区信息
+                    dt = dt.replace(tzinfo=timezone.utc)
+                item[key] = dt.isoformat()
 
         return item

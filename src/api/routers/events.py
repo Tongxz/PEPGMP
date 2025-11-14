@@ -19,11 +19,11 @@ logger = logging.getLogger(__name__)
 
 
 def _read_events(lines: int = 2000) -> List[Dict[str, Any]]:
-    events_file = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
-        "logs",
-        "events_record.jsonl",
+    # 事件日志现在位于 logs/events/ 目录下
+    project_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     )
+    events_file = os.path.join(project_root, "logs", "events", "events_record.jsonl")
     out: List[Dict[str, Any]] = []
     if not os.path.exists(events_file):
         return out

@@ -65,20 +65,43 @@ async def download_video(filename: str):
     )
 
 
-@router.get("/image/{filename}", summary="下载处理后的图片")
+@router.get("/image/{filename:path}", summary="下载处理后的图片")
 async def download_image(filename: str):
     """
-    下载处理后的图片文件
+    下载处理后的图片文件（支持快照和processed_images）
 
     Args:
-        filename: 图片文件名
+        filename: 图片文件名或相对路径
 
     Returns:
         图片文件响应
     """
-    # 图片文件存储目录
-    image_dir = "./output/processed_images"
-    file_path = os.path.join(image_dir, filename)
+    import os
+    from pathlib import Path
+
+    # 尝试多个可能的存储目录
+    possible_dirs = [
+        "./output/processed_images",  # 处理后的图片
+        "./datasets/raw",  # 快照存储目录（默认）
+        os.getenv("SNAPSHOT_BASE_DIR", "datasets/raw"),  # 环境变量配置的快照目录
+    ]
+
+    file_path = None
+    for image_dir in possible_dirs:
+        # 如果filename包含路径分隔符，尝试直接拼接
+        if "/" in filename or "\\" in filename:
+            test_path = os.path.join(image_dir, filename)
+        else:
+            test_path = os.path.join(image_dir, filename)
+
+        if os.path.exists(test_path):
+            file_path = test_path
+            break
+
+    # 如果都没找到，使用第一个目录作为默认
+    if file_path is None:
+        image_dir = "./output/processed_images"
+        file_path = os.path.join(image_dir, filename)
 
     # 检查文件是否存在
     if not os.path.exists(file_path):
@@ -88,10 +111,16 @@ async def download_image(filename: str):
     # 检查文件是否在允许的目录内（安全检查）
     try:
         real_file_path = os.path.realpath(file_path)
-        real_image_dir = os.path.realpath(image_dir)
+        # 检查是否在任何一个允许的目录内
+        allowed = False
+        for allowed_dir in possible_dirs:
+            real_allowed_dir = os.path.realpath(os.path.expanduser(allowed_dir))
+            if real_file_path.startswith(real_allowed_dir):
+                allowed = True
+                break
 
-        if not real_file_path.startswith(real_image_dir):
-            logger.warning(f"尝试访问不安全的文件路径: {filename}")
+        if not allowed:
+            logger.warning(f"尝试访问不安全的文件路径: {filename}, 实际路径: {real_file_path}")
             raise HTTPException(status_code=403, detail="访问被拒绝")
     except Exception as e:
         logger.error(f"文件路径安全检查失败: {e}")

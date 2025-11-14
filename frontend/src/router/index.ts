@@ -51,6 +51,11 @@ const routes: RouteRecordRaw[] = [
         name: 'realtime-monitor',
         component: () => import('../views/RealtimeMonitor.vue'),
       },
+      {
+        path: 'detection-config',
+        name: 'detection-config',
+        component: () => import('../views/DetectionConfig.vue'),
+      },
     ]
   },
 ]

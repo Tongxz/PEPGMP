@@ -40,6 +40,8 @@ def get_model_training_config() -> ModelTrainingConfig:
     yolo_epochs = int(os.getenv("YOLO_TRAIN_EPOCHS", "30"))
     yolo_image_size = int(os.getenv("YOLO_TRAIN_IMAGE_SIZE", "224"))
     yolo_batch_size = int(os.getenv("YOLO_TRAIN_BATCH_SIZE", "32"))
+    # 默认使用auto，允许自动选择设备（MPS → CUDA → CPU）
+    # 可以通过环境变量YOLO_TRAIN_DEVICE或工作流training_params.device覆盖
     yolo_device = os.getenv("YOLO_TRAIN_DEVICE", "auto")
     yolo_patience = int(os.getenv("YOLO_TRAIN_PATIENCE", "10"))
 

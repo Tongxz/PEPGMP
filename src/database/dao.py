@@ -4,7 +4,7 @@
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import delete, func, select, update
@@ -27,7 +27,29 @@ class DatasetDAO:
     @staticmethod
     async def create(session: AsyncSession, dataset_data: Dict[str, Any]) -> Dataset:
         """创建数据集"""
-        dataset = Dataset(**dataset_data)
+        # 处理时区问题：如果传入的datetime是带时区的，转换为不带时区的（naive）
+        # 因为数据库字段是 TIMESTAMP WITHOUT TIME ZONE
+        processed_data = dataset_data.copy()
+
+        # 处理 created_at
+        if "created_at" in processed_data:
+            created_at = processed_data["created_at"]
+            if isinstance(created_at, datetime) and created_at.tzinfo is not None:
+                # 转换为UTC时间，然后移除时区信息
+                processed_data["created_at"] = created_at.astimezone(
+                    timezone.utc
+                ).replace(tzinfo=None)
+
+        # 处理 updated_at
+        if "updated_at" in processed_data:
+            updated_at = processed_data["updated_at"]
+            if isinstance(updated_at, datetime) and updated_at.tzinfo is not None:
+                # 转换为UTC时间，然后移除时区信息
+                processed_data["updated_at"] = updated_at.astimezone(
+                    timezone.utc
+                ).replace(tzinfo=None)
+
+        dataset = Dataset(**processed_data)
         session.add(dataset)
         await session.commit()
         await session.refresh(dataset)

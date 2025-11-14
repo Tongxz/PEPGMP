@@ -67,19 +67,112 @@
           <n-button size="small" @click="reconnect">
             🔄 重连
           </n-button>
+          <n-button size="small" @click="showConfigModal = true">
+            ⚙️ 配置
+          </n-button>
         </n-space>
         <n-text depth="3" style="font-size: 12px">
           帧数: {{ frameCount }}
         </n-text>
       </n-space>
     </div>
+
+    <!-- 配置对话框 -->
+    <n-modal
+      v-model:show="showConfigModal"
+      preset="card"
+      title="视频流配置"
+      style="width: 500px"
+      :bordered="false"
+      size="small"
+    >
+      <n-form
+        :model="configForm"
+        label-placement="left"
+        label-width="120px"
+        :show-feedback="false"
+      >
+        <n-form-item label="检测帧率" path="stream_interval">
+          <n-slider
+            v-model:value="configForm.stream_interval"
+            :min="1"
+            :max="30"
+            :step="1"
+            :marks="streamIntervalMarks"
+            :disabled="configForm.frame_by_frame"
+          />
+          <n-text depth="3" style="margin-left: 12px; font-size: 12px">
+            {{ configForm.stream_interval }} 帧/次
+          </n-text>
+        </n-form-item>
+
+        <n-form-item label="检测间隔" path="log_interval">
+          <n-input-number
+            v-model:value="configForm.log_interval"
+            :min="1"
+            :max="1000"
+            :step="10"
+            style="width: 100%"
+          />
+          <n-text depth="3" style="margin-left: 12px; font-size: 12px">
+            每 {{ configForm.log_interval }} 帧检测一次
+          </n-text>
+        </n-form-item>
+
+        <n-form-item label="逐帧模式" path="frame_by_frame">
+          <n-switch v-model:value="configForm.frame_by_frame" />
+          <n-text depth="3" style="margin-left: 12px; font-size: 12px">
+            {{ configForm.frame_by_frame ? '开启（最高帧率）' : '关闭（使用检测帧率）' }}
+          </n-text>
+        </n-form-item>
+
+        <n-form-item label="当前配置">
+          <n-space vertical size="small">
+            <n-text depth="3" style="font-size: 12px">
+              推送间隔: {{ currentConfig.stream_interval }} 帧
+            </n-text>
+            <n-text depth="3" style="font-size: 12px">
+              检测间隔: {{ currentConfig.log_interval }} 帧
+            </n-text>
+            <n-text depth="3" style="font-size: 12px">
+              逐帧模式: {{ currentConfig.frame_by_frame ? '开启' : '关闭' }}
+            </n-text>
+          </n-space>
+        </n-form-item>
+      </n-form>
+
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showConfigModal = false">取消</n-button>
+          <n-button type="primary" @click="saveConfig" :loading="savingConfig">
+            保存
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { NSpace, NTag, NText, NButton, NSpin, NIcon, NTooltip, useMessage } from 'naive-ui'
+import {
+  NSpace,
+  NTag,
+  NText,
+  NButton,
+  NSpin,
+  NIcon,
+  NTooltip,
+  NModal,
+  NForm,
+  NFormItem,
+  NSlider,
+  NInputNumber,
+  NSwitch,
+  useMessage
+} from 'naive-ui'
 import { WarningOutline } from '@vicons/ionicons5'
+import { videoStreamApi, type VideoStreamConfig, type VideoStreamConfigRequest } from '../api/videoStream'
 
 const message = useMessage()
 
@@ -108,6 +201,42 @@ const currentFps = ref(0)
 const latency = ref(0)
 const frameCount = ref(0)
 const connectionStartTime = ref(0)
+
+// 配置相关
+const showConfigModal = ref(false)
+const savingConfig = ref(false)
+const currentConfig = ref<VideoStreamConfig>({
+  camera_id: props.cameraId,
+  stream_interval: 3,
+  log_interval: 120,
+  frame_by_frame: false,
+})
+
+// 配置表单（所有字段必需，用于表单绑定）
+interface ConfigForm {
+  stream_interval: number
+  log_interval: number
+  frame_by_frame: boolean
+}
+
+const configForm = ref<ConfigForm>({
+  stream_interval: 3,
+  log_interval: 120,
+  frame_by_frame: false,
+})
+
+// 检测帧率标记
+const streamIntervalMarks = computed(() => {
+  return {
+    1: '1',
+    5: '5',
+    10: '10',
+    15: '15',
+    20: '20',
+    25: '25',
+    30: '30',
+  }
+})
 
 // WebSocket
 let ws: WebSocket | null = null
@@ -312,9 +441,84 @@ function reconnect() {
   connect()
 }
 
+// 加载配置
+async function loadConfig() {
+  try {
+    const config = await videoStreamApi.getConfig(props.cameraId)
+    currentConfig.value = config
+    configForm.value = {
+      stream_interval: config.stream_interval,
+      log_interval: config.log_interval,
+      frame_by_frame: config.frame_by_frame,
+    }
+    console.log(`[VideoStreamCard] 加载配置成功:`, config)
+  } catch (error) {
+    console.error(`[VideoStreamCard] 加载配置失败:`, error)
+    message.error('加载配置失败')
+  }
+}
+
+// 保存配置
+async function saveConfig() {
+  try {
+    savingConfig.value = true
+
+    // 如果开启逐帧模式，确保stream_interval为1
+    if (configForm.value.frame_by_frame) {
+      configForm.value.stream_interval = 1
+    }
+
+    // 转换为API请求格式（可选字段）
+    const request: VideoStreamConfigRequest = {
+      stream_interval: configForm.value.stream_interval,
+      log_interval: configForm.value.log_interval,
+      frame_by_frame: configForm.value.frame_by_frame,
+    }
+
+    const response = await videoStreamApi.updateConfig(props.cameraId, request)
+    currentConfig.value = {
+      camera_id: response.camera_id,
+      stream_interval: response.stream_interval,
+      log_interval: response.log_interval,
+      frame_by_frame: response.frame_by_frame,
+    }
+
+    message.success('配置已保存，检测进程将在下次读取时应用新配置')
+    showConfigModal.value = false
+    console.log(`[VideoStreamCard] 保存配置成功:`, response)
+  } catch (error) {
+    console.error(`[VideoStreamCard] 保存配置失败:`, error)
+    message.error('保存配置失败')
+  } finally {
+    savingConfig.value = false
+  }
+}
+
+// 监听逐帧模式变化
+watch(
+  () => configForm.value.frame_by_frame,
+  (newVal) => {
+    if (newVal) {
+      configForm.value.stream_interval = 1
+    }
+  }
+)
+
+// 监听配置对话框显示，加载配置
+watch(
+  () => showConfigModal.value,
+  (newVal) => {
+    if (newVal) {
+      // 打开对话框时重新加载配置，确保显示最新配置
+      loadConfig()
+    }
+  }
+)
+
 // 生命周期
 onMounted(() => {
   connect()
+  loadConfig()
 })
 
 onBeforeUnmount(() => {

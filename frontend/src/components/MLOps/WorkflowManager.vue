@@ -589,7 +589,7 @@
               </n-grid>
             </n-form-item>
             <n-form-item v-if="step.type === 'model_training'" label="训练参数">
-              <n-grid :cols="2" :x-gap="12">
+              <n-grid :cols="3" :x-gap="12">
                 <n-gi>
                   <n-input-group>
                     <n-input-group-label>学习率</n-input-group-label>
@@ -600,6 +600,17 @@
                   <n-input-group>
                     <n-input-group-label>批次大小</n-input-group-label>
                     <n-input :value="step.training_params?.batch_size || ''" @update:value="(val) => updateTrainingParam(step, 'batch_size', val)" placeholder="32" />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>设备</n-input-group-label>
+                    <n-select
+                      :value="step.training_params?.device || 'auto'"
+                      @update:value="(val) => updateTrainingParam(step, 'device', val)"
+                      :options="deviceOptions"
+                      placeholder="选择设备"
+                    />
                   </n-input-group>
                 </n-gi>
               </n-grid>
@@ -660,6 +671,7 @@ interface WorkflowStep {
   training_params?: {
     learning_rate?: string
     batch_size?: string
+    device?: string
   }
   deployment_params?: {
     replicas?: number
@@ -851,6 +863,13 @@ const environmentOptions = [
   { label: '生产环境', value: 'production' }
 ]
 
+const deviceOptions = [
+  { label: '自动选择', value: 'auto' },
+  { label: 'CPU', value: 'cpu' },
+  { label: 'CUDA (GPU)', value: 'cuda' },
+  { label: 'MPS (Apple Silicon)', value: 'mps' }
+]
+
 // 更新训练参数
 function updateTrainingParam(step: WorkflowStep, param: string, value: string) {
   if (!step.training_params) {
@@ -1031,6 +1050,9 @@ function normalizeStepsForSubmit(steps: WorkflowStep[]) {
       }
       if (step.training_params.batch_size) {
         trainingPayload.batch_size = step.training_params.batch_size
+      }
+      if (step.training_params.device) {
+        trainingPayload.device = step.training_params.device
       }
       if (Object.keys(trainingPayload).length > 0) {
         normalized.training_params = trainingPayload
@@ -1341,7 +1363,8 @@ function editWorkflow(workflow: Workflow) {
       if (step.type === 'model_training') {
         prepared.training_params = {
           learning_rate: step.training_params?.learning_rate || '0.001',
-          batch_size: step.training_params?.batch_size || '32'
+          batch_size: step.training_params?.batch_size || '32',
+          device: step.training_params?.device || 'auto'
         }
       }
       if (step.type === 'model_deployment') {

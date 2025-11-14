@@ -3,8 +3,9 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 
-from src.api.dependencies import get_detection_app_service
+from src.api.dependencies import get_detection_app_service, get_optimized_pipeline
 from src.application.detection_application_service import DetectionApplicationService
+from src.core.optimized_detection_pipeline import OptimizedDetectionPipeline
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -195,3 +196,90 @@ async def detect_hairnet(
     except Exception as e:
         logger.exception(f"发网检测失败: {e}")
         raise HTTPException(status_code=500, detail=f"处理失败: {str(e)}")
+
+
+@router.get("/stats", summary="获取检测管道统计信息")
+async def get_detection_stats(
+    pipeline: Optional[OptimizedDetectionPipeline] = Depends(get_optimized_pipeline),
+) -> Dict[str, Any]:
+    """
+    获取检测管道的统计信息，包括优化功能状态和性能指标。
+
+    Returns:
+        检测管道统计信息，包括：
+        - 优化功能启用状态
+        - 状态管理统计
+        - 缓存统计
+        - 性能指标
+        - ROI优化统计
+    """
+    if pipeline is None:
+        raise HTTPException(status_code=503, detail="检测管道未初始化")
+
+    try:
+        stats = {
+            "optimization_enabled": True,
+            "state_management": {
+                "enabled": getattr(pipeline, "enable_state_management", False),
+                "stats": {},
+            },
+            "async_detection": {
+                "enabled": getattr(pipeline, "enable_async", False),
+                "max_workers": 0,
+            },
+            "cache": {
+                "enabled": getattr(pipeline, "enable_cache", False),
+                "stats": {},
+            },
+            "performance": {
+                "total_detections": pipeline.stats.get("total_detections", 0),
+                "avg_processing_time": pipeline.stats.get("avg_processing_time", 0.0),
+                "cache_hits": pipeline.stats.get("cache_hits", 0),
+                "cache_misses": pipeline.stats.get("cache_misses", 0),
+            },
+        }
+
+        # 状态管理统计
+        if stats["state_management"]["enabled"]:
+            state_manager = getattr(pipeline, "state_manager", None)
+            if state_manager:
+                stats["state_management"]["stats"] = state_manager.get_stats()
+
+        # 异步检测统计
+        if stats["async_detection"]["enabled"]:
+            async_pipeline = getattr(pipeline, "async_pipeline", None)
+            if async_pipeline is not None and hasattr(async_pipeline, "executor"):
+                stats["async_detection"][
+                    "max_workers"
+                ] = async_pipeline.executor._max_workers
+
+        # 缓存统计
+        if stats["cache"]["enabled"]:
+            frame_cache = getattr(pipeline, "frame_cache", None)
+            if frame_cache:
+                stats["cache"]["stats"] = frame_cache.get_stats()
+
+                # 计算缓存命中率
+                cache_hits = pipeline.stats.get("cache_hits", 0)
+                cache_misses = pipeline.stats.get("cache_misses", 0)
+                total_requests = cache_hits + cache_misses
+                if total_requests > 0:
+                    stats["cache"]["hit_rate"] = cache_hits / total_requests
+                else:
+                    stats["cache"]["hit_rate"] = 0.0
+
+        # ROI优化统计（通过检查方法是否存在）
+        stats["roi_optimization"] = {
+            "enabled": hasattr(pipeline, "_detect_hairnet_for_persons"),
+        }
+
+        # 帧跳过统计（如果可用）
+        stats["frame_skip"] = {
+            "enabled": False,  # 默认未启用，需要手动配置
+        }
+
+        return stats
+
+    except Exception as e:
+        logger.exception(f"获取统计信息失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取统计信息失败: {str(e)}")

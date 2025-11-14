@@ -14,7 +14,8 @@ def _read_event_counts(max_lines: int = 5000) -> Dict[str, int]:
     project_root = os.path.dirname(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     )
-    events_file = os.path.join(project_root, "logs", "events_record.jsonl")
+    # 事件日志现在位于 logs/events/ 目录下
+    events_file = os.path.join(project_root, "logs", "events", "events_record.jsonl")
     counts: Dict[str, int] = {}
     if not os.path.exists(events_file):
         return counts

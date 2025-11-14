@@ -45,7 +45,7 @@ async def get_violations(
     Args:
         camera_id: 摄像头ID筛选
         status: 违规状态筛选
-        violation_type: 违规类型筛选
+        violation_type: 违规类型筛选（如果不指定，默认只返回 no_hairnet 类型）
         limit: 返回记录数量
         offset: 分页偏移量
 
@@ -54,6 +54,12 @@ async def get_violations(
     """
     try:
         domain_service = _ensure_domain_service()
+
+        # 如果未指定违规类型，默认只返回当前系统检测的违规类型（no_hairnet）
+        # 这样可以过滤掉数据库中的旧数据（如 no_safety_helmet 等）
+        if violation_type is None:
+            violation_type = "no_hairnet"
+
         result = await domain_service.get_violation_details(
             camera_id=camera_id,
             status=status,
@@ -61,10 +67,18 @@ async def get_violations(
             limit=limit,
             offset=offset,
         )
+
+        # 二次过滤：确保只返回当前系统支持的违规类型
+        violations = result.get("violations", [])
+        allowed_types = {"no_hairnet"}  # 当前系统只检测发网违规
+        filtered_violations = [
+            v for v in violations if v.get("violation_type") in allowed_types
+        ]
+
         # 对齐旧响应结构（domain 已返回 ISO 时间字符串）
         return {
-            "violations": result.get("violations", []),
-            "total": int(result.get("total", 0)),
+            "violations": filtered_violations,
+            "total": len(filtered_violations),  # 使用过滤后的数量
             "limit": limit,
             "offset": offset,
         }

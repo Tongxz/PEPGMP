@@ -49,7 +49,23 @@ class HairnetDetectionParams:
     device: str = "auto"
     confidence_threshold: float = 0.6  # 统一发网检测置信度
 
-    # 图像处理参数
+    # ROI提取参数
+    roi_head_ratio: float = 0.3  # 头部区域占人体高度比例
+    roi_padding_height_ratio: float = 0.15  # 头部区域高度方向padding比例
+    roi_padding_width_ratio: float = 0.1  # 头部区域宽度方向padding比例
+    roi_min_size: int = 200  # ROI最小尺寸阈值
+
+    # ROI检测参数
+    roi_detection_confidence: float = 0.1  # ROI检测使用的置信度阈值
+    roi_postprocess_threshold_cap: float = 0.2  # ROI后处理阈值上限
+    roi_min_positive_confidence: float = 0.1  # ROI判定为佩戴的最低置信度
+
+    # 扩展ROI参数
+    roi_expansion_pixels: int = 50  # 每次扩展的像素数
+    roi_expansion_conf_scale: float = 0.8  # 扩展ROI时的阈值缩放系数
+    roi_expansion_attempts: int = 1  # 扩展尝试次数（倍数递增）
+
+    # 图像处理参数（兼容旧实现）
     input_size: tuple = (224, 224)
 
     # 边缘检测参数
@@ -235,6 +251,65 @@ class UnifiedParams:
             logger.info(f"配置已保存到: {file_path}")
         except Exception as e:
             logger.error(f"保存配置失败: {e}")
+
+    @classmethod
+    def load_from_dict(
+        cls, config_data: Dict[str, Any]
+    ) -> "UnifiedParams":  # noqa: C901
+        """从字典加载配置（用于从数据库加载）"""
+        instance = cls()
+
+        if not config_data:
+            return instance
+
+        # 更新配置（基础块）
+        if "human_detection" in config_data:
+            for key, value in config_data["human_detection"].items():
+                if hasattr(instance.human_detection, key):
+                    setattr(instance.human_detection, key, value)
+
+        if "hairnet_detection" in config_data:
+            for key, value in config_data["hairnet_detection"].items():
+                if hasattr(instance.hairnet_detection, key):
+                    setattr(instance.hairnet_detection, key, value)
+
+        if "behavior_recognition" in config_data:
+            for key, value in config_data["behavior_recognition"].items():
+                if hasattr(instance.behavior_recognition, key):
+                    setattr(instance.behavior_recognition, key, value)
+
+        if "pose_detection" in config_data:
+            for key, value in config_data["pose_detection"].items():
+                if hasattr(instance.pose_detection, key):
+                    setattr(instance.pose_detection, key, value)
+
+        if "detection_rules" in config_data:
+            for key, value in config_data["detection_rules"].items():
+                if hasattr(instance.detection_rules, key):
+                    setattr(instance.detection_rules, key, value)
+
+        if "system" in config_data:
+            for key, value in config_data["system"].items():
+                if hasattr(instance.system, key):
+                    setattr(instance.system, key, value)
+
+        # 新增：运行期基础块（dict 直接合并覆盖）
+        for blk in ("inference", "runtime", "cascade", "profiles"):
+            if blk in config_data and isinstance(config_data[blk], dict):
+                instance.__dict__[blk] = {
+                    **instance.__dict__.get(blk, {}),
+                    **config_data[blk],
+                }
+
+        # 新增：流程合规配置块（作为 dict 原样带入）
+        if "process" in config_data and isinstance(config_data["process"], dict):
+            instance.process = dict(config_data["process"])
+
+        # 新增：抓拍配置块（作为 dict 原样带入）
+        if "capture" in config_data and isinstance(config_data["capture"], dict):
+            instance.capture = dict(config_data["capture"])
+
+        return instance
 
     @classmethod
     def load_from_yaml(cls, file_path: str) -> "UnifiedParams":  # noqa: C901

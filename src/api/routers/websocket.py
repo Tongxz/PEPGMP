@@ -215,7 +215,10 @@ async def websocket_events(websocket: WebSocket):
         project_root = os.path.dirname(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         )
-        events_file = os.path.join(project_root, "logs", "events_record.jsonl")
+        # 事件日志现在位于 logs/events/ 目录下
+        events_file = os.path.join(
+            project_root, "logs", "events", "events_record.jsonl"
+        )
 
         last_pos = 0
         while True:

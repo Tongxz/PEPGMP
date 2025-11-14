@@ -52,6 +52,38 @@ class DetectionLoopConfig:
         self.stream_width = stream_width
         self.stream_height = stream_height
 
+    def update_from_redis(self):
+        """从Redis读取配置并更新"""
+        import os
+
+        import redis
+
+        try:
+            redis_url = os.getenv("REDIS_URL")
+            if not redis_url:
+                return
+
+            r = redis.from_url(redis_url)
+            config_key = f"video_stream:config:{self.camera_id}"
+            config_data = r.hgetall(config_key)
+
+            if config_data:
+                # 解码bytes为字符串
+                config_data = {
+                    k.decode(): v.decode() if isinstance(v, bytes) else v
+                    for k, v in config_data.items()
+                }
+
+                if "stream_interval" in config_data:
+                    self.stream_interval = int(config_data["stream_interval"])
+                    logger.info(f"从Redis更新stream_interval: {self.stream_interval}")
+
+                if "log_interval" in config_data:
+                    self.log_interval = int(config_data["log_interval"])
+                    logger.info(f"从Redis更新log_interval: {self.log_interval}")
+        except Exception as e:
+            logger.debug(f"从Redis读取配置失败（使用默认配置）: {e}")
+
 
 class DetectionLoopService:
     """
@@ -100,6 +132,18 @@ class DetectionLoopService:
         self.start_time = None
         self.hour_stats = defaultdict(int)
         self.current_hour = None
+
+        # 检测统计（用于发布到Redis）
+        self.detection_stats = {
+            "total_frames": 0,
+            "processed_frames": 0,
+            "detected_persons": 0,
+            "detected_hairnets": 0,
+            "detected_handwash": 0,
+            "total_detection_time": 0.0,
+        }
+        self.last_stats_publish_time = None
+        self.stats_publish_interval = 5.0  # 每5秒发布一次统计数据
 
         # 注册信号处理器
         self._register_signal_handlers()
@@ -233,6 +277,74 @@ class DetectionLoopService:
         # 2. 保存记录（如果配置了应用服务）
         saved_to_db = False
         save_reason = None
+        app_result = None
+
+        # 更新检测统计（从检测结果中获取，不依赖app_result）
+        self.detection_stats["processed_frames"] += 1
+
+        # 统计人数（累计所有检测到的人数，不是取最大值）
+        person_count = 0
+        if hasattr(result, "person_detections"):
+            person_count = (
+                len(result.person_detections) if result.person_detections else 0
+            )
+
+        if person_count > 0:
+            # 累计检测到的人数总数（所有帧的总和）
+            self.detection_stats["detected_persons"] += person_count
+
+        # 统计发网检测（从result中获取）
+        # 注意：只统计实际检测到发网的人数（has_hairnet=True），不是所有检测结果
+        hairnet_detected_count = 0
+        hairnet_results_count = 0
+        if hasattr(result, "hairnet_results") and result.hairnet_results:
+            hairnet_results_count = len(result.hairnet_results)
+            # 统计有发网的人数（has_hairnet=True）
+            hairnet_detected_count = sum(
+                1 for h in result.hairnet_results if h.get("has_hairnet") is True
+            )
+            # 累计有发网的人数
+            self.detection_stats["detected_hairnets"] += hairnet_detected_count
+
+        # 统计洗手检测
+        # 注意：只统计实际检测到洗手的人数（is_handwashing=True），不是所有检测结果
+        handwash_detected_count = 0
+        handwash_results_count = 0
+        if hasattr(result, "handwash_results") and result.handwash_results:
+            handwash_results_count = len(result.handwash_results)
+            # 统计正在洗手的人数（is_handwashing=True）
+            handwash_detected_count = sum(
+                1 for h in result.handwash_results if h.get("is_handwashing") is True
+            )
+            self.detection_stats["detected_handwash"] += handwash_detected_count
+
+        # 每100帧记录一次统计信息（调试用）
+        if self.detection_stats["processed_frames"] % 100 == 0:
+            logger.info(
+                f"统计更新: frame={frame_count}, person_count={person_count}, "
+                f"total_persons={self.detection_stats['detected_persons']}, "
+                f"hairnet_results={hairnet_results_count}, hairnet_detected={hairnet_detected_count}, "
+                f"total_hairnets={self.detection_stats['detected_hairnets']}, "
+                f"handwash_results={handwash_results_count}, handwash_detected={handwash_detected_count}, "
+                f"total_handwash={self.detection_stats['detected_handwash']}"
+            )
+            # 调试：打印前几个检测结果的内容
+            if (
+                hasattr(result, "hairnet_results")
+                and result.hairnet_results
+                and len(result.hairnet_results) > 0
+            ):
+                logger.info(
+                    f"发网检测结果示例 (前3个): {[{'has_hairnet': h.get('has_hairnet'), 'confidence': h.get('hairnet_confidence')} for h in result.hairnet_results[:3]]}"
+                )
+            if (
+                hasattr(result, "handwash_results")
+                and result.handwash_results
+                and len(result.handwash_results) > 0
+            ):
+                logger.info(
+                    f"洗手检测结果示例 (前3个): {[{'is_handwashing': h.get('is_handwashing'), 'confidence': h.get('handwash_confidence')} for h in result.handwash_results[:3]]}"
+                )
 
         if self.detection_app_service:
             try:
@@ -245,21 +357,29 @@ class DetectionLoopService:
                 save_reason = app_result.get("save_reason")
 
                 if saved_to_db:
-                    logger.debug(
+                    logger.info(
                         f"✓ 帧 {frame_count}: 已保存 ({save_reason}), "
                         f"违规={app_result['result']['has_violations']}, "
-                        f"严重程度={app_result['result']['violation_severity']:.2f}"
+                        f"严重程度={app_result['result']['violation_severity']:.2f}, "
+                        f"detection_id={app_result.get('detection_id')}"
                     )
+
+                # 累计处理时间（从app_result获取）
+                if app_result:
+                    processing_time = app_result.get("processing_time", 0.0)
+                    self.detection_stats["total_detection_time"] += processing_time
             except Exception as e:
                 logger.error(f"保存帧失败: {e}")
 
         # 3. 推送视频流（如果配置了视频流服务）
-        if self.video_stream_service and frame_count % self.config.stream_interval == 0:
+        # 视频流推送频率与检测频率保持一致，确保显示的是检测后的结果
+        if self.video_stream_service and frame_count % self.config.log_interval == 0:
             try:
-                # 判断是否有标注
+                # 判断是否有标注（使用annotated_image属性）
                 annotated_frame = (
-                    result.annotated_frame
-                    if hasattr(result, "annotated_frame")
+                    result.annotated_image
+                    if hasattr(result, "annotated_image")
+                    and result.annotated_image is not None
                     else None
                 )
                 has_annotations = annotated_frame is not None
@@ -269,7 +389,7 @@ class DetectionLoopService:
 
                 logger.info(
                     f"准备推送视频帧: camera={self.config.camera_id}, "
-                    f"frame={frame_count}, interval={self.config.stream_interval}, "
+                    f"frame={frame_count}, detection_interval={self.config.log_interval}, "
                     f"has_annotations={has_annotations}"
                 )
 
@@ -333,6 +453,100 @@ class DetectionLoopService:
                 f"平均FPS={avg_fps:.2f}, 运行时间={elapsed:.1f}s"
             )
 
+    def _publish_stats_to_redis(self):
+        """发布统计数据到Redis"""
+        import json
+        import os
+        import time as time_module
+
+        now = time_module.time()
+
+        # 检查是否需要发布（每5秒或首次）
+        if (
+            self.last_stats_publish_time is None
+            or now - self.last_stats_publish_time >= self.stats_publish_interval
+        ):
+            try:
+                import redis
+
+                # 获取Redis连接
+                redis_url = os.getenv("REDIS_URL")
+                if not redis_url:
+                    host = os.getenv("REDIS_HOST", "localhost")
+                    port = int(os.getenv("REDIS_PORT", "6379"))
+                    db = int(os.getenv("REDIS_DB", "0"))
+                    password = os.getenv("REDIS_PASSWORD")
+                    redis_client = redis.Redis(
+                        host=host,
+                        port=port,
+                        db=db,
+                        password=password,
+                        decode_responses=False,
+                    )
+                else:
+                    redis_client = redis.from_url(redis_url, decode_responses=False)
+
+                # 计算统计数据
+                elapsed = (
+                    time_module.time() - self.start_time if self.start_time else 1.0
+                )
+                # 修复FPS计算：使用总帧数和已处理帧数来计算
+                if elapsed > 0:
+                    # 使用实际处理帧数计算FPS（更准确）
+                    avg_fps = self.detection_stats["processed_frames"] / elapsed
+                else:
+                    avg_fps = 0.0
+
+                avg_detection_time = (
+                    self.detection_stats["total_detection_time"]
+                    / self.detection_stats["processed_frames"]
+                    if self.detection_stats["processed_frames"] > 0
+                    else 0.0
+                )
+
+                # 构建统计数据
+                stats_data = {
+                    "type": "stats",
+                    "camera_id": self.config.camera_id,
+                    "timestamp": now,
+                    "data": {
+                        "total_frames": self.frame_count,
+                        "processed_frames": self.detection_stats["processed_frames"],
+                        "detected_persons": self.detection_stats["detected_persons"],
+                        "detected_hairnets": self.detection_stats["detected_hairnets"],
+                        "detected_handwash": self.detection_stats["detected_handwash"],
+                        "avg_fps": avg_fps,
+                        "avg_detection_time": avg_detection_time,
+                        "last_detection_time": now
+                        if self.detection_stats["processed_frames"] > 0
+                        else None,
+                    },
+                }
+
+                # 发布到Redis
+                payload = json.dumps(stats_data).encode("utf-8")
+                redis_client.publish("hbd:stats", payload)
+
+                self.last_stats_publish_time = now
+                logger.info(
+                    f"统计数据已发布到Redis: camera={self.config.camera_id}, "
+                    f"total_frames={self.frame_count}, "
+                    f"processed={self.detection_stats['processed_frames']}, "
+                    f"detected_persons={self.detection_stats['detected_persons']}, "
+                    f"detected_hairnets={self.detection_stats['detected_hairnets']}, "
+                    f"detected_handwash={self.detection_stats['detected_handwash']}, "
+                    f"avg_fps={avg_fps:.2f}, "
+                    f"stats_data_keys={list(stats_data['data'].keys())}"
+                )
+                # 调试：打印实际发布的统计数据内容
+                logger.debug(
+                    f"发布的统计数据详情: {json.dumps(stats_data['data'], indent=2, ensure_ascii=False)}"
+                )
+
+            except Exception as e:
+                logger.debug(f"发布统计数据到Redis失败: {e}")
+                # 不中断流程，继续运行
+
     async def run(self):
         """
         运行检测循环
@@ -352,10 +566,128 @@ class DetectionLoopService:
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
             self.start_time = time.time()
+            self.last_stats_publish_time = None
+            # 重置检测统计（确保统计值被重置）
+            self.detection_stats = {
+                "total_frames": 0,
+                "processed_frames": 0,
+                "detected_persons": 0,
+                "detected_hairnets": 0,
+                "detected_handwash": 0,
+                "total_detection_time": 0.0,
+            }
             self.frame_count = 0
             self.process_count = 0
+            logger.info(
+                f"检测统计已重置: detected_persons={self.detection_stats['detected_persons']}, "
+                f"detected_hairnets={self.detection_stats['detected_hairnets']}, "
+                f"detected_handwash={self.detection_stats['detected_handwash']}"
+            )
 
-            logger.info("开始视频处理循环...")
+            # 启动时立即从Redis读取配置（不等待100帧）
+            # 注意：Redis配置用于运行时动态更新，但不应覆盖命令行参数（初始化值）
+            # 这里只用于同步，不强制覆盖已设置的命令行参数值
+            initial_log_interval = self.config.log_interval  # 保存初始值（来自命令行参数或默认值）
+            self.config.stream_interval
+
+            # 从Redis读取配置
+            redis_log_interval = None
+            try:
+                import os
+
+                import redis
+
+                redis_url = os.getenv("REDIS_URL")
+                if redis_url:
+                    r = redis.from_url(redis_url)
+                    config_key = f"video_stream:config:{self.camera_id}"
+                    config_data = r.hgetall(config_key)
+                    if config_data:
+                        config_data = {
+                            k.decode(): v.decode() if isinstance(v, bytes) else v
+                            for k, v in config_data.items()
+                        }
+                        if "log_interval" in config_data:
+                            redis_log_interval = int(config_data["log_interval"])
+            except Exception:
+                pass
+
+            # 更新配置（但保留初始值用于比较）
+            self.config.update_from_redis()
+
+            # 如果初始值（命令行参数）与Redis中的值不同，优先使用命令行参数
+            # 这确保了用户通过相机配置设置的log_interval不会被Redis中的旧值覆盖
+            if (
+                redis_log_interval is not None
+                and initial_log_interval != redis_log_interval
+            ):
+                logger.info(
+                    f"检测到配置冲突：命令行参数 log_interval={initial_log_interval}，"
+                    f"Redis中的值={redis_log_interval}，优先使用命令行参数"
+                )
+                self.config.log_interval = initial_log_interval
+            elif redis_log_interval is not None:
+                logger.info(
+                    f"从Redis读取配置 log_interval={self.config.log_interval} " f"（与命令行参数一致）"
+                )
+
+            logger.info(
+                f"开始视频处理循环: camera_id={self.config.camera_id}, "
+                f"log_interval={self.config.log_interval}, "
+                f"stream_interval={self.config.stream_interval}"
+            )
+
+            # 启动配置变更监听器
+            try:
+                from src.application.config_change_listener import ConfigChangeListener
+
+                def on_config_change(notification: Dict[str, Any]):
+                    """配置变更回调函数"""
+                    config_type = notification.get("config_type")
+                    config_key = notification.get("config_key")
+                    config_value = notification.get("config_value")
+                    change_type = notification.get("change_type", "update")
+
+                    logger.info(
+                        f"收到配置变更通知: config_type={config_type}, "
+                        f"config_key={config_key}, change_type={change_type}, "
+                        f"config_value={config_value}"
+                    )
+
+                    # 重新加载检测配置
+                    try:
+                        from src.core.config_reload_helper import (
+                            reload_detection_config,
+                        )
+
+                        success = reload_detection_config(
+                            detection_pipeline=self.detection_pipeline,
+                            config_type=config_type,
+                            config_key=config_key,
+                            config_value=config_value,
+                        )
+
+                        if success:
+                            logger.info(
+                                f"配置已重新加载: config_type={config_type}, "
+                                f"config_key={config_key}, config_value={config_value}"
+                            )
+                        else:
+                            logger.warning(
+                                f"配置重新加载失败: config_type={config_type}, "
+                                f"config_key={config_key}"
+                            )
+                    except Exception as e:
+                        logger.error(f"重新加载配置失败: {e}", exc_info=True)
+
+                self.config_change_listener = ConfigChangeListener(
+                    camera_id=self.config.camera_id,
+                    on_config_change=on_config_change,
+                )
+                await self.config_change_listener.start()
+                logger.info("配置变更监听器已启动")
+            except Exception as e:
+                logger.warning(f"启动配置变更监听器失败: {e}，将继续运行但不监听配置变更")
 
             # 主循环
             while not self.shutdown_requested:
@@ -379,6 +711,16 @@ class DetectionLoopService:
 
                 self.frame_count += 1
 
+                # 定期从Redis读取配置更新（每100帧检查一次）
+                # 注意：这是运行时动态更新，允许前端修改配置后实时生效
+                if self.frame_count % 100 == 0:
+                    old_log_interval = self.config.log_interval
+                    self.config.update_from_redis()
+                    if old_log_interval != self.config.log_interval:
+                        logger.info(
+                            f"从Redis更新log_interval: {old_log_interval} -> {self.config.log_interval}"
+                        )
+
                 # 跳帧处理：只对检测和保存逻辑跳过，视频流推送不受影响
                 should_process_detection = (
                     self.config.log_interval == 1
@@ -394,40 +736,15 @@ class DetectionLoopService:
                         logger.error(f"处理帧 {self.frame_count} 失败: {e}")
                         continue
                 else:
-                    # 即使跳过检测，也要推送视频流（使用原始帧，不进行检测）
-                    # 这样可以保证视频流的实时性
-                    if (
-                        self.video_stream_service
-                        and self.frame_count % self.config.stream_interval == 0
-                    ):
-                        try:
-                            logger.info(
-                                f"跳过检测但推送视频流: camera={self.config.camera_id}, "
-                                f"frame={self.frame_count}, interval={self.config.stream_interval}"
-                            )
-                            success = await self.video_stream_service.push_frame(
-                                camera_id=self.config.camera_id,
-                                frame=frame,  # 使用原始帧，不进行检测
-                                quality=self.config.video_quality,
-                                target_width=self.config.stream_width,
-                                target_height=self.config.stream_height,
-                            )
-                            if success:
-                                logger.info(
-                                    f"视频流推送成功（跳过检测模式）: camera={self.config.camera_id}, frame={self.frame_count}"
-                                )
-                            else:
-                                logger.warning(
-                                    f"视频流推送失败（跳过检测模式）: camera={self.config.camera_id}, frame={self.frame_count}"
-                                )
-                        except Exception as e:
-                            logger.error(
-                                f"推送视频流失败（跳过检测模式）: camera={self.config.camera_id}, frame={self.frame_count}, error={e}",
-                                exc_info=True,
-                            )
+                    # 跳过检测时，不推送视频流
+                    # 视频流只在检测时推送，确保显示的是检测后的结果
+                    pass
 
                 # 更新统计
                 self._update_statistics(self.frame_count)
+
+                # 发布统计数据到Redis（每5秒或每100帧）
+                self._publish_stats_to_redis()
 
             logger.info(
                 f"检测循环结束: 总帧数={self.frame_count}, "

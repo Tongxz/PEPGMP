@@ -117,6 +117,9 @@ class CameraService:
                 "auto_tune",
                 "auto_start",
                 "env",
+                "log_interval",  # 检测频率
+                "stream_interval",  # 视频流推送间隔（已废弃，与log_interval保持一致）
+                "frame_by_frame",  # 逐帧模式（已废弃）
             ]:
                 if key in camera_data:
                     camera.metadata[key] = camera_data[key]
@@ -124,10 +127,33 @@ class CameraService:
             # 保存到数据库（主要数据源）
             await self.camera_repository.save(camera)
 
+            # 同步运行时配置到Redis（如果配置了log_interval等）
+            try:
+                from src.infrastructure.notifications.redis_config_sync import (
+                    sync_camera_config_to_redis,
+                )
+
+                # 提取需要同步的配置项（从camera_data中）
+                changed_keys = [
+                    key
+                    for key in ["log_interval", "stream_interval"]
+                    if key in camera_data
+                ]
+                if changed_keys:
+                    sync_camera_config_to_redis(
+                        camera_id=camera_id,
+                        camera_config=camera.to_dict(),
+                        changed_keys=changed_keys,
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"同步相机配置到Redis失败（不影响创建）: camera_id={camera_id}, error={e}"
+                )
+
             # 注意: YAML写入已移除，数据库是单一数据源
             # 如需备份，使用导出工具: scripts/export_cameras_to_yaml.py
 
-            logger.info(f"摄像头创建成功: {camera_id}")
+            logger.info(f"摄像头创建成功: camera_id={camera_id}")
             return {"ok": True, "camera": camera.to_dict()}
 
         except ValueError:
@@ -178,8 +204,8 @@ class CameraService:
                 camera.status = (
                     CameraStatus.ACTIVE if updates["active"] else CameraStatus.INACTIVE
                 )
-            # 更新metadata中的其他字段
-            for key in [
+            # 更新metadata中的其他字段（包括log_interval等）
+            metadata_fields = [
                 "regions_file",
                 "profile",
                 "device",
@@ -187,17 +213,44 @@ class CameraService:
                 "auto_tune",
                 "auto_start",
                 "env",
-            ]:
+                "log_interval",  # 检测频率
+                "stream_interval",  # 视频流推送间隔（已废弃，与log_interval保持一致）
+                "frame_by_frame",  # 逐帧模式（已废弃）
+            ]
+            for key in metadata_fields:
                 if key in updates:
                     camera.metadata[key] = updates[key]
 
             # 更新到数据库（主要数据源）
             await self.camera_repository.save(camera)
 
+            # 同步运行时配置到Redis（如果更新了运行时配置项）
+            # 提取变更的运行时配置项
+            runtime_config_keys = ["log_interval", "stream_interval"]
+            changed_runtime_keys = [
+                key for key in runtime_config_keys if key in updates
+            ]
+
+            if changed_runtime_keys:
+                try:
+                    from src.infrastructure.notifications.redis_config_sync import (
+                        sync_camera_config_to_redis,
+                    )
+
+                    sync_camera_config_to_redis(
+                        camera_id=camera_id,
+                        camera_config=camera.to_dict(),
+                        changed_keys=changed_runtime_keys,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"同步相机配置到Redis失败（不影响更新）: camera_id={camera_id}, error={e}"
+                    )
+
             # 注意: YAML写入已移除，数据库是单一数据源
             # 如需备份，使用导出工具: scripts/export_cameras_to_yaml.py
 
-            logger.info(f"摄像头更新成功: {camera_id}")
+            logger.info(f"摄像头更新成功: {camera_id}, updates={updates}")
             return {"status": "success", "camera": camera.to_dict()}
 
         except ValueError:
@@ -227,10 +280,22 @@ class CameraService:
             # 从数据库删除（主要数据源）
             await self.camera_repository.delete_by_id(camera_id)
 
+            # 从Redis删除运行时配置（如果存在）
+            try:
+                from src.infrastructure.notifications.redis_config_sync import (
+                    delete_camera_config_from_redis,
+                )
+
+                delete_camera_config_from_redis(camera_id=camera_id)
+            except Exception as e:
+                logger.warning(
+                    f"从Redis删除相机配置失败（不影响删除）: camera_id={camera_id}, error={e}"
+                )
+
             # 注意: YAML写入已移除，数据库是单一数据源
             # 如需备份，使用导出工具: scripts/export_cameras_to_yaml.py
 
-            logger.info(f"摄像头删除成功: {camera_id}")
+            logger.info(f"摄像头删除成功: camera_id={camera_id}")
             return {"status": "success"}
 
         except ValueError:

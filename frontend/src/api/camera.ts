@@ -21,6 +21,10 @@ export interface Camera {
   profile?: string
   device?: string
   imgsz?: string | number
+  // 视频流配置
+  stream_interval?: number  // 视频流推送间隔（帧数）
+  log_interval?: number     // 检测间隔（帧数）
+  frame_by_frame?: boolean   // 是否逐帧模式
   // 运行时状态（由前端查询后填充）
   runtime_status?: RuntimeStatus
 }

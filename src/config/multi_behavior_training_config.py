@@ -17,7 +17,7 @@ class MultiBehaviorTrainingConfig:
     epochs: int = 50
     image_size: int = 640
     batch_size: int = 16
-    device: str = "auto"
+    device: str = "auto"  # 默认使用auto，允许自动选择设备，可通过环境变量或训练参数覆盖
     patience: int = 15
     validation_split: float = 0.2
 
@@ -33,6 +33,8 @@ def get_multi_behavior_training_config() -> MultiBehaviorTrainingConfig:
     epochs = int(os.getenv("MULTI_BEHAVIOR_EPOCHS", "50"))
     image_size = int(os.getenv("MULTI_BEHAVIOR_IMAGE_SIZE", "640"))
     batch_size = int(os.getenv("MULTI_BEHAVIOR_BATCH_SIZE", "16"))
+    # 默认使用auto，允许自动选择设备（MPS → CUDA → CPU）
+    # 可以通过环境变量MULTI_BEHAVIOR_DEVICE或工作流training_params.device覆盖
     device = os.getenv("MULTI_BEHAVIOR_DEVICE", "auto")
     patience = int(os.getenv("MULTI_BEHAVIOR_PATIENCE", "15"))
     val_split = float(os.getenv("MULTI_BEHAVIOR_VAL_SPLIT", "0.2"))

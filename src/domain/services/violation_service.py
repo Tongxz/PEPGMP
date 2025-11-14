@@ -170,17 +170,37 @@ class ViolationService:
         else:
             raise ValueError(f"无法将对象转换为DetectedObject: {type(obj)}")
 
-    def _get_metadata(self, obj: Any, key: str, default: Any = None) -> Any:
-        """获取元数据（兼容字典格式和对象格式）"""
+    def _get_metadata(
+        self, obj: Any, key: Optional[str] = None, default: Any = None
+    ) -> Any:
+        """获取元数据（兼容字典格式和对象格式）
+
+        Args:
+            obj: 对象（字典或对象）
+            key: 元数据键（如果为None，返回整个metadata字典）
+            default: 默认值
+
+        Returns:
+            元数据值或整个metadata字典
+        """
         if isinstance(obj, dict):
             metadata = obj.get("metadata", {})
-            if isinstance(metadata, dict):
-                return metadata.get(key, default)
-            return default
-        return obj.get_metadata(key, default)
+            if not isinstance(metadata, dict):
+                metadata = {}
+            if key is None:
+                return metadata
+            return metadata.get(key, default)
+        if key is None:
+            return obj.metadata if hasattr(obj, "metadata") else {}
+        return (
+            obj.get_metadata(key, default) if hasattr(obj, "get_metadata") else default
+        )
 
     def _initialize_violation_rules(self) -> Dict[str, Dict[str, Any]]:
-        """初始化违规检测规则"""
+        """初始化违规检测规则
+
+        注意：当前系统只检测发网违规，其他违规规则已禁用
+        """
         return {
             "no_hairnet": {
                 "min_confidence": 0.5,
@@ -189,41 +209,42 @@ class ViolationService:
                 "severity": ViolationSeverity.HIGH,
                 "description": "检测到未戴发网的人员",
             },
-            "no_safety_helmet": {
-                "min_confidence": 0.7,
-                "required_objects": ["person"],
-                "forbidden_objects": ["helmet", "hard_hat"],
-                "severity": ViolationSeverity.HIGH,
-                "description": "检测到未戴安全帽的人员",
-            },
-            "no_safety_vest": {
-                "min_confidence": 0.6,
-                "required_objects": ["person"],
-                "forbidden_objects": ["safety_vest", "reflective_vest"],
-                "severity": ViolationSeverity.MEDIUM,
-                "description": "检测到未穿安全背心的人员",
-            },
-            "unauthorized_access": {
-                "min_confidence": 0.8,
-                "required_objects": ["person"],
-                "restricted_areas": ["construction_zone", "danger_zone"],
-                "severity": ViolationSeverity.CRITICAL,
-                "description": "检测到未授权进入限制区域",
-            },
-            "crowding": {
-                "min_confidence": 0.5,
-                "min_person_count": 5,
-                "max_area_per_person": 2.0,  # 平方米
-                "severity": ViolationSeverity.MEDIUM,
-                "description": "检测到人员过度聚集",
-            },
-            "speeding": {
-                "min_confidence": 0.7,
-                "max_speed": 5.0,  # 米/秒
-                "required_objects": ["person", "vehicle"],
-                "severity": ViolationSeverity.HIGH,
-                "description": "检测到超速行为",
-            },
+            # 以下规则已禁用（当前系统只检测发网）
+            # "no_safety_helmet": {
+            #     "min_confidence": 0.7,
+            #     "required_objects": ["person"],
+            #     "forbidden_objects": ["helmet", "hard_hat"],
+            #     "severity": ViolationSeverity.HIGH,
+            #     "description": "检测到未戴安全帽的人员",
+            # },
+            # "no_safety_vest": {
+            #     "min_confidence": 0.6,
+            #     "required_objects": ["person"],
+            #     "forbidden_objects": ["safety_vest", "reflective_vest"],
+            #     "severity": ViolationSeverity.MEDIUM,
+            #     "description": "检测到未穿安全背心的人员",
+            # },
+            # "unauthorized_access": {
+            #     "min_confidence": 0.8,
+            #     "required_objects": ["person"],
+            #     "restricted_areas": ["construction_zone", "danger_zone"],
+            #     "severity": ViolationSeverity.CRITICAL,
+            #     "description": "检测到未授权进入限制区域",
+            # },
+            # "crowding": {
+            #     "min_confidence": 0.5,
+            #     "min_person_count": 5,
+            #     "max_area_per_person": 2.0,  # 平方米
+            #     "severity": ViolationSeverity.MEDIUM,
+            #     "description": "检测到人员过度聚集",
+            # },
+            # "speeding": {
+            #     "min_confidence": 0.7,
+            #     "max_speed": 5.0,  # 米/秒
+            #     "required_objects": ["person", "vehicle"],
+            #     "severity": ViolationSeverity.HIGH,
+            #     "description": "检测到超速行为",
+            # },
         }
 
     def detect_violations(self, record: DetectionRecord) -> List[Violation]:
@@ -283,14 +304,28 @@ class ViolationService:
                 continue
 
             # 检查检测对象中的发网信息
-            metadata = self._get_metadata(obj, {})
+            metadata = self._get_metadata(obj)  # 获取整个metadata字典
+            if not isinstance(metadata, dict):
+                metadata = {}
             has_hairnet = metadata.get("has_hairnet")
             hairnet_confidence = metadata.get("hairnet_confidence", 0.0)
             min_hairnet_confidence = rule_config.get("min_hairnet_confidence", 0.5)
 
-            # 只有在明确检测到未佩戴发网（has_hairnet = False）且置信度足够高时，才判定为违规
-            # 如果 has_hairnet 为 None（检测结果不明确），则不判定为违规
-            if has_hairnet is False and hairnet_confidence >= min_hairnet_confidence:
+            # 如果 has_hairnet 为 False（明确未佩戴）或 None（未检测到发网），都判定为违规
+            # 但如果 has_hairnet 为 None，需要降低置信度要求（因为检测模型可能未检测到）
+            is_violation = False
+            if has_hairnet is False:
+                # 明确未佩戴发网，需要满足置信度要求
+                # 如果 hairnet_confidence 不够高，可以使用人体检测置信度作为补充（更宽松的条件）
+                is_violation = (
+                    hairnet_confidence >= min_hairnet_confidence or conf_value >= 0.7
+                )
+            elif has_hairnet is None:
+                # 未检测到发网，降低置信度要求（使用人体检测置信度）
+                # 如果人体检测置信度足够高，说明检测到人员，但未检测到发网，判定为违规
+                is_violation = conf_value >= rule_config["min_confidence"]
+
+            if is_violation:
                 # 转换为DetectedObject实例
                 detected_obj = self._to_detected_object(obj)
                 track_id = self._get_track_id(obj) or "unknown"
@@ -310,15 +345,22 @@ class ViolationService:
                         "rule_name": "no_hairnet",
                         "detection_confidence": conf_value,
                         "hairnet_confidence": hairnet_confidence,
+                        "has_hairnet": has_hairnet,
                     },
                 )
                 violations.append(violation)
+                self.logger.info(
+                    f"检测到发网违规: camera_id={record.camera_id}, track_id={track_id}, "
+                    f"has_hairnet={has_hairnet}, hairnet_confidence={hairnet_confidence}, "
+                    f"detection_confidence={conf_value}"
+                )
             elif has_hairnet is None:
-                # 如果发网检测结果不明确，记录调试信息但不判定为违规
+                # 如果发网检测结果不明确且未达到违规条件，记录调试信息
                 track_id = self._get_track_id(obj) or "unknown"
                 self.logger.debug(
-                    f"发网检测结果不明确: has_hairnet={has_hairnet}, "
+                    f"发网检测结果不明确，未判定为违规: has_hairnet={has_hairnet}, "
                     f"hairnet_confidence={hairnet_confidence}, "
+                    f"detection_confidence={conf_value}, "
                     f"camera_id={record.camera_id}, track_id={track_id}"
                 )
 

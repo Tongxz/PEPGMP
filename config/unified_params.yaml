@@ -1,17 +1,17 @@
 behavior_recognition:
-  confidence_threshold: 0.6
+  confidence_threshold: 0.65  # 提高到0.65以提升准确度（从0.6提高）
   hairnet_min_duration: 1.0
   hairnet_stability_frames: 5
   handwashing_max_duration: 60.0
   handwashing_min_duration: 0.0
-  handwashing_stability_frames: 1
+  handwashing_stability_frames: 3  # 提高到3以提高稳定性要求（从1提高）
   history_maxlen: 30
   max_num_hands: 2
   min_detection_confidence: 0.5
   min_tracking_confidence: 0.5
   sanitizing_max_duration: 30.0
   sanitizing_min_duration: 0.0
-  sanitizing_stability_frames: 1
+  sanitizing_stability_frames: 3  # 提高到3以提高稳定性要求（从1提高）
   use_advanced_detection: true
   use_mediapipe: true
   use_ml_classifier: true
@@ -20,7 +20,7 @@ behavior_recognition:
   ml_fusion_alpha: 0.5
 hairnet_detection:
   confidence_boost_factor: 1.2
-  confidence_threshold: 0.6
+  confidence_threshold: 0.20  # 进一步降低到0.20以提高检测敏感度（从0.25降低）
   contour_area_threshold: 50
   device: auto
   edge_density_threshold: 0.006
@@ -30,21 +30,31 @@ hairnet_detection:
   light_blue_ratio_threshold: 0.001
   light_color_ratio_threshold: 0.003
   min_contour_count: 2
-  model_path: null
+  model_path: models/hairnet_detection/hairnet_detection.pt  # 明确指定模型路径
   sensitive_edge_threshold: 0.008
-  total_score_threshold: 0.8
+  total_score_threshold: 0.65  # 进一步降低到0.65以提高检测敏感度（从0.70降低）
   upper_edge_density_threshold: 0.008
   upper_region_ratio: 0.4
   white_ratio_threshold: 0.002
+  roi_head_ratio: 0.3
+  roi_padding_height_ratio: 0.15
+  roi_padding_width_ratio: 0.1
+  roi_min_size: 200
+  roi_detection_confidence: 0.1
+  roi_postprocess_threshold_cap: 0.2
+  roi_min_positive_confidence: 0.1
+  roi_expansion_pixels: 50
+  roi_expansion_conf_scale: 0.8
+  roi_expansion_attempts: 1
 human_detection:
-  confidence_threshold: 0.4
+  confidence_threshold: 0.5  # 提高到0.5以提升准确度（从0.4提高）
   device: auto
   iou_threshold: 0.6
   max_box_ratio: 6.0
   max_detections: 15
-  min_box_area: 1000
-  min_height: 60
-  min_width: 40
+  min_box_area: 1500  # 提高到1500以过滤小目标（从1000提高）
+  min_height: 80  # 提高到80以过滤过小的人体（从60提高）
+  min_width: 50  # 提高到50以过滤过窄的人体（从40提高）
   model_path: models/yolo/yolov8s.pt
   nms_threshold: 0.4
   imgsz: 416 # 从512降到416提高吞吐量
