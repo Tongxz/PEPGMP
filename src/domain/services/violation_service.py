@@ -21,6 +21,8 @@ class ViolationType(Enum):
     """违规类型枚举"""
 
     NO_HAIRNET = "no_hairnet"  # 未戴发网
+    NO_HANDWASH = "no_handwash"  # 未洗手
+    NO_SANITIZE = "no_sanitize"  # 未消毒
     NO_SAFETY_HELMET = "no_safety_helmet"  # 未戴安全帽
     NO_SAFETY_VEST = "no_safety_vest"  # 未穿安全背心
     UNAUTHORIZED_ACCESS = "unauthorized_access"  # 未授权进入
@@ -199,7 +201,7 @@ class ViolationService:
     def _initialize_violation_rules(self) -> Dict[str, Dict[str, Any]]:
         """初始化违规检测规则
 
-        注意：当前系统只检测发网违规，其他违规规则已禁用
+        当前系统检测发网、洗手、消毒违规
         """
         return {
             "no_hairnet": {
@@ -209,7 +211,21 @@ class ViolationService:
                 "severity": ViolationSeverity.HIGH,
                 "description": "检测到未戴发网的人员",
             },
-            # 以下规则已禁用（当前系统只检测发网）
+            "no_handwash": {
+                "min_confidence": 0.5,
+                "min_handwash_confidence": 0.3,
+                "required_objects": ["person"],
+                "severity": ViolationSeverity.MEDIUM,
+                "description": "检测到未洗手的人员",
+            },
+            "no_sanitize": {
+                "min_confidence": 0.5,
+                "min_sanitize_confidence": 0.3,
+                "required_objects": ["person"],
+                "severity": ViolationSeverity.MEDIUM,
+                "description": "检测到未消毒的人员",
+            },
+            # 以下规则已禁用
             # "no_safety_helmet": {
             #     "min_confidence": 0.7,
             #     "required_objects": ["person"],
@@ -274,6 +290,10 @@ class ViolationService:
         try:
             if rule_name == "no_hairnet":
                 violations.extend(self._check_no_hairnet(record, rule_config))
+            elif rule_name == "no_handwash":
+                violations.extend(self._check_no_handwash(record, rule_config))
+            elif rule_name == "no_sanitize":
+                violations.extend(self._check_no_sanitize(record, rule_config))
             elif rule_name == "no_safety_helmet":
                 violations.extend(self._check_no_safety_helmet(record, rule_config))
             elif rule_name == "no_safety_vest":
@@ -457,6 +477,138 @@ class ViolationService:
                     },
                 )
                 violations.append(violation)
+
+        return violations
+
+    def _check_no_handwash(
+        self, record: DetectionRecord, rule_config: Dict[str, Any]
+    ) -> List[Violation]:
+        """检查未洗手违规"""
+        violations = []
+
+        for obj in record.objects:
+            if not self._is_person(obj):
+                continue
+
+            conf_value = self._get_confidence_value(obj)
+            if conf_value < rule_config["min_confidence"]:
+                continue
+
+            # 检查检测对象中的洗手信息
+            metadata = self._get_metadata(obj)
+            if not isinstance(metadata, dict):
+                metadata = {}
+            
+            is_handwashing = metadata.get("is_handwashing")
+            handwash_confidence = metadata.get("handwash_confidence", 0.0)
+            min_handwash_confidence = rule_config.get("min_handwash_confidence", 0.3)
+
+            # 如果 is_handwashing 为 False（明确未洗手）或 None（未检测到洗手），都判定为违规
+            is_violation = False
+            if is_handwashing is False:
+                # 明确未洗手，需要满足置信度要求
+                is_violation = (
+                    handwash_confidence >= min_handwash_confidence or conf_value >= 0.7
+                )
+            elif is_handwashing is None:
+                # 未检测到洗手行为，降低置信度要求（使用人体检测置信度）
+                is_violation = conf_value >= rule_config["min_confidence"]
+
+            if is_violation:
+                # 转换为DetectedObject实例
+                detected_obj = self._to_detected_object(obj)
+                track_id = self._get_track_id(obj) or "unknown"
+
+                violation = Violation(
+                    id=f"violation_{record.id}_{track_id}_handwash",
+                    violation_type=ViolationType.NO_HANDWASH,
+                    severity=rule_config["severity"],
+                    camera_id=record.camera_id,
+                    detected_object=detected_obj,
+                    timestamp=record.timestamp.value
+                    if hasattr(record.timestamp, "value")
+                    else record.timestamp,
+                    confidence=detected_obj.confidence,
+                    description=rule_config["description"],
+                    metadata={
+                        "rule_name": "no_handwash",
+                        "detection_confidence": conf_value,
+                        "handwash_confidence": handwash_confidence,
+                        "is_handwashing": is_handwashing,
+                    },
+                )
+                violations.append(violation)
+                self.logger.info(
+                    f"检测到洗手违规: camera_id={record.camera_id}, track_id={track_id}, "
+                    f"is_handwashing={is_handwashing}, handwash_confidence={handwash_confidence}, "
+                    f"detection_confidence={conf_value}"
+                )
+
+        return violations
+
+    def _check_no_sanitize(
+        self, record: DetectionRecord, rule_config: Dict[str, Any]
+    ) -> List[Violation]:
+        """检查未消毒违规"""
+        violations = []
+
+        for obj in record.objects:
+            if not self._is_person(obj):
+                continue
+
+            conf_value = self._get_confidence_value(obj)
+            if conf_value < rule_config["min_confidence"]:
+                continue
+
+            # 检查检测对象中的消毒信息
+            metadata = self._get_metadata(obj)
+            if not isinstance(metadata, dict):
+                metadata = {}
+            
+            is_sanitizing = metadata.get("is_sanitizing")
+            sanitize_confidence = metadata.get("sanitize_confidence", 0.0)
+            min_sanitize_confidence = rule_config.get("min_sanitize_confidence", 0.3)
+
+            # 如果 is_sanitizing 为 False（明确未消毒）或 None（未检测到消毒），都判定为违规
+            is_violation = False
+            if is_sanitizing is False:
+                # 明确未消毒，需要满足置信度要求
+                is_violation = (
+                    sanitize_confidence >= min_sanitize_confidence or conf_value >= 0.7
+                )
+            elif is_sanitizing is None:
+                # 未检测到消毒行为，降低置信度要求（使用人体检测置信度）
+                is_violation = conf_value >= rule_config["min_confidence"]
+
+            if is_violation:
+                # 转换为DetectedObject实例
+                detected_obj = self._to_detected_object(obj)
+                track_id = self._get_track_id(obj) or "unknown"
+
+                violation = Violation(
+                    id=f"violation_{record.id}_{track_id}_sanitize",
+                    violation_type=ViolationType.NO_SANITIZE,
+                    severity=rule_config["severity"],
+                    camera_id=record.camera_id,
+                    detected_object=detected_obj,
+                    timestamp=record.timestamp.value
+                    if hasattr(record.timestamp, "value")
+                    else record.timestamp,
+                    confidence=detected_obj.confidence,
+                    description=rule_config["description"],
+                    metadata={
+                        "rule_name": "no_sanitize",
+                        "detection_confidence": conf_value,
+                        "sanitize_confidence": sanitize_confidence,
+                        "is_sanitizing": is_sanitizing,
+                    },
+                )
+                violations.append(violation)
+                self.logger.info(
+                    f"检测到消毒违规: camera_id={record.camera_id}, track_id={track_id}, "
+                    f"is_sanitizing={is_sanitizing}, sanitize_confidence={sanitize_confidence}, "
+                    f"detection_confidence={conf_value}"
+                )
 
         return violations
 

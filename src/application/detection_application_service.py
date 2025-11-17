@@ -337,8 +337,20 @@ class DetectionApplicationService:
         *,
         violation_type: Optional[str],
         metadata: Optional[Dict[str, Any]] = None,
+        annotated_image: Optional[np.ndarray] = None,
     ) -> Optional[SnapshotInfo]:
-        """尝试保存快照并返回结果"""
+        """尝试保存快照并返回结果
+        
+        Args:
+            frame: 原始视频帧
+            camera_id: 摄像头ID
+            violation_type: 违规类型（如果有）
+            metadata: 元数据
+            annotated_image: 标注后的图片（优先使用，如果提供）
+        
+        Returns:
+            快照信息，如果保存失败则返回None
+        """
         if self.snapshot_storage is None:
             self.logger.warning(
                 f"快照存储未配置: camera={camera_id}, violation_type={violation_type}"
@@ -349,9 +361,13 @@ class DetectionApplicationService:
         if metadata:
             metadata_mapping = {str(k): str(v) for k, v in metadata.items()}
 
+        # 优先使用标注后的图片，如果没有则使用原始帧
+        # 违规记录中应该显示标注框，方便查看违规详情
+        image_to_save = annotated_image if annotated_image is not None else frame
+        
         try:
             snapshot_info = await self.snapshot_storage.save_frame(
-                frame,
+                image_to_save,
                 camera_id,
                 captured_at=datetime.utcnow(),
                 violation_type=violation_type,
@@ -359,7 +375,8 @@ class DetectionApplicationService:
             )
             self.logger.debug(
                 f"快照保存成功: camera={camera_id}, violation_type={violation_type}, "
-                f"path={snapshot_info.relative_path if snapshot_info else None}"
+                f"path={snapshot_info.relative_path if snapshot_info else None}, "
+                f"使用标注图片={annotated_image is not None}"
             )
             return snapshot_info
         except Exception as exc:
@@ -422,10 +439,30 @@ class DetectionApplicationService:
             bbox_key = tuple(person_bbox) if len(person_bbox) >= 4 else (i,)
             hairnet_map[bbox_key] = hairnet
 
+        # 创建洗手和消毒检测结果映射（按track_id或person_id匹配）
+        handwash_map = {}
+        sanitize_map = {}
+        for result in detection_result.handwash_results:
+            track_id = result.get("track_id")
+            person_id = result.get("person_id")
+            # 优先使用track_id，其次使用person_id
+            key = track_id if track_id is not None else person_id
+            if key is not None:
+                handwash_map[key] = result
+        
+        for result in detection_result.sanitize_results:
+            track_id = result.get("track_id")
+            person_id = result.get("person_id")
+            key = track_id if track_id is not None else person_id
+            if key is not None:
+                sanitize_map[key] = result
+
         # 转换人体检测结果，并将发网检测结果关联到对应的人员对象
         for i, person in enumerate(detection_result.person_detections):
             person_bbox = person.get("bbox", [0, 0, 0, 0])
             bbox_key = tuple(person_bbox) if len(person_bbox) >= 4 else (i,)
+            track_id = person.get("track_id")
+            person_id = i + 1  # person_id从1开始
 
             # 查找对应的发网检测结果
             hairnet_info = None
@@ -435,6 +472,27 @@ class DetectionApplicationService:
             # 如果 bbox 匹配失败，尝试通过索引匹配
             elif i < len(detection_result.hairnet_results):
                 hairnet_info = detection_result.hairnet_results[i]
+
+            # 查找对应的洗手检测结果
+            handwash_info = None
+            # 优先通过track_id匹配
+            if track_id is not None and track_id in handwash_map:
+                handwash_info = handwash_map[track_id]
+            # 其次通过person_id匹配
+            elif person_id in handwash_map:
+                handwash_info = handwash_map[person_id]
+            # 最后通过索引匹配
+            elif i < len(detection_result.handwash_results):
+                handwash_info = detection_result.handwash_results[i]
+
+            # 查找对应的消毒检测结果
+            sanitize_info = None
+            if track_id is not None and track_id in sanitize_map:
+                sanitize_info = sanitize_map[track_id]
+            elif person_id in sanitize_map:
+                sanitize_info = sanitize_map[person_id]
+            elif i < len(detection_result.sanitize_results):
+                sanitize_info = detection_result.sanitize_results[i]
 
             # 构建人员对象的 metadata
             person_metadata = {
@@ -463,6 +521,28 @@ class DetectionApplicationService:
                     f"人员 {i} (track_id={person.get('track_id')}) 未匹配到发网检测结果，"
                     f"默认判定为未佩戴发网"
                 )
+
+            # 如果有洗手检测结果，将洗手信息添加到 metadata 中
+            if handwash_info:
+                is_handwashing = handwash_info.get("is_handwashing", False)
+                handwash_confidence = handwash_info.get("handwash_confidence", 0.0)
+                person_metadata["is_handwashing"] = is_handwashing
+                person_metadata["handwash_confidence"] = handwash_confidence
+            else:
+                # 如果没有匹配到洗手检测结果，默认判定为未洗手
+                person_metadata["is_handwashing"] = False
+                person_metadata["handwash_confidence"] = 0.0
+
+            # 如果有消毒检测结果，将消毒信息添加到 metadata 中
+            if sanitize_info:
+                is_sanitizing = sanitize_info.get("is_sanitizing", False)
+                sanitize_confidence = sanitize_info.get("sanitize_confidence", 0.0)
+                person_metadata["is_sanitizing"] = is_sanitizing
+                person_metadata["sanitize_confidence"] = sanitize_confidence
+            else:
+                # 如果没有匹配到消毒检测结果，默认判定为未消毒
+                person_metadata["is_sanitizing"] = False
+                person_metadata["sanitize_confidence"] = 0.0
 
             objects.append(
                 {
@@ -549,6 +629,14 @@ class DetectionApplicationService:
         record = None
         snapshot_info: Optional[SnapshotInfo] = None
         if save_to_db:
+            # 获取标注后的图片（如果存在）
+            annotated_image = (
+                detection_result.annotated_image
+                if hasattr(detection_result, "annotated_image")
+                and detection_result.annotated_image is not None
+                else None
+            )
+            
             snapshot_info = await self._save_snapshot_if_possible(
                 image,
                 camera_id,
@@ -559,6 +647,7 @@ class DetectionApplicationService:
                     "mode": DetectionMode.SINGLE_IMAGE.value,
                     "has_violations": has_violations,
                 },
+                annotated_image=annotated_image,
             )
             record = await self.detection_domain_service.process_detection(
                 camera_id=camera_id,
@@ -646,6 +735,14 @@ class DetectionApplicationService:
             primary_violation_type = self._get_primary_violation_type(detection_result)
 
             # 保存快照（使用违规类型）
+            # 优先使用标注后的图片，这样违规记录中可以显示标注框
+            annotated_image = (
+                detection_result.annotated_image
+                if hasattr(detection_result, "annotated_image")
+                and detection_result.annotated_image is not None
+                else None
+            )
+            
             snapshot_info = await self._save_snapshot_if_possible(
                 frame,
                 camera_id,
@@ -655,6 +752,7 @@ class DetectionApplicationService:
                     "frame_count": frame_count,
                     "has_violations": has_violations,
                 },
+                annotated_image=annotated_image,
             )
 
             # 记录快照保存结果
