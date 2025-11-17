@@ -477,7 +477,10 @@ class MultiBehaviorTrainingService:
             return "cpu"
 
     def _extract_metrics(self, trainer: Any, save_dir: Path) -> Dict[str, Any]:
+        """提取训练指标，包括验证集指标（mAP50, mAP50-95等）"""
         metrics: Dict[str, Any] = {}
+        
+        # 从trainer对象提取指标
         if trainer is not None:
             trainer_metrics = getattr(trainer, "metrics", None)
             if isinstance(trainer_metrics, dict):
@@ -487,7 +490,32 @@ class MultiBehaviorTrainingService:
                     except Exception as exc:
                         logger.warning("提取指标 %s 失败: %s", key, exc)
                         # 跳过无法序列化的指标，继续处理其他指标
+            
+            # 尝试从trainer的results属性提取验证指标
+            # YOLO的results对象通常包含验证指标，如metrics/mAP50, metrics/mAP50-95等
+            try:
+                results = getattr(trainer, "results", None)
+                if results is not None:
+                    # 尝试获取常见的验证指标
+                    val_metrics = {}
+                    for metric_name in ["metrics/mAP50", "metrics/mAP50-95", "metrics/precision", "metrics/recall"]:
+                        try:
+                            # 尝试从results对象获取指标
+                            if hasattr(results, metric_name.replace("/", "_")):
+                                value = getattr(results, metric_name.replace("/", "_"))
+                                if value is not None:
+                                    val_metrics[metric_name] = self._to_serializable(value)
+                        except Exception:
+                            pass
+                    
+                    # 如果找到了验证指标，添加到metrics中
+                    if val_metrics:
+                        metrics.setdefault("validation_metrics", val_metrics)
+                        logger.info("提取到验证集指标: %s", list(val_metrics.keys()))
+            except Exception as exc:
+                logger.debug("从trainer.results提取验证指标失败: %s", exc)
 
+        # 从results.json文件提取指标（这是YOLO保存指标的主要方式）
         results_json = save_dir / "results.json"
         if results_json.exists():
             try:
@@ -512,11 +540,27 @@ class MultiBehaviorTrainingService:
                                 cleaned_results[key] = cleaned_value
                         except Exception:
                             logger.debug("跳过无效的指标值: %s = %s", key, value)
+                    
+                    # 特别提取验证指标（通常以metrics/开头）
+                    val_metrics_from_file = {}
+                    for key, value in cleaned_results.items():
+                        if key.startswith("metrics/") or "map" in key.lower():
+                            val_metrics_from_file[key] = value
+                    
+                    if val_metrics_from_file:
+                        metrics.setdefault("validation_metrics", val_metrics_from_file)
+                        logger.info("从results.json提取到验证集指标: %s", list(val_metrics_from_file.keys()))
+                    
+                    # 合并到metrics中，优先使用trainer的指标
+                    for key, value in cleaned_results.items():
+                        if key not in metrics:
+                            metrics[key] = value
                     metrics.setdefault("results", cleaned_results)
             except json.JSONDecodeError:
                 logger.debug("无法解析 YOLO 结果文件: %s", results_json)
             except Exception as exc:
                 logger.warning("处理 YOLO 结果文件时出错: %s", exc)
+        
         return metrics
 
     @staticmethod
