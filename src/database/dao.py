@@ -318,7 +318,38 @@ class WorkflowRunDAO:
     @staticmethod
     async def create(session: AsyncSession, run_data: Dict[str, Any]) -> WorkflowRun:
         """创建运行记录"""
-        run = WorkflowRun(**run_data)
+        # 处理时区问题：如果传入的datetime是带时区的，转换为不带时区的（naive）
+        # 因为数据库字段是 TIMESTAMP WITHOUT TIME ZONE
+        processed_data = run_data.copy()
+        
+        # 处理 started_at
+        if "started_at" in processed_data:
+            started_at = processed_data["started_at"]
+            if isinstance(started_at, datetime) and started_at.tzinfo is not None:
+                # 转换为UTC时间，然后移除时区信息
+                processed_data["started_at"] = started_at.astimezone(
+                    timezone.utc
+                ).replace(tzinfo=None)
+        
+        # 处理 ended_at
+        if "ended_at" in processed_data:
+            ended_at = processed_data["ended_at"]
+            if isinstance(ended_at, datetime) and ended_at.tzinfo is not None:
+                # 转换为UTC时间，然后移除时区信息
+                processed_data["ended_at"] = ended_at.astimezone(
+                    timezone.utc
+                ).replace(tzinfo=None)
+        
+        # 处理 created_at（如果传入）
+        if "created_at" in processed_data:
+            created_at = processed_data["created_at"]
+            if isinstance(created_at, datetime) and created_at.tzinfo is not None:
+                # 转换为UTC时间，然后移除时区信息
+                processed_data["created_at"] = created_at.astimezone(
+                    timezone.utc
+                ).replace(tzinfo=None)
+        
+        run = WorkflowRun(**processed_data)
         session.add(run)
         await session.commit()
         await session.refresh(run)
@@ -374,13 +405,18 @@ class WorkflowRunDAO:
         additional_data: Optional[Dict[str, Any]] = None,
     ) -> Optional[WorkflowRun]:
         """完成运行记录"""
+        # 使用 naive datetime（无时区），与数据库字段类型一致
         ended_at = datetime.utcnow()
 
         # 计算运行时长
         run = await WorkflowRunDAO.get_by_id(session, run_id)
         duration = None
         if run and run.started_at:
-            duration = int((ended_at - run.started_at).total_seconds() / 60)
+            # 确保两个datetime都是naive，避免时区问题
+            started_at = run.started_at
+            if started_at.tzinfo is not None:
+                started_at = started_at.replace(tzinfo=None)
+            duration = int((ended_at - started_at).total_seconds() / 60)
 
         update_data = {
             "status": status,

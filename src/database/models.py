@@ -248,7 +248,7 @@ class WorkflowRun(Base):
     run_log = Column(Text, nullable=True)  # 运行日志
     run_config = Column(JSON, nullable=True)  # 运行时的配置快照
     created_at = Column(
-        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
+        DateTime, nullable=False, default=lambda: datetime.utcnow()
     )
 
     def to_dict(self) -> Dict[str, Any]:
