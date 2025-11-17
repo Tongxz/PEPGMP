@@ -195,15 +195,16 @@
               />
             </n-form-item>
 
-            <n-form-item label="名称" path="name" v-if="mode === 'create'">
+            <n-form-item label="名称" path="name">
               <n-input
                 v-model:value="formData.name"
                 placeholder="例如: 大门口 USB0"
                 :input-props="{ autocomplete: 'off' }"
+                :disabled="mode === 'edit'"
               />
             </n-form-item>
 
-            <n-form-item label="来源" path="source" v-if="mode === 'create'">
+            <n-form-item label="来源" path="source">
               <n-input
                 v-model:value="formData.source"
                 placeholder="0 或 rtsp://username:password@ip:554/stream"
@@ -796,7 +797,22 @@ function fillForm(camera: any) {
   formData.id = camera.id || ''
   formData.name = camera.name || ''
   formData.source = camera.source || ''
-  formData.resolution = camera.resolution || ''
+  
+  // resolution 字段：后端返回的是元组 [width, height]，需要转换为字符串 "widthxheight"
+  if (camera.resolution) {
+    if (Array.isArray(camera.resolution) && camera.resolution.length === 2) {
+      // 元组格式：[1920, 1080] -> "1920x1080"
+      formData.resolution = `${camera.resolution[0]}x${camera.resolution[1]}`
+    } else if (typeof camera.resolution === 'string') {
+      // 字符串格式：直接使用
+      formData.resolution = camera.resolution
+    } else {
+      formData.resolution = ''
+    }
+  } else {
+    formData.resolution = ''
+  }
+  
   formData.fps = camera.fps || null
   formData.regions_file = camera.regions_file || ''
   // 检测与视频流配置（从camera配置或默认值）
@@ -808,11 +824,69 @@ function collectFormData(includeEmpty: boolean) {
   const payload: any = {}
 
   if (includeEmpty || formData.id.trim()) payload.id = formData.id.trim()
-  if (includeEmpty || formData.name.trim()) payload.name = formData.name.trim()
-  if (includeEmpty || formData.source.trim()) payload.source = formData.source.trim()
-  if (includeEmpty || formData.resolution.trim()) payload.resolution = formData.resolution.trim()
+  
+  // 创建模式下，name 是必填的
+  if (mode.value === 'create' && (includeEmpty || formData.name.trim())) {
+    payload.name = formData.name.trim()
+  }
+  
+  // source 字段：创建模式下必填，编辑模式下允许修改
+  // 在编辑模式下，source 字段总是被包含在 payload 中（如果表单中有值）
+  if (mode.value === 'create') {
+    // 创建模式：source 是必填的
+    if (includeEmpty || formData.source.trim()) {
+      payload.source = formData.source.trim()
+    }
+  } else {
+    // 编辑模式：source 字段允许修改，如果表单中有值则包含
+    // 注意：formData.source 在 fillForm 时会被填充为当前值
+    // 如果用户修改了 source，新值会被包含；如果用户没有修改，原有值也会被包含
+    if (formData.source !== undefined && formData.source !== null && formData.source.trim()) {
+      payload.source = formData.source.trim()
+    }
+  }
+  
+  // resolution 字段：需要将字符串 "widthxheight" 转换为数组 [width, height]
+  // 后端期望的是列表格式，如 [1920, 1080]
+  if (formData.resolution) {
+    // 确保 resolution 是字符串类型
+    const resolutionStr = typeof formData.resolution === 'string' 
+      ? formData.resolution.trim() 
+      : String(formData.resolution || '').trim()
+    
+    if (resolutionStr) {
+      // 解析 "1280x720" 格式
+      if (resolutionStr.includes('x')) {
+        const parts = resolutionStr.split('x')
+        if (parts.length === 2) {
+          const width = parseInt(parts[0].trim(), 10)
+          const height = parseInt(parts[1].trim(), 10)
+          if (!isNaN(width) && !isNaN(height) && width > 0 && height > 0) {
+            payload.resolution = [width, height]
+          }
+        }
+      }
+      // 如果不符合格式，不包含在 payload 中（编辑模式下，不会更新该字段）
+    }
+  }
+  // 注意：编辑模式下，如果 resolution 为空或不合法，不包含在 payload 中，保持原值
+  
   if (includeEmpty || formData.fps !== null) payload.fps = formData.fps
-  if (includeEmpty || formData.regions_file.trim()) payload.regions_file = formData.regions_file.trim()
+  
+  // regions_file 字段：确保是字符串类型
+  // 编辑模式下，如果 regions_file 为空，不包含在 payload 中（保持原值）
+  if (formData.regions_file !== undefined && formData.regions_file !== null) {
+    const regionsFileStr = typeof formData.regions_file === 'string' 
+      ? formData.regions_file.trim() 
+      : String(formData.regions_file).trim()
+    // 编辑模式下，即使为空字符串，如果用户清空了字段，也应该更新
+    if (includeEmpty || regionsFileStr) {
+      payload.regions_file = regionsFileStr
+    }
+  } else if (includeEmpty) {
+    // 创建模式下，如果 regions_file 未设置，设置为空字符串
+    payload.regions_file = ''
+  }
 
   // 检测与视频流配置（简化：只保留检测频率）
   // 确保 log_interval 被包含（编辑模式下也需要）
