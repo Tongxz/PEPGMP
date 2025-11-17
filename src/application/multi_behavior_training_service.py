@@ -422,7 +422,26 @@ class MultiBehaviorTrainingService:
                 import torch
 
                 if device_req == "cuda" and not torch.cuda.is_available():
+                    # 详细诊断 CUDA 不可用的原因
                     logger.warning("CUDA 不可用，回退到 CPU")
+                    try:
+                        # 检查 PyTorch 是否支持 CUDA
+                        has_cuda_support = hasattr(torch.version, 'cuda') and torch.version.cuda is not None
+                        if not has_cuda_support:
+                            logger.warning("  原因: PyTorch 是 CPU 版本，不支持 CUDA")
+                            logger.warning("  解决方案: 安装 CUDA 版本的 PyTorch")
+                            logger.warning("    pip uninstall torch torchvision")
+                            logger.warning("    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121")
+                        else:
+                            logger.warning(f"  原因: PyTorch 支持 CUDA (编译版本: {torch.version.cuda})，但运行时检测不到 GPU")
+                            logger.warning("  可能原因:")
+                            logger.warning("    1. NVIDIA 驱动未安装或版本过旧")
+                            logger.warning("    2. CUDA 工具包未安装或版本不匹配")
+                            logger.warning("    3. GPU 被其他进程占用")
+                            logger.warning("    4. 系统没有 NVIDIA GPU")
+                            logger.warning("  建议运行诊断脚本: python scripts/diagnose_cuda.py")
+                    except Exception as diag_error:
+                        logger.debug(f"CUDA 诊断失败: {diag_error}")
                     return "cpu"
                 if device_req == "mps":
                     mps_available = bool(
