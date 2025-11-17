@@ -232,6 +232,147 @@
                 </n-gi>
               </n-grid>
             </n-form-item>
+
+            <!-- 多行为训练配置（用于Roboflow数据集） -->
+            <n-form-item v-if="step.type === 'multi_behavior_training'" label="训练配置">
+              <n-grid :cols="1" :x-gap="12" :y-gap="12">
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>数据集目录</n-input-group-label>
+                    <n-input
+                      :value="getMultiBehaviorConfig(step, 'dataset_dir')"
+                      @update:value="val => updateMultiBehaviorConfig(step, 'dataset_dir', val)"
+                      placeholder="/Users/zhou/Code/Pyt/data/datasets/hairnet.v15i.yolov8"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>data.yaml路径</n-input-group-label>
+                    <n-input
+                      :value="getMultiBehaviorConfig(step, 'data_config')"
+                      @update:value="val => updateMultiBehaviorConfig(step, 'data_config', val)"
+                      placeholder="/Users/zhou/Code/Pyt/data/datasets/hairnet.v15i.yolov8/data.yaml"
+                    />
+                  </n-input-group>
+                </n-gi>
+              </n-grid>
+            </n-form-item>
+
+            <!-- 训练参数配置（适用于model_training和multi_behavior_training） -->
+            <n-form-item v-if="step.type === 'model_training' || step.type === 'multi_behavior_training' || step.type === 'handwash_training'" label="训练参数">
+              <n-grid :cols="3" :x-gap="12" :y-gap="12">
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>初始学习率 (lr0)</n-input-group-label>
+                    <n-input-number
+                      :value="step.training_params?.lr0 || 0.01"
+                      @update:value="(val) => updateTrainingParam(step, 'lr0', val)"
+                      :min="0.0001"
+                      :max="1"
+                      :step="0.001"
+                      :precision="4"
+                      placeholder="0.01"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>最终学习率 (lrf)</n-input-group-label>
+                    <n-input-number
+                      :value="step.training_params?.lrf || 0.1"
+                      @update:value="(val) => updateTrainingParam(step, 'lrf', val)"
+                      :min="0.01"
+                      :max="1"
+                      :step="0.01"
+                      :precision="2"
+                      placeholder="0.1"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>批次大小</n-input-group-label>
+                    <n-input-number
+                      :value="step.training_params?.batch_size || 16"
+                      @update:value="(val) => updateTrainingParam(step, 'batch_size', val)"
+                      :min="1"
+                      :max="128"
+                      placeholder="16"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>设备</n-input-group-label>
+                    <n-select
+                      :value="step.training_params?.device || 'auto'"
+                      @update:value="(val) => updateTrainingParam(step, 'device', val)"
+                      :options="deviceOptions"
+                      placeholder="选择设备"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>模型</n-input-group-label>
+                    <n-input :value="step.training_params?.model || ''" @update:value="(val) => updateTrainingParam(step, 'model', val)" placeholder="yolov8n.pt" />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>训练轮数</n-input-group-label>
+                    <n-input-number :value="step.training_params?.epochs || 50" @update:value="(val) => updateTrainingParam(step, 'epochs', val)" :min="1" :max="1000" />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>图像尺寸</n-input-group-label>
+                    <n-input-number :value="step.training_params?.image_size || 640" @update:value="(val) => updateTrainingParam(step, 'image_size', val)" :min="128" :max="2048" />
+                  </n-input-group>
+                </n-gi>
+                <n-gi v-if="step.type === 'multi_behavior_training'">
+                  <n-input-group>
+                    <n-input-group-label>动量 (momentum)</n-input-group-label>
+                    <n-input-number
+                      :value="step.training_params?.momentum || 0.937"
+                      @update:value="(val) => updateTrainingParam(step, 'momentum', val)"
+                      :min="0"
+                      :max="1"
+                      :step="0.001"
+                      :precision="3"
+                      placeholder="0.937"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi v-if="step.type === 'multi_behavior_training'">
+                  <n-input-group>
+                    <n-input-group-label>权重衰减 (weight_decay)</n-input-group-label>
+                    <n-input-number
+                      :value="step.training_params?.weight_decay || 0.0005"
+                      @update:value="(val) => updateTrainingParam(step, 'weight_decay', val)"
+                      :min="0"
+                      :max="0.01"
+                      :step="0.0001"
+                      :precision="4"
+                      placeholder="0.0005"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi v-if="step.type === 'multi_behavior_training'">
+                  <n-input-group>
+                    <n-input-group-label>预热轮数 (warmup_epochs)</n-input-group-label>
+                    <n-input-number
+                      :value="step.training_params?.warmup_epochs || 3"
+                      @update:value="(val) => updateTrainingParam(step, 'warmup_epochs', val)"
+                      :min="0"
+                      :max="10"
+                      placeholder="3"
+                    />
+                  </n-input-group>
+                </n-gi>
+              </n-grid>
+            </n-form-item>
           </n-card>
         </div>
         <n-button @click="addStep" type="dashed" style="width: 100%; margin-top: 12px;">
@@ -588,18 +729,73 @@
                 </n-gi>
               </n-grid>
             </n-form-item>
-            <n-form-item v-if="step.type === 'model_training'" label="训练参数">
-              <n-grid :cols="3" :x-gap="12">
+            <!-- 多行为训练配置（用于Roboflow数据集） -->
+            <n-form-item v-if="step.type === 'multi_behavior_training'" label="训练配置">
+              <n-grid :cols="1" :x-gap="12" :y-gap="12">
                 <n-gi>
                   <n-input-group>
-                    <n-input-group-label>学习率</n-input-group-label>
-                    <n-input :value="step.training_params?.learning_rate || ''" @update:value="(val) => updateTrainingParam(step, 'learning_rate', val)" placeholder="0.001" />
+                    <n-input-group-label>数据集目录</n-input-group-label>
+                    <n-input
+                      :value="getMultiBehaviorConfig(step, 'dataset_dir')"
+                      @update:value="val => updateMultiBehaviorConfig(step, 'dataset_dir', val)"
+                      placeholder="/Users/zhou/Code/Pyt/data/datasets/hairnet.v15i.yolov8"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>data.yaml路径</n-input-group-label>
+                    <n-input
+                      :value="getMultiBehaviorConfig(step, 'data_config')"
+                      @update:value="val => updateMultiBehaviorConfig(step, 'data_config', val)"
+                      placeholder="/Users/zhou/Code/Pyt/data/datasets/hairnet.v15i.yolov8/data.yaml"
+                    />
+                  </n-input-group>
+                </n-gi>
+              </n-grid>
+            </n-form-item>
+
+            <!-- 训练参数配置（适用于model_training和multi_behavior_training） -->
+            <n-form-item v-if="step.type === 'model_training' || step.type === 'multi_behavior_training' || step.type === 'handwash_training'" label="训练参数">
+              <n-grid :cols="3" :x-gap="12" :y-gap="12">
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>初始学习率 (lr0)</n-input-group-label>
+                    <n-input-number
+                      :value="step.training_params?.lr0 || 0.01"
+                      @update:value="(val) => updateTrainingParam(step, 'lr0', val)"
+                      :min="0.0001"
+                      :max="1"
+                      :step="0.001"
+                      :precision="4"
+                      placeholder="0.01"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>最终学习率 (lrf)</n-input-group-label>
+                    <n-input-number
+                      :value="step.training_params?.lrf || 0.1"
+                      @update:value="(val) => updateTrainingParam(step, 'lrf', val)"
+                      :min="0.01"
+                      :max="1"
+                      :step="0.01"
+                      :precision="2"
+                      placeholder="0.1"
+                    />
                   </n-input-group>
                 </n-gi>
                 <n-gi>
                   <n-input-group>
                     <n-input-group-label>批次大小</n-input-group-label>
-                    <n-input :value="step.training_params?.batch_size || ''" @update:value="(val) => updateTrainingParam(step, 'batch_size', val)" placeholder="32" />
+                    <n-input-number
+                      :value="step.training_params?.batch_size || 16"
+                      @update:value="(val) => updateTrainingParam(step, 'batch_size', val)"
+                      :min="1"
+                      :max="128"
+                      placeholder="16"
+                    />
                   </n-input-group>
                 </n-gi>
                 <n-gi>
@@ -610,6 +806,64 @@
                       @update:value="(val) => updateTrainingParam(step, 'device', val)"
                       :options="deviceOptions"
                       placeholder="选择设备"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>模型</n-input-group-label>
+                    <n-input :value="step.training_params?.model || ''" @update:value="(val) => updateTrainingParam(step, 'model', val)" placeholder="yolov8n.pt" />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>训练轮数</n-input-group-label>
+                    <n-input-number :value="step.training_params?.epochs || 50" @update:value="(val) => updateTrainingParam(step, 'epochs', val)" :min="1" :max="1000" />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>图像尺寸</n-input-group-label>
+                    <n-input-number :value="step.training_params?.image_size || 640" @update:value="(val) => updateTrainingParam(step, 'image_size', val)" :min="128" :max="2048" />
+                  </n-input-group>
+                </n-gi>
+                <n-gi v-if="step.type === 'multi_behavior_training'">
+                  <n-input-group>
+                    <n-input-group-label>动量 (momentum)</n-input-group-label>
+                    <n-input-number
+                      :value="step.training_params?.momentum || 0.937"
+                      @update:value="(val) => updateTrainingParam(step, 'momentum', val)"
+                      :min="0"
+                      :max="1"
+                      :step="0.001"
+                      :precision="3"
+                      placeholder="0.937"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi v-if="step.type === 'multi_behavior_training'">
+                  <n-input-group>
+                    <n-input-group-label>权重衰减 (weight_decay)</n-input-group-label>
+                    <n-input-number
+                      :value="step.training_params?.weight_decay || 0.0005"
+                      @update:value="(val) => updateTrainingParam(step, 'weight_decay', val)"
+                      :min="0"
+                      :max="0.01"
+                      :step="0.0001"
+                      :precision="4"
+                      placeholder="0.0005"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi v-if="step.type === 'multi_behavior_training'">
+                  <n-input-group>
+                    <n-input-group-label>预热轮数 (warmup_epochs)</n-input-group-label>
+                    <n-input-number
+                      :value="step.training_params?.warmup_epochs || 3"
+                      @update:value="(val) => updateTrainingParam(step, 'warmup_epochs', val)"
+                      :min="0"
+                      :max="10"
+                      placeholder="3"
                     />
                   </n-input-group>
                 </n-gi>
@@ -851,6 +1105,8 @@ const stepTypeOptions = [
   { label: '数据预处理', value: 'data_processing' },
   { label: '数据集生成', value: 'dataset_generation' },
   { label: '模型训练', value: 'model_training' },
+  { label: '多行为训练', value: 'multi_behavior_training' },
+  { label: '洗手训练', value: 'handwash_training' },
   { label: '模型评估', value: 'model_evaluation' },
   { label: '模型部署', value: 'model_deployment' },
   { label: '数据验证', value: 'data_validation' },
@@ -871,11 +1127,42 @@ const deviceOptions = [
 ]
 
 // 更新训练参数
-function updateTrainingParam(step: WorkflowStep, param: string, value: string) {
+function updateTrainingParam(step: WorkflowStep, param: string, value: string | number) {
   if (!step.training_params) {
     step.training_params = {}
   }
   step.training_params[param as keyof typeof step.training_params] = value
+  syncTrainingConfig(step)
+}
+
+// 获取多行为训练配置
+function getMultiBehaviorConfig(step: WorkflowStep, key: string): string {
+  const config = parseConfig(step.config)
+  return config[key] || ''
+}
+
+// 更新多行为训练配置
+function updateMultiBehaviorConfig(step: WorkflowStep, key: string, value: string) {
+  const config = parseConfig(step.config)
+  if (value) {
+    config[key] = value
+  } else {
+    delete config[key]
+  }
+  step.config = JSON.stringify(config, null, 2)
+}
+
+// 同步训练配置到config
+function syncTrainingConfig(step: WorkflowStep) {
+  if (!step.training_params) {
+    return
+  }
+  const config = parseConfig(step.config)
+  if (!config.training_params) {
+    config.training_params = {}
+  }
+  Object.assign(config.training_params, step.training_params)
+  step.config = JSON.stringify(config, null, 2)
 }
 
 // 更新部署参数
@@ -1040,22 +1327,66 @@ function normalizeStepsForSubmit(steps: WorkflowStep[]) {
       normalized.dataset_params = datasetParams
       Object.assign(configObj, datasetParams)
     }
-    if (Object.keys(configObj).length > 0) {
+
+    // 处理多行为训练配置
+    if (step.type === 'multi_behavior_training') {
+      normalized.config = {}
+      if (configObj.dataset_dir) {
+        normalized.config.dataset_dir = configObj.dataset_dir
+      }
+      if (configObj.data_config) {
+        normalized.config.data_config = configObj.data_config
+      }
+      if (configObj.training_params) {
+        normalized.config.training_params = configObj.training_params
+      }
+    } else if (Object.keys(configObj).length > 0) {
       normalized.config = configObj
     }
+
     if (step.training_params) {
       const trainingPayload: Record<string, any> = {}
-      if (step.training_params.learning_rate) {
+      if (step.training_params.lr0 !== undefined) {
+        trainingPayload.lr0 = step.training_params.lr0
+      }
+      if (step.training_params.lrf !== undefined) {
+        trainingPayload.lrf = step.training_params.lrf
+      }
+      if (step.training_params.learning_rate !== undefined) {
         trainingPayload.learning_rate = step.training_params.learning_rate
       }
-      if (step.training_params.batch_size) {
+      if (step.training_params.batch_size !== undefined) {
         trainingPayload.batch_size = step.training_params.batch_size
       }
       if (step.training_params.device) {
         trainingPayload.device = step.training_params.device
       }
+      if (step.training_params.model) {
+        trainingPayload.model = step.training_params.model
+      }
+      if (step.training_params.epochs !== undefined) {
+        trainingPayload.epochs = step.training_params.epochs
+      }
+      if (step.training_params.image_size !== undefined) {
+        trainingPayload.image_size = step.training_params.image_size
+      }
+      if (step.training_params.momentum !== undefined) {
+        trainingPayload.momentum = step.training_params.momentum
+      }
+      if (step.training_params.weight_decay !== undefined) {
+        trainingPayload.weight_decay = step.training_params.weight_decay
+      }
+      if (step.training_params.warmup_epochs !== undefined) {
+        trainingPayload.warmup_epochs = step.training_params.warmup_epochs
+      }
       if (Object.keys(trainingPayload).length > 0) {
-        normalized.training_params = trainingPayload
+        if (step.type === 'multi_behavior_training') {
+          // 对于multi_behavior_training，将训练参数放在config.training_params中
+          normalized.config = normalized.config || {}
+          normalized.config.training_params = trainingPayload
+        } else {
+          normalized.training_params = trainingPayload
+        }
       }
     }
     if (step.deployment_params) {
@@ -1222,31 +1553,9 @@ async function fetchWorkflows() {
     }
   } catch (error) {
     console.error('获取工作流列表失败:', error)
-    // 使用模拟数据作为备用
-    workflows.value = [
-      {
-        id: '1',
-        name: '智能检测模型训练流水线',
-        type: 'training',
-        status: 'active',
-        trigger: 'schedule',
-        schedule: '0 2 * * *',
-        description: '每日自动训练智能检测模型',
-        steps: [
-          { name: '数据预处理', type: 'data_processing', description: '清洗和预处理检测数据' },
-          { name: '模型训练', type: 'model_training', description: '训练YOLOv8检测模型' }
-        ],
-        last_run: '2024-01-20T02:00:00Z',
-        next_run: '2024-01-21T02:00:00Z',
-        run_count: 15,
-        success_rate: 93.3,
-        avg_duration: 45,
-        created_at: '2024-01-01T10:00:00Z',
-        recent_runs: [
-          { id: '1', status: 'success', started_at: '2024-01-20T02:00:00Z', duration: 42 }
-        ]
-      }
-    ]
+    // 不使用模拟数据，避免用户尝试运行不存在的工作流
+    workflows.value = []
+    message.error('获取工作流列表失败，请检查后端服务是否正常运行')
   } finally {
     loading.value = false
   }
@@ -1383,12 +1692,23 @@ function editWorkflow(workflow: Workflow) {
 async function runWorkflow(workflow: Workflow) {
   console.log('运行工作流:', workflow)
   try {
+    // 检查工作流ID是否有效（避免运行模拟数据）
+    if (!workflow.id || workflow.id === '1' || workflow.id.startsWith('mock_')) {
+      message.warning('无法运行此工作流，请刷新列表获取最新数据')
+      await refreshWorkflows()
+      return
+    }
+
     const confirmed = confirm(`确定要运行工作流 "${workflow.name}" 吗？`)
-    if (confirmed) {
-      message.loading('正在运行工作流...')
+    if (!confirmed) return
+
+    const loadingMessage = message.loading('正在运行工作流...', { duration: 0 })
+    try {
       const response = await fetch(`/api/v1/mlops/workflows/${workflow.id}/run`, {
         method: 'POST'
       })
+      loadingMessage.destroy()
+
       if (response.ok) {
         const result = await response.json()
         message.success('工作流运行成功')
@@ -1404,10 +1724,22 @@ async function runWorkflow(workflow: Workflow) {
           showRunLogDialog.value = true
         }
       } else {
-        throw new Error('运行失败')
+        const errorData = await response.json().catch(() => ({ detail: '运行失败' }))
+        const errorMsg = errorData.detail || errorData.message || '运行失败'
+        if (response.status === 404) {
+          message.error(`工作流不存在，请刷新列表: ${errorMsg}`)
+          await refreshWorkflows()
+        } else {
+          message.error(`运行失败: ${errorMsg}`)
+        }
       }
+    } catch (fetchError) {
+      loadingMessage.destroy()
+      console.error('运行工作流请求失败:', fetchError)
+      message.error('网络请求失败，请检查后端服务是否正常运行')
     }
   } catch (error) {
+    console.error('运行工作流失败:', error)
     message.error('运行失败')
   }
 }
@@ -1510,6 +1842,8 @@ function getStepTypeColor(type: string) {
     data_processing: 'info',
     dataset_generation: 'success',
     model_training: 'success',
+    multi_behavior_training: 'success',
+    handwash_training: 'success',
     model_evaluation: 'warning',
     model_deployment: 'error',
     data_validation: 'default',
@@ -1519,11 +1853,13 @@ function getStepTypeColor(type: string) {
 }
 
 // 获取步骤类型文本
-function getStepTypeText(type: string) {
+function getStepTypeText(type: string): string {
   const typeMap = {
     data_processing: '数据处理',
     dataset_generation: '数据集生成',
     model_training: '模型训练',
+    multi_behavior_training: '多行为训练',
+    handwash_training: '洗手训练',
     model_evaluation: '模型评估',
     model_deployment: '模型部署',
     data_validation: '数据验证',
