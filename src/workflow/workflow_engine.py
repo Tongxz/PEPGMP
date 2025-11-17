@@ -176,12 +176,37 @@ class WorkflowEngine:
 
             run_id = f"run_{int(datetime.utcnow().timestamp())}"
             logger.info(f"创建工作流运行任务: {workflow_id} (Run ID: {run_id})")
-            self.running_workflows[workflow_id] = asyncio.current_task()
-            result = await self._execute_workflow(workflow_id, run_id, workflow_config)
+            
+            # 创建任务来执行工作流，这样才能正确取消
+            task = asyncio.create_task(
+                self._execute_workflow(workflow_id, run_id, workflow_config)
+            )
+            self.running_workflows[workflow_id] = task
+            
+            # 等待任务完成
+            result = await task
+            
+            # 任务完成后从运行列表中移除
+            if workflow_id in self.running_workflows:
+                del self.running_workflows[workflow_id]
+            
             return result
 
+        except asyncio.CancelledError:
+            logger.info(f"工作流 {workflow_id} 已被取消")
+            # 从运行列表中移除
+            if workflow_id in self.running_workflows:
+                del self.running_workflows[workflow_id]
+            return {
+                "success": False,
+                "error": "工作流已取消",
+                "message": f"工作流 {workflow_id} 已被取消",
+            }
         except Exception as e:
             logger.error(f"运行工作流异常: {e}")
+            # 从运行列表中移除
+            if workflow_id in self.running_workflows:
+                del self.running_workflows[workflow_id]
             return {"success": False, "error": str(e), "message": "工作流运行异常"}
 
     async def stop_workflow(self, workflow_id: str) -> Dict[str, Any]:
@@ -284,6 +309,11 @@ class WorkflowEngine:
 
             for i, step in enumerate(steps):
                 try:
+                    # 检查是否被取消
+                    current_task = asyncio.current_task()
+                    if current_task and current_task.cancelled():
+                        raise asyncio.CancelledError("工作流已被取消")
+                    
                     step_name = step.get("name", f"步骤 {i+1}")
                     step_type = StepType(step.get("type", "custom"))
 

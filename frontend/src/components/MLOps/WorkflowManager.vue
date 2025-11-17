@@ -1748,16 +1748,61 @@ async function runWorkflow(workflow: Workflow) {
 async function toggleWorkflow(workflow: Workflow) {
   console.log('切换工作流状态:', workflow)
   const action = workflow.status === 'active' ? '停用' : '启用'
+  const newStatus = workflow.status === 'active' ? 'inactive' : 'active'
   try {
-    const confirmed = confirm(`确定要${action}工作流 "${workflow.name}" 吗？`)
-    if (confirmed) {
-      message.loading(`正在${action}...`)
-      // 模拟API调用
-      await new Promise(resolve => setTimeout(resolve, 1000))
+    const confirmed = confirm(`确定要${action}工作流 "${workflow.name}" 吗？${workflow.status === 'active' ? '如果工作流正在运行，将先停止运行。' : ''}`)
+    if (!confirmed) {
+      return
+    }
+    
+    const loadingMessage = message.loading(`正在${action}...`, { duration: 0 })
+    
+    try {
+      // 如果停用工作流，先尝试停止正在运行的训练
+      if (workflow.status === 'active') {
+        try {
+          const stopResponse = await fetch(`/api/v1/mlops/workflows/${workflow.id}/stop`, {
+            method: 'POST'
+          })
+          if (stopResponse.ok) {
+            const stopResult = await stopResponse.json()
+            if (stopResult.success) {
+              console.log('工作流已停止:', stopResult)
+            }
+          }
+        } catch (stopError) {
+          // 如果停止失败（可能工作流未在运行），继续更新状态
+          console.warn('停止工作流失败（可能未在运行）:', stopError)
+        }
+      }
+      
+      // 更新工作流状态
+      const response = await fetch(`/api/v1/mlops/workflows/${workflow.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          ...workflow,
+          status: newStatus
+        })
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: '更新失败' }))
+        throw new Error(errorData.detail || '更新失败')
+      }
+      
+      loadingMessage.destroy()
       message.success(`工作流${action}成功`)
       refreshWorkflows()
+    } catch (error) {
+      loadingMessage.destroy()
+      console.error(`${action}工作流失败:`, error)
+      message.error(`${action}失败: ${error instanceof Error ? error.message : '未知错误'}`)
     }
   } catch (error) {
+    console.error(`${action}工作流失败:`, error)
     message.error(`${action}失败`)
   }
 }

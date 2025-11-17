@@ -902,6 +902,18 @@ async def update_workflow(
 ):
     """更新工作流"""
     try:
+        # 如果工作流状态从 active 变为 inactive，且工作流正在运行，先停止运行
+        if "status" in workflow:
+            new_status = workflow["status"]
+            if new_status == "inactive":
+                # 检查工作流是否正在运行
+                try:
+                    stop_result = await workflow_engine.stop_workflow(workflow_id)
+                    if stop_result.get("success"):
+                        logger.info(f"工作流 {workflow_id} 正在运行，已停止")
+                except Exception as e:
+                    logger.warning(f"停止工作流 {workflow_id} 失败（可能未在运行）: {e}")
+        
         if "steps" in workflow:
             workflow["steps"] = [
                 _normalize_step_config(step) for step in workflow.get("steps", [])
@@ -1005,10 +1017,31 @@ async def run_workflow(
         raise HTTPException(status_code=500, detail="运行工作流失败")
 
 
+@router.post("/workflows/{workflow_id}/stop")
+async def stop_workflow(workflow_id: str):
+    """停止正在运行的工作流"""
+    try:
+        result = await workflow_engine.stop_workflow(workflow_id)
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("message", "停止工作流失败"))
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"停止工作流失败: {e}")
+        raise HTTPException(status_code=500, detail="停止工作流失败")
+
+
 @router.delete("/workflows/{workflow_id}")
 async def delete_workflow(workflow_id: str):
     """删除工作流"""
     try:
+        # 如果工作流正在运行，先停止
+        try:
+            await workflow_engine.stop_workflow(workflow_id)
+        except Exception:
+            pass  # 如果停止失败，继续删除
+        
         # 这里应该从工作流引擎删除
         logger.info(f"删除工作流: {workflow_id}")
         return {"message": "工作流删除成功"}
