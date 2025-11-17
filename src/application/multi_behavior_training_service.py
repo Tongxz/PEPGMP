@@ -187,8 +187,9 @@ class MultiBehaviorTrainingService:
                     perspective=0.0,  # 透视变换（禁用，避免张量问题）
                     flipud=0.0,  # 上下翻转概率（禁用）
                     fliplr=0.5,  # 左右翻转概率
-                    mosaic=1.0,  # Mosaic增强概率
+                    mosaic=0.5,  # Mosaic增强概率（降低，避免shape mismatch）
                     mixup=0.0,  # Mixup增强概率（禁用，避免张量问题）
+                    copy_paste=0.0,  # Copy-paste增强（禁用，避免shape问题）
                 )
             except (ValueError, RuntimeError, RuntimeWarning) as exc:
                 # 捕获训练过程中的异常，提供更详细的错误信息
@@ -207,17 +208,37 @@ class MultiBehaviorTrainingService:
                 # 检查是否是张量大小不匹配的错误
                 is_tensor_size_error = (
                     "size of tensor" in error_lower and "must match" in error_lower
+                ) or (
+                    "shape mismatch" in error_lower or
+                    "cannot be broadcast" in error_lower
                 )
 
                 if is_tensor_size_error:
-                    logger.error("训练过程中出现张量大小不匹配错误，这通常是由于数据集问题导致的。" "错误: %s", exc)
+                    logger.error(
+                        "训练过程中出现张量形状不匹配错误，这通常是由于数据增强或数据集问题导致的。"
+                        "错误: %s", exc
+                    )
+                    # 检查训练进度，如果已经训练了很多轮，可能是数据增强导致的问题
+                    trainer = getattr(model, "trainer", None)
+                    if trainer is not None:
+                        current_epoch = getattr(trainer, "epoch", 0)
+                        if current_epoch > 10:
+                            # 已经训练了很多轮，可能是数据增强导致的问题
+                            raise ValueError(
+                                f"训练失败：张量形状不匹配（第{current_epoch}轮）。"
+                                f"这通常是由于数据增强（特别是Mosaic）导致的问题。"
+                                f"建议：1) 降低Mosaic增强概率；2) 禁用某些数据增强；"
+                                f"3) 检查数据集中是否有异常的标注文件。原始错误: {error_msg}"
+                            ) from exc
                     raise ValueError(
-                        f"训练失败：张量大小不匹配。这通常是由于："
-                        f"1) 标注文件与图像文件不匹配；"
-                        f"2) 某些图像文件损坏或无法读取；"
-                        f"3) 数据集中存在格式不一致的标注。"
-                        f"建议：1) 检查数据集完整性；2) 验证所有图像和标注文件是否匹配；"
-                        f"3) 尝试重新下载或准备数据集。原始错误: {error_msg}"
+                        f"训练失败：张量形状不匹配。这通常是由于："
+                        f"1) 数据增强（Mosaic等）导致标注索引问题；"
+                        f"2) 标注文件与图像文件不匹配；"
+                        f"3) 某些图像文件损坏或无法读取；"
+                        f"4) 数据集中存在格式不一致的标注。"
+                        f"建议：1) 降低Mosaic增强概率或禁用数据增强；"
+                        f"2) 检查数据集完整性；3) 验证所有图像和标注文件是否匹配；"
+                        f"4) 尝试重新下载或准备数据集。原始错误: {error_msg}"
                     ) from exc
                 elif is_metrics_error:
                     logger.warning("训练过程中出现指标计算警告（通常在验证阶段），这是YOLO的已知问题。" "错误: %s", exc)
