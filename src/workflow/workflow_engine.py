@@ -6,6 +6,7 @@
 import asyncio
 import json
 import logging
+import threading
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -64,6 +65,8 @@ class WorkflowEngine:
     def __init__(self):
         self.running_workflows: Dict[str, asyncio.Task] = {}
         self.scheduled_workflows: Dict[str, asyncio.Task] = {}
+        # 用于取消训练任务的取消事件字典
+        self.cancel_events: Dict[str, threading.Event] = {}
         self.step_handlers: Dict[StepType, Callable] = {
             StepType.DATA_PROCESSING: self._handle_data_processing,
             StepType.DATASET_GENERATION: self._handle_dataset_generation,
@@ -164,10 +167,11 @@ class WorkflowEngine:
             运行结果
         """
         try:
-            logger.info(f"开始运行工作流: {workflow_id}")
+            logger.info(f"[工作流引擎] 开始运行工作流: workflow_id={workflow_id}")
 
             # 检查是否已在运行
             if workflow_id in self.running_workflows:
+                logger.warning(f"[工作流引擎] 工作流已在运行中: workflow_id={workflow_id}")
                 return {
                     "success": False,
                     "error": "工作流正在运行中",
@@ -175,11 +179,15 @@ class WorkflowEngine:
                 }
 
             run_id = f"run_{int(datetime.utcnow().timestamp())}"
-            logger.info(f"创建工作流运行任务: {workflow_id} (Run ID: {run_id})")
+            logger.info(f"[工作流引擎] 创建工作流运行任务: workflow_id={workflow_id}, run_id={run_id}")
+            
+            # 创建取消事件
+            cancel_event = threading.Event()
+            self.cancel_events[workflow_id] = cancel_event
             
             # 创建任务来执行工作流，这样才能正确取消
             task = asyncio.create_task(
-                self._execute_workflow(workflow_id, run_id, workflow_config)
+                self._execute_workflow(workflow_id, run_id, workflow_config, cancel_event)
             )
             self.running_workflows[workflow_id] = task
             
@@ -220,27 +228,71 @@ class WorkflowEngine:
             停止结果
         """
         try:
-            if workflow_id not in self.running_workflows:
+            stopped = False
+            
+            # 首先设置取消事件，通知训练任务停止（即使工作流不在运行列表中）
+            if workflow_id in self.cancel_events:
+                cancel_event = self.cancel_events[workflow_id]
+                cancel_event.set()
+                logger.info(f"已设置取消事件: {workflow_id}")
+                stopped = True
+            
+            # 如果工作流在运行列表中，取消运行任务
+            if workflow_id in self.running_workflows:
+                task = self.running_workflows[workflow_id]
+                try:
+                    task.cancel()
+                    logger.info(f"已取消工作流任务: {workflow_id}")
+                    stopped = True
+                except Exception as e:
+                    logger.warning(f"取消工作流任务失败: {e}")
+                
+                # 从运行列表中移除
+                try:
+                    del self.running_workflows[workflow_id]
+                except KeyError:
+                    pass  # 可能已经被删除
+            
+            # 如果工作流在调度列表中，也取消调度
+            if workflow_id in self.scheduled_workflows:
+                scheduled_task = self.scheduled_workflows[workflow_id]
+                try:
+                    scheduled_task.cancel()
+                    logger.info(f"已取消调度工作流任务: {workflow_id}")
+                    stopped = True
+                except Exception as e:
+                    logger.warning(f"取消调度工作流任务失败: {e}")
+                
+                # 从调度列表中移除
+                try:
+                    del self.scheduled_workflows[workflow_id]
+                except KeyError:
+                    pass  # 可能已经被删除
+
+            if stopped:
+                logger.info(f"✅ 工作流已停止: {workflow_id}")
                 return {
-                    "success": False,
-                    "error": "工作流未在运行",
-                    "message": f"工作流 {workflow_id} 未在运行",
+                    "success": True,
+                    "workflow_id": workflow_id,
+                    "status": "cancelled",
+                    "message": f"工作流 {workflow_id} 已停止",
                 }
-
-            # 取消运行任务
-            task = self.running_workflows[workflow_id]
-            task.cancel()
-
-            # 从运行列表中移除
-            del self.running_workflows[workflow_id]
-
-            logger.info(f"✅ 工作流已停止: {workflow_id}")
-            return {
-                "success": True,
-                "workflow_id": workflow_id,
-                "status": "cancelled",
-                "message": f"工作流 {workflow_id} 已停止",
-            }
+            else:
+                # 即使没有找到运行中的任务，也尝试创建取消事件（以防训练任务还在运行）
+                # 这样即使工作流不在运行列表中，训练任务也能响应取消
+                if workflow_id not in self.cancel_events:
+                    cancel_event = threading.Event()
+                    cancel_event.set()  # 立即设置，因为要停止
+                    self.cancel_events[workflow_id] = cancel_event
+                    logger.info(f"为工作流 {workflow_id} 创建并设置取消事件（工作流不在运行列表中）")
+                
+                logger.info(f"工作流 {workflow_id} 未在运行列表中，但已设置取消事件")
+                return {
+                    "success": True,
+                    "workflow_id": workflow_id,
+                    "status": "cancelled",
+                    "message": f"工作流 {workflow_id} 停止请求已发送",
+                }
 
         except Exception as e:
             logger.error(f"停止工作流异常: {e}")
@@ -286,7 +338,7 @@ class WorkflowEngine:
             }
 
     async def _execute_workflow(
-        self, workflow_id: str, run_id: str, workflow_config: Dict[str, Any]
+        self, workflow_id: str, run_id: str, workflow_config: Dict[str, Any], cancel_event: Optional[threading.Event] = None
     ) -> Dict[str, Any]:
         """
         执行工作流
@@ -305,7 +357,7 @@ class WorkflowEngine:
             completed_steps = 0
             context: Dict[str, Any] = {"step_outputs": [], "last_output": None}
 
-            logger.info(f"开始执行工作流 {workflow_id}，共 {total_steps} 个步骤")
+            logger.info(f"[工作流执行] 开始执行工作流: workflow_id={workflow_id}, total_steps={total_steps}, steps={[s.get('name', '') for s in steps]}")
 
             for i, step in enumerate(steps):
                 try:
@@ -314,17 +366,23 @@ class WorkflowEngine:
                     if current_task and current_task.cancelled():
                         raise asyncio.CancelledError("工作流已被取消")
                     
+                    # 检查取消事件
+                    if cancel_event and cancel_event.is_set():
+                        logger.info(f"检测到取消事件，停止工作流: {workflow_id}")
+                        raise asyncio.CancelledError("工作流已被取消")
+                    
                     step_name = step.get("name", f"步骤 {i+1}")
                     step_type = StepType(step.get("type", "custom"))
 
-                    logger.info(f"执行步骤 {i+1}/{total_steps}: {step_name}")
+                    logger.info(f"[工作流执行] 执行步骤 {i+1}/{total_steps}: step_name={step_name}, step_type={step_type.value}")
 
-                    # 执行步骤
+                    # 执行步骤，传递取消事件
                     step_result = await self._execute_step(
                         step_type,
                         step,
                         workflow_config,
                         context,
+                        cancel_event,
                     )
 
                     if step_result["success"]:
@@ -386,6 +444,7 @@ class WorkflowEngine:
                 "workflow_id": workflow_id,
                 "run_id": run_id,
                 "cancelled": True,
+                "error": "工作流被取消",
                 "message": "工作流被取消",
             }
         except Exception as e:
@@ -401,6 +460,9 @@ class WorkflowEngine:
             # 从运行列表中移除
             if workflow_id in self.running_workflows:
                 del self.running_workflows[workflow_id]
+            # 清理取消事件
+            if workflow_id in self.cancel_events:
+                del self.cancel_events[workflow_id]
 
     async def _execute_step(
         self,
@@ -408,6 +470,7 @@ class WorkflowEngine:
         step_config: Dict[str, Any],
         workflow_config: Dict[str, Any],
         context: Dict[str, Any],
+        cancel_event: Optional[threading.Event] = None,
     ) -> Dict[str, Any]:
         """
         执行单个步骤
@@ -425,7 +488,9 @@ class WorkflowEngine:
             if not handler:
                 return {"success": False, "error": f"不支持的步骤类型: {step_type}"}
 
-            return await handler(step_config, workflow_config, context)
+            # 将取消事件传递给步骤处理器（通过 context）
+            context_with_cancel = {**context, "_cancel_event": cancel_event}
+            return await handler(step_config, workflow_config, context_with_cancel)
 
         except Exception as e:
             logger.error(f"步骤执行异常: {e}")
@@ -801,6 +866,24 @@ class WorkflowEngine:
             return {"success": False, "error": "未提供多行为训练数据集目录"}
 
         training_params = config.get("training_params", {})
+        
+        # 检查是否要从上一次训练结果继续训练
+        # 1. 优先使用训练参数中明确指定的 resume_from
+        # 2. 如果没有指定，检查 context 中是否有上一次训练的模型路径
+        if "resume_from" not in training_params and "from_model" not in training_params:
+            last_training = context.get("last_multi_behavior_training") or context.get("last_training_output")
+            if last_training and last_training.get("model_path"):
+                resume_model_path = last_training.get("model_path")
+                training_params["resume_from"] = resume_model_path
+                logger.info(f"[工作流执行] 自动使用上一次训练的模型继续训练: {resume_model_path}")
+        
+        # 从 context 中获取取消事件
+        cancel_event = context.get("_cancel_event")
+        if cancel_event:
+            # 将取消事件传递给训练服务
+            training_params["_cancel_event"] = cancel_event
+        
+        logger.info(f"[工作流执行] 开始多行为训练: dataset_dir={dataset_dir}, data_config={data_config}")
         try:
             result = await training_service.train(
                 Path(dataset_dir),
@@ -816,8 +899,10 @@ class WorkflowEngine:
                 "version": result.version,
                 "artifacts": result.artifacts,
             }
+            # 保存训练结果到 context，供后续步骤使用（如继续训练）
             context["last_multi_behavior_training"] = output
-            logger.info("多行为训练完成: %s", result.model_path)
+            context["last_training_output"] = output  # 通用键名，供其他步骤使用
+            logger.info(f"[工作流执行] 多行为训练完成: model_path={result.model_path}, metrics={result.metrics}")
             return {"success": True, "message": "多行为训练完成", "output": output}
         except Exception as exc:
             logger.error("多行为训练步骤失败: %s", exc)

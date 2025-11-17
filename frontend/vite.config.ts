@@ -14,7 +14,7 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    open: '/',
+    open: true,
     proxy: {
       // 开发环境建议 VITE_API_BASE=/api/v1，所有 API 写相对路径，前缀走 /api
       '/api': {

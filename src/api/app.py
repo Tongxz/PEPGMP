@@ -281,10 +281,135 @@ async def lifespan(app: FastAPI):  # noqa: C901
     except Exception as e:
         logger.error(f"Redis监听器启动失败: {e}")
 
+    # 从数据库加载工作流到工作流引擎
+    try:
+        from src.database.connection import get_async_session
+        from src.database.dao import WorkflowDAO
+        from src.workflow.workflow_engine import workflow_engine
+
+        async for session in get_async_session():
+            try:
+                workflows = await WorkflowDAO.get_all(session)
+                loaded_count = 0
+                for workflow in workflows:
+                    try:
+                        workflow_dict = workflow.to_dict()
+                        # 重新注册到工作流引擎（特别是调度工作流）
+                        if workflow.status == "active" and workflow.trigger == "schedule":
+                            engine_result = await workflow_engine.create_workflow(workflow_dict)
+                            if engine_result.get("success"):
+                                loaded_count += 1
+                                logger.info(f"已加载调度工作流: {workflow.name} ({workflow.id})")
+                        elif workflow.status == "active":
+                            # 非调度工作流也注册到引擎（用于手动触发）
+                            engine_result = await workflow_engine.create_workflow(workflow_dict)
+                            if engine_result.get("success"):
+                                loaded_count += 1
+                                logger.info(f"已加载工作流: {workflow.name} ({workflow.id})")
+                    except Exception as e:
+                        logger.warning(f"加载工作流失败 {workflow.id}: {e}")
+                
+                if loaded_count > 0:
+                    logger.info(f"✅ 从数据库加载了 {loaded_count} 个工作流到工作流引擎")
+                else:
+                    logger.info("数据库中没有需要加载的工作流")
+            except Exception as e:
+                logger.warning(f"从数据库加载工作流失败（非关键）: {e}")
+            break  # 退出生成器循环
+    except Exception as e:
+        logger.warning(f"工作流加载初始化失败（非关键）: {e}")
+
     yield
 
     # Shutdown
     logger.info("Shutting down the application...")
+
+    # 停止所有正在运行的工作流
+    try:
+        from src.workflow.workflow_engine import workflow_engine
+        import asyncio
+        
+        # 获取所有正在运行的工作流ID
+        running_workflow_ids = list(workflow_engine.running_workflows.keys())
+        # 获取所有有取消事件的工作流ID（可能不在运行列表中，但训练任务还在运行）
+        all_cancel_events = list(workflow_engine.cancel_events.keys())
+        
+        # 合并所有需要停止的工作流ID
+        all_workflow_ids = set(running_workflow_ids) | set(all_cancel_events)
+        
+        if all_workflow_ids:
+            logger.info(f"正在停止 {len(all_workflow_ids)} 个工作流（运行中: {len(running_workflow_ids)}, 有取消事件: {len(all_cancel_events)}）...")
+            
+            # 首先设置所有取消事件
+            for workflow_id in all_workflow_ids:
+                if workflow_id in workflow_engine.cancel_events:
+                    cancel_event = workflow_engine.cancel_events[workflow_id]
+                    if not cancel_event.is_set():
+                        cancel_event.set()
+                        logger.info(f"已设置取消事件: {workflow_id}")
+            
+            # 然后停止所有运行中的工作流任务
+            for workflow_id in running_workflow_ids:
+                try:
+                    stop_result = await workflow_engine.stop_workflow(workflow_id)
+                    if stop_result.get("success"):
+                        logger.info(f"已停止工作流: {workflow_id}")
+                    else:
+                        logger.warning(f"停止工作流失败 {workflow_id}: {stop_result.get('message', '未知错误')}")
+                except Exception as e:
+                    logger.warning(f"停止工作流异常 {workflow_id}: {e}")
+            
+            # 等待一段时间让训练任务响应取消信号
+            logger.info("等待训练任务响应取消信号...")
+            
+            # 分阶段等待，每阶段检查任务状态
+            max_wait_time = 15.0  # 最多等待15秒
+            check_interval = 1.0  # 每1秒检查一次
+            waited_time = 0.0
+            
+            while waited_time < max_wait_time:
+                await asyncio.sleep(check_interval)
+                waited_time += check_interval
+                
+                # 检查是否还有运行中的任务
+                remaining_tasks = [wid for wid in workflow_engine.running_workflows.keys() if wid in all_workflow_ids]
+                if not remaining_tasks:
+                    logger.info(f"所有工作流任务已停止（等待了 {waited_time:.1f} 秒）")
+                    break
+                
+                logger.debug(f"仍有 {len(remaining_tasks)} 个工作流任务运行中（已等待 {waited_time:.1f} 秒）...")
+            
+            # 再次检查是否还有运行中的任务
+            remaining_tasks = [wid for wid in workflow_engine.running_workflows.keys() if wid in all_workflow_ids]
+            if remaining_tasks:
+                logger.warning(f"仍有 {len(remaining_tasks)} 个工作流任务未完成，强制取消...")
+                for workflow_id in remaining_tasks:
+                    try:
+                        task = workflow_engine.running_workflows[workflow_id]
+                        if not task.done():
+                            task.cancel()
+                            logger.info(f"已强制取消工作流任务: {workflow_id}")
+                            try:
+                                # 尝试等待任务取消完成（最多3秒，给训练线程更多时间响应）
+                                await asyncio.wait_for(task, timeout=3.0)
+                            except (asyncio.CancelledError, asyncio.TimeoutError):
+                                logger.warning(f"工作流任务 {workflow_id} 取消超时或已取消")
+                                # 如果任务仍在运行，记录警告但继续关闭流程
+                                if not task.done():
+                                    logger.error(f"⚠️ 工作流任务 {workflow_id} 无法取消，训练线程可能仍在后台运行")
+                                    logger.error(f"   这可能导致训练进程无法完全停止，需要手动终止")
+                    except Exception as e:
+                        logger.warning(f"强制取消工作流任务失败 {workflow_id}: {e}")
+                
+                # 最后再等待一段时间，确保取消信号传播（增加到5秒）
+                logger.info("等待训练线程响应取消信号（最多5秒）...")
+                await asyncio.sleep(5.0)
+            
+            logger.info("工作流停止完成")
+        else:
+            logger.info("没有正在运行的工作流")
+    except Exception as e:
+        logger.warning(f"停止工作流失败（非关键）: {e}", exc_info=True)
 
     # 关闭Redis监听器
     try:

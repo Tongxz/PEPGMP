@@ -107,7 +107,21 @@
               <n-space justify="end">
                 <n-button size="small" @click="viewWorkflow(workflow)">详情</n-button>
                 <n-button size="small" @click="editWorkflow(workflow)">编辑</n-button>
-                <n-button size="small" @click="runWorkflow(workflow)">运行</n-button>
+                <n-button 
+                  v-if="!isWorkflowRunning(workflow)"
+                  size="small" 
+                  @click="runWorkflow(workflow)"
+                >
+                  运行
+                </n-button>
+                <n-button
+                  v-if="isWorkflowRunning(workflow)"
+                  size="small"
+                  type="error"
+                  @click="stopWorkflow(workflow)"
+                >
+                  停止
+                </n-button>
                 <n-button
                   size="small"
                   :type="workflow.status === 'active' ? 'error' : 'primary'"
@@ -600,16 +614,42 @@
           </n-card>
         </div>
         <n-text depth="3" style="font-size: 12px; margin-top: 16px; display: block;">
-          步骤输出
+          步骤输出 ({{ currentRunEntries.length }} 个步骤)
         </n-text>
-        <n-empty v-if="currentRunEntries.length === 0" description="暂无详细输出" style="margin-top: 12px;" />
+        <n-empty v-if="currentRunEntries.length === 0" description="暂无详细输出" style="margin-top: 12px;">
+          <template #extra>
+            <n-text depth="3" style="font-size: 11px;">
+              如果工作流正在运行，请稍后刷新查看输出
+            </n-text>
+          </template>
+        </n-empty>
         <n-collapse v-else style="margin-top: 12px;">
           <n-collapse-item
             v-for="(entry, index) in currentRunEntries"
             :key="index"
-            :title="`${entry.name || '步骤'} (${getStepTypeText(entry.type)})`"
+            :title="`步骤 ${index + 1}: ${entry.name || '未命名步骤'} (${getStepTypeText(entry.type)})`"
+            :name="index"
           >
-            <n-code :code="JSON.stringify(entry.output ?? {}, null, 2)" language="json" />
+            <n-space vertical :size="12">
+              <n-descriptions :column="1" size="small" bordered>
+                <n-descriptions-item label="步骤名称">
+                  {{ entry.name || '未命名步骤' }}
+                </n-descriptions-item>
+                <n-descriptions-item label="步骤类型">
+                  <n-tag :type="getStepTypeColor(entry.type)" size="small">
+                    {{ getStepTypeText(entry.type) }}
+                  </n-tag>
+                </n-descriptions-item>
+              </n-descriptions>
+              <n-divider style="margin: 8px 0;" />
+              <n-text depth="3" style="font-size: 12px;">输出内容</n-text>
+              <n-code 
+                :code="JSON.stringify(entry.output ?? {}, null, 2)" 
+                language="json"
+                :show-line-numbers="true"
+                :word-wrap="true"
+              />
+            </n-space>
           </n-collapse-item>
         </n-collapse>
       </div>
@@ -905,7 +945,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { NCard, NButton, NSpace, NIcon, NEmpty, NList, NListItem, NTag, NDescriptions, NDescriptionsItem, NDivider, NText, NSteps, NStep, NModal, NForm, NFormItem, NSelect, NInput, NInputNumber, NInputGroup, NInputGroupLabel, NDatePicker, NSwitch, NAlert, NCollapse, NCollapseItem, NCode, NGrid, NGi, NStatistic, useMessage } from 'naive-ui'
 import { RefreshOutline, AddOutline } from '@vicons/ionicons5'
 
@@ -935,13 +975,15 @@ interface WorkflowStep {
 
 interface WorkflowRun {
   id: string
-  status: 'success' | 'failed' | 'running' | 'pending'
+  workflow_id?: string
+  status: 'success' | 'failed' | 'running' | 'pending' | 'cancelled'
   started_at: string
   ended_at?: string | null
   duration?: number | null
-  error_message?: string
+  error_message?: string | null
   run_log?: string | null
   run_config?: Record<string, any>
+  step_outputs?: WorkflowStepOutput[]
 }
 
 interface WorkflowStepOutput {
@@ -1744,6 +1786,55 @@ async function runWorkflow(workflow: Workflow) {
   }
 }
 
+// 检查工作流是否正在运行
+function isWorkflowRunning(workflow: Workflow): boolean {
+  if (!workflow.recent_runs || workflow.recent_runs.length === 0) {
+    return false
+  }
+  // 检查最近的运行记录状态是否为 'running'
+  const lastRun = workflow.recent_runs[0]
+  return lastRun && lastRun.status === 'running'
+}
+
+// 停止正在运行的工作流
+async function stopWorkflow(workflow: Workflow) {
+  console.log('停止工作流:', workflow)
+  try {
+    const confirmed = confirm(`确定要停止工作流 "${workflow.name}" 吗？`)
+    if (!confirmed) {
+      return
+    }
+    
+    const loadingMessage = message.loading('正在停止工作流...', { duration: 0 })
+    try {
+      const response = await fetch(`/api/v1/mlops/workflows/${workflow.id}/stop`, {
+        method: 'POST'
+      })
+      loadingMessage.destroy()
+      
+      if (response.ok) {
+        const result = await response.json()
+        if (result.success) {
+          message.success('工作流已停止')
+          await refreshWorkflows()
+        } else {
+          message.error(result.message || '停止失败')
+        }
+      } else {
+        const errorData = await response.json().catch(() => ({ detail: '停止失败' }))
+        message.error(errorData.detail || '停止失败')
+      }
+    } catch (fetchError) {
+      loadingMessage.destroy()
+      console.error('停止工作流请求失败:', fetchError)
+      message.error('网络请求失败，请检查后端服务是否正常运行')
+    }
+  } catch (error) {
+    console.error('停止工作流失败:', error)
+    message.error('停止失败')
+  }
+}
+
 // 切换工作流状态
 async function toggleWorkflow(workflow: Workflow) {
   console.log('切换工作流状态:', workflow)
@@ -1914,21 +2005,101 @@ function getStepTypeText(type: string): string {
 }
 
 // 查看运行详情
-function viewRunDetails(run: WorkflowRun) {
-  currentRun.value = run
-  let entries: WorkflowStepOutput[] = []
-  if (run.run_log) {
+async function viewRunDetails(run: WorkflowRun) {
+  try {
+    // 从API获取完整的运行详情（包括步骤输出）
+    const loadingMessage = message.loading('正在加载运行详情...', { duration: 0 })
     try {
-      const parsed = JSON.parse(run.run_log)
-      if (Array.isArray(parsed)) {
-        entries = parsed as WorkflowStepOutput[]
+      // 从run对象中提取workflow_id（如果run对象中没有，需要从workflow中获取）
+      const workflowId = run.workflow_id || (selectedWorkflow.value?.id)
+      if (!workflowId) {
+        loadingMessage.destroy()
+        message.error('无法获取工作流ID')
+        return
       }
-    } catch (error) {
-      console.warn('解析运行日志失败:', error)
+      
+      const response = await fetch(`/api/v1/mlops/workflows/${workflowId}/runs/${run.id}`)
+      loadingMessage.destroy()
+      
+      if (response.ok) {
+        const runDetail = await response.json()
+        // 更新currentRun，使用API返回的完整数据
+        currentRun.value = {
+          id: runDetail.id,
+          workflow_id: runDetail.workflow_id,
+          status: runDetail.status,
+          started_at: runDetail.started_at,
+          ended_at: runDetail.ended_at,
+          duration: runDetail.duration,
+          error_message: runDetail.error_message,
+          run_log: runDetail.run_log,
+          run_config: runDetail.run_config
+        } as WorkflowRun
+        
+        // 解析步骤输出
+        let entries: WorkflowStepOutput[] = []
+        if (runDetail.step_outputs && Array.isArray(runDetail.step_outputs)) {
+          entries = runDetail.step_outputs as WorkflowStepOutput[]
+        } else if (runDetail.run_log) {
+          // 如果step_outputs不存在，尝试从run_log解析
+          try {
+            const parsed = JSON.parse(runDetail.run_log)
+            if (Array.isArray(parsed)) {
+              entries = parsed as WorkflowStepOutput[]
+            } else if (parsed && typeof parsed === 'object' && parsed.outputs) {
+              entries = parsed.outputs as WorkflowStepOutput[]
+            }
+          } catch (error) {
+            console.warn('解析运行日志失败:', error)
+          }
+        }
+        currentRunEntries.value = entries
+        showRunLogDialog.value = true
+      } else {
+        // 如果API调用失败，回退到使用本地数据
+        console.warn('获取运行详情失败，使用本地数据')
+        currentRun.value = run
+        let entries: WorkflowStepOutput[] = []
+        if (run.run_log) {
+          try {
+            const parsed = JSON.parse(run.run_log)
+            if (Array.isArray(parsed)) {
+              entries = parsed as WorkflowStepOutput[]
+            } else if (parsed && typeof parsed === 'object' && parsed.outputs) {
+              entries = parsed.outputs as WorkflowStepOutput[]
+            }
+          } catch (error) {
+            console.warn('解析运行日志失败:', error)
+          }
+        }
+        currentRunEntries.value = entries
+        showRunLogDialog.value = true
+      }
+    } catch (fetchError) {
+      loadingMessage.destroy()
+      console.error('获取运行详情请求失败:', fetchError)
+      // 回退到使用本地数据
+      currentRun.value = run
+      let entries: WorkflowStepOutput[] = []
+      if (run.run_log) {
+        try {
+          const parsed = JSON.parse(run.run_log)
+          if (Array.isArray(parsed)) {
+            entries = parsed as WorkflowStepOutput[]
+          } else if (parsed && typeof parsed === 'object' && parsed.outputs) {
+            entries = parsed.outputs as WorkflowStepOutput[]
+          }
+        } catch (error) {
+          console.warn('解析运行日志失败:', error)
+        }
+      }
+      currentRunEntries.value = entries
+      showRunLogDialog.value = true
     }
+  } catch (error) {
+    console.error('查看运行详情失败:', error)
+    message.error('加载运行详情失败')
   }
-  currentRunEntries.value = entries
-  showRunLogDialog.value = true
 }
 
 // 添加编辑步骤
@@ -1976,8 +2147,25 @@ async function submitEdit() {
   }
 }
 
+// 自动刷新定时器
+let refreshTimer: number | null = null
+
 onMounted(() => {
   fetchWorkflows()
+  // 如果有正在运行的工作流，每5秒自动刷新一次
+  refreshTimer = setInterval(() => {
+    const hasRunning = workflows.value.some(w => isWorkflowRunning(w))
+    if (hasRunning) {
+      refreshWorkflows()
+    }
+  }, 5000) // 每5秒刷新一次
+})
+
+onUnmounted(() => {
+  if (refreshTimer !== null) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
 })
 </script>
 

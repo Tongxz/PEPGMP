@@ -906,13 +906,20 @@ async def update_workflow(
         if "status" in workflow:
             new_status = workflow["status"]
             if new_status == "inactive":
-                # 检查工作流是否正在运行
-                try:
-                    stop_result = await workflow_engine.stop_workflow(workflow_id)
-                    if stop_result.get("success"):
-                        logger.info(f"工作流 {workflow_id} 正在运行，已停止")
-                except Exception as e:
-                    logger.warning(f"停止工作流 {workflow_id} 失败（可能未在运行）: {e}")
+                # 获取当前工作流状态，检查是否正在运行
+                current_workflow = await WorkflowDAO.get_by_id(session, workflow_id)
+                if current_workflow and current_workflow.status == "active":
+                    # 工作流状态从 active 变为 inactive，尝试停止运行中的工作流
+                    try:
+                        stop_result = await workflow_engine.stop_workflow(workflow_id)
+                        if stop_result.get("success"):
+                            logger.info(f"工作流 {workflow_id} 正在运行，已停止")
+                        else:
+                            logger.warning(f"停止工作流 {workflow_id} 失败: {stop_result.get('message', '未知错误')}")
+                            # 即使停止失败，也继续更新状态（可能工作流已经完成）
+                    except Exception as e:
+                        logger.warning(f"停止工作流 {workflow_id} 异常: {e}", exc_info=True)
+                        # 即使停止失败，也继续更新状态
         
         if "steps" in workflow:
             workflow["steps"] = [
@@ -938,11 +945,15 @@ async def run_workflow(
     workflow_id: str, session: AsyncSession = Depends(get_async_session)
 ):
     """运行工作流"""
+    logger.info(f"[API] 收到工作流运行请求: workflow_id={workflow_id}")
     try:
         # 检查工作流是否存在
         workflow = await WorkflowDAO.get_by_id(session, workflow_id)
         if not workflow:
+            logger.error(f"[API] 工作流不存在: workflow_id={workflow_id}")
             raise HTTPException(status_code=404, detail="工作流不存在")
+        
+        logger.info(f"[API] 工作流存在: name={workflow.name}, status={workflow.status}")
 
         # 创建工作流运行记录
         run_data = {
@@ -954,61 +965,98 @@ async def run_workflow(
         }
 
         run_record = await WorkflowRunDAO.create(session, run_data)
-        logger.info(f"工作流运行记录创建成功: {run_record.id}")
+        logger.info(f"[工作流启动] 运行记录创建成功: run_id={run_record.id}, workflow_id={workflow_id}")
 
         # 执行工作流
         workflow_dict = workflow.to_dict()
         workflow_dict["steps"] = [
             _normalize_step_config(step) for step in workflow_dict.get("steps", [])
         ]
-        engine_result = await workflow_engine.run_workflow(workflow_id, workflow_dict)
-
-        if engine_result["success"]:
-            # 更新运行记录状态
-            outputs_json = json.dumps(
-                engine_result.get("outputs", []), ensure_ascii=False
-            )
-            await WorkflowRunDAO.finish_run(
-                session,
-                run_record.id,
-                "success",
-                additional_data={
-                    "run_log": outputs_json,
-                },
-            )
-
-            # 更新工作流统计
-            await WorkflowDAO.update(
-                session,
-                workflow_id,
-                {"run_count": workflow.run_count + 1, "last_run": datetime.utcnow()},
-            )
-
-            logger.info(f"✅ 工作流运行成功: {workflow_id}")
-            return {
-                "message": "工作流运行成功",
-                "workflow_id": workflow_id,
-                "run_id": run_record.id,
-                "status": "success",
-                "outputs": engine_result.get("outputs", []),
-            }
-        else:
-            # 更新运行记录状态为失败
-            outputs_json = json.dumps(
-                engine_result.get("outputs", []), ensure_ascii=False
-            )
-            await WorkflowRunDAO.finish_run(
-                session,
-                run_record.id,
-                "failed",
-                engine_result.get("error"),
-                additional_data={"run_log": outputs_json},
-            )
-
-            logger.error(f"❌ 工作流运行失败: {engine_result.get('error')}")
-            raise HTTPException(
-                status_code=500, detail=f"工作流运行失败: {engine_result.get('error', '未知错误')}"
-            )
+        
+        logger.info(f"[工作流启动] 准备执行工作流: name={workflow.name}, workflow_id={workflow_id}")
+        logger.info(f"[工作流启动] 工作流配置: steps_count={len(workflow_dict.get('steps', []))}, steps={[s.get('name', '') for s in workflow_dict.get('steps', [])]}")
+        
+        # 创建工作流执行任务（后台异步执行，不阻塞API响应）
+        async def execute_and_update():
+            """后台执行工作流并更新数据库状态"""
+            # 使用新的数据库会话
+            async for db_session in get_async_session():
+                try:
+                    engine_result = await workflow_engine.run_workflow(workflow_id, workflow_dict)
+                    logger.info(f"工作流执行完成: workflow_id={workflow_id}, success={engine_result.get('success')}")
+                    
+                    if engine_result["success"]:
+                        # 更新运行记录状态
+                        outputs_json = json.dumps(
+                            engine_result.get("outputs", []), ensure_ascii=False
+                        )
+                        await WorkflowRunDAO.finish_run(
+                            db_session,
+                            run_record.id,
+                            "success",
+                            additional_data={
+                                "run_log": outputs_json,
+                            },
+                        )
+                        
+                        # 更新工作流统计
+                        workflow_for_update = await WorkflowDAO.get_by_id(db_session, workflow_id)
+                        if workflow_for_update:
+                            await WorkflowDAO.update(
+                                db_session,
+                                workflow_id,
+                                {"run_count": workflow_for_update.run_count + 1, "last_run": datetime.utcnow()},
+                            )
+                        
+                        logger.info(f"✅ 工作流运行成功: {workflow_id}")
+                    else:
+                        # 检查是否是取消
+                        error_message = engine_result.get("error") or engine_result.get("message") or "未知错误"
+                        is_cancelled = "取消" in error_message or "cancelled" in error_message.lower()
+                        status = "cancelled" if is_cancelled else "failed"
+                        
+                        # 更新运行记录状态
+                        outputs_json = json.dumps(
+                            engine_result.get("outputs", []), ensure_ascii=False
+                        )
+                        await WorkflowRunDAO.finish_run(
+                            db_session,
+                            run_record.id,
+                            status,
+                            error_message if not is_cancelled else None,
+                            additional_data={"run_log": outputs_json},
+                        )
+                        
+                        if is_cancelled:
+                            logger.info(f"工作流已取消: {workflow_id}")
+                        else:
+                            logger.error(f"❌ 工作流运行失败: {error_message}")
+                except Exception as e:
+                    logger.error(f"工作流后台执行异常: {e}", exc_info=True)
+                    try:
+                        await WorkflowRunDAO.finish_run(
+                            db_session,
+                            run_record.id,
+                            "failed",
+                            str(e),
+                        )
+                    except Exception as update_error:
+                        logger.error(f"更新运行记录状态失败: {update_error}")
+                finally:
+                    break  # 退出生成器循环
+        
+        # 启动后台任务
+        asyncio.create_task(execute_and_update())
+        
+        # 立即返回，不等待工作流完成
+        logger.info(f"[工作流启动] 工作流已启动，正在后台执行: workflow_id={workflow_id}, run_id={run_record.id}")
+        
+        return {
+            "message": "工作流已启动，正在后台执行",
+            "workflow_id": workflow_id,
+            "run_id": run_record.id,
+            "status": "running",
+        }
 
     except HTTPException:
         raise
@@ -1018,18 +1066,111 @@ async def run_workflow(
 
 
 @router.post("/workflows/{workflow_id}/stop")
-async def stop_workflow(workflow_id: str):
+async def stop_workflow(
+    workflow_id: str, session: AsyncSession = Depends(get_async_session)
+):
     """停止正在运行的工作流"""
     try:
+        logger.info(f"收到停止工作流请求: {workflow_id}")
+        
+        # 检查工作流是否存在
+        workflow = await WorkflowDAO.get_by_id(session, workflow_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="工作流不存在")
+        
+        # 检查是否有正在运行的记录
+        recent_runs = await WorkflowRunDAO.get_by_workflow_id(session, workflow_id, limit=1)
+        running_run = None
+        if recent_runs and recent_runs[0].status == "running":
+            running_run = recent_runs[0]
+            logger.info(f"找到正在运行的记录: {running_run.id}")
+        
+        # 停止工作流
         result = await workflow_engine.stop_workflow(workflow_id)
-        if not result.get("success"):
-            raise HTTPException(status_code=400, detail=result.get("message", "停止工作流失败"))
-        return result
+        
+        if result.get("success"):
+            logger.info(f"✅ 工作流停止成功: {workflow_id}")
+            
+            # 如果有关联的运行记录，更新其状态
+            if running_run:
+                try:
+                    await WorkflowRunDAO.finish_run(
+                        session,
+                        running_run.id,
+                        "cancelled",
+                        None,  # 取消时没有错误消息
+                        additional_data={"run_log": json.dumps({"cancelled": True}, ensure_ascii=False)},
+                    )
+                    logger.info(f"已更新运行记录状态为 cancelled: {running_run.id}")
+                except Exception as e:
+                    logger.warning(f"更新运行记录状态失败: {e}")
+            
+            return {
+                "success": True,
+                "message": "工作流已停止",
+                "workflow_id": workflow_id,
+                "status": "cancelled",
+                "run_id": running_run.id if running_run else None,
+            }
+        else:
+            error_msg = result.get("message", "停止工作流失败")
+            logger.warning(f"停止工作流失败: {workflow_id} - {error_msg}")
+            raise HTTPException(status_code=400, detail=error_msg)
+            
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"停止工作流失败: {e}")
-        raise HTTPException(status_code=500, detail="停止工作流失败")
+        logger.error(f"停止工作流异常: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"停止工作流失败: {str(e)}")
+
+
+@router.get("/workflows/{workflow_id}/runs/{run_id}")
+async def get_workflow_run(
+    workflow_id: str,
+    run_id: str,
+    session: AsyncSession = Depends(get_async_session),
+):
+    """获取工作流运行详情"""
+    try:
+        # 获取运行记录
+        run = await WorkflowRunDAO.get_by_id(session, run_id)
+        if not run:
+            raise HTTPException(status_code=404, detail="运行记录不存在")
+        
+        # 验证运行记录是否属于该工作流
+        if run.workflow_id != workflow_id:
+            raise HTTPException(status_code=404, detail="运行记录不属于该工作流")
+        
+        # 解析运行日志
+        step_outputs = []
+        if run.run_log:
+            try:
+                parsed = json.loads(run.run_log)
+                if isinstance(parsed, list):
+                    step_outputs = parsed
+                elif isinstance(parsed, dict):
+                    # 如果是字典，尝试提取outputs字段
+                    step_outputs = parsed.get("outputs", [])
+            except json.JSONDecodeError:
+                logger.warning(f"解析运行日志失败: run_id={run_id}")
+        
+        return {
+            "id": run.id,
+            "workflow_id": run.workflow_id,
+            "status": run.status,
+            "started_at": run.started_at.isoformat() if run.started_at else None,
+            "ended_at": run.ended_at.isoformat() if run.ended_at else None,
+            "duration": run.duration,
+            "error_message": run.error_message,
+            "run_log": run.run_log,
+            "step_outputs": step_outputs,
+            "run_config": run.run_config,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取运行详情失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"获取运行详情失败: {str(e)}")
 
 
 @router.delete("/workflows/{workflow_id}")

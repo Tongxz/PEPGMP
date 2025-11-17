@@ -59,12 +59,26 @@ class MultiBehaviorTrainingService:
             raise FileNotFoundError(f"未找到 data.yaml: {data_config}")
 
         training_params = training_params or {}
-        result = await asyncio.to_thread(
-            self._run_training,
-            dataset_dir,
-            data_config,
-            training_params,
-        )
+        # 创建一个可取消的线程任务
+        loop = asyncio.get_event_loop()
+        try:
+            # 使用 run_in_executor 而不是 to_thread，以便更好地控制取消
+            result = await loop.run_in_executor(
+                None,  # 使用默认线程池
+                self._run_training,
+                dataset_dir,
+                data_config,
+                training_params,
+            )
+        except asyncio.CancelledError:
+            # 如果任务被取消，确保训练任务也被停止
+            cancel_event = training_params.get("_cancel_event")
+            if cancel_event:
+                cancel_event.set()
+                logger.info("训练任务已被取消，已设置取消事件")
+            # 尝试强制终止训练线程（如果可能）
+            logger.warning("训练任务被取消，但训练线程可能仍在运行")
+            raise
 
         if self._model_registry:
             try:
@@ -96,14 +110,50 @@ class MultiBehaviorTrainingService:
         data_config: Path,
         training_params: Dict[str, Any],
     ) -> MultiBehaviorTrainingResult:
+        # 从训练参数中获取取消事件
+        cancel_event = training_params.pop("_cancel_event", None)
+        
+        # 在训练开始前检查 PyTorch 和 CUDA 状态
+        try:
+            import torch
+            logger.info(f"[训练前检查] PyTorch版本: {torch.__version__}")
+            logger.info(f"[训练前检查] CUDA可用: {torch.cuda.is_available()}")
+            if torch.cuda.is_available():
+                logger.info(f"[训练前检查] CUDA设备数量: {torch.cuda.device_count()}")
+                logger.info(f"[训练前检查] 当前CUDA设备: {torch.cuda.current_device() if torch.cuda.is_available() else 'N/A'}")
+                logger.info(f"[训练前检查] CUDA设备名称: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'N/A'}")
+            if hasattr(torch.version, 'cuda') and torch.version.cuda:
+                logger.info(f"[训练前检查] PyTorch CUDA编译版本: {torch.version.cuda}")
+            else:
+                logger.warning(f"[训练前检查] PyTorch是CPU版本，不支持CUDA")
+        except Exception as e:
+            logger.warning(f"[训练前检查] 检查PyTorch状态失败: {e}")
+        
         try:
             from ultralytics import YOLO
+            # 检查 ultralytics 使用的 PyTorch 版本
+            import torch as ultralytics_torch
+            logger.info(f"[训练前检查] Ultralytics使用的PyTorch版本: {ultralytics_torch.__version__}")
+            logger.info(f"[训练前检查] Ultralytics检测到的CUDA可用: {ultralytics_torch.cuda.is_available()}")
         except ImportError as exc:  # pragma: no cover
             raise RuntimeError(
                 "未安装 ultralytics 库，无法执行多行为训练。请运行 `pip install ultralytics`。"
             ) from exc
 
-        model_name = training_params.get("model", self._config.yolo_model)
+        # 检查是否要从之前的模型继续训练
+        resume_from = training_params.get("resume_from") or training_params.get("from_model")
+        if resume_from:
+            # 如果指定了继续训练的模型路径，使用该路径
+            resume_path = Path(resume_from)
+            if not resume_path.exists():
+                raise FileNotFoundError(f"指定的继续训练模型文件不存在: {resume_path}")
+            model_name = str(resume_path)
+            logger.info(f"从已训练模型继续训练: {model_name}")
+        else:
+            # 否则使用默认的预训练模型
+            model_name = training_params.get("model", self._config.yolo_model)
+            logger.info(f"使用预训练模型开始训练: {model_name}")
+        
         epochs = int(training_params.get("epochs", self._config.epochs))
         imgsz = int(training_params.get("image_size", self._config.image_size))
         batch_size = int(training_params.get("batch_size", self._config.batch_size))
@@ -116,8 +166,15 @@ class MultiBehaviorTrainingService:
         )
 
         # 学习率参数（从训练参数中获取，如果没有则使用合理的默认值）
-        lr0 = float(training_params.get("lr0", 0.01))  # 初始学习率
-        lrf = float(training_params.get("lrf", 0.1))  # 最终学习率（相对于lr0）
+        # 如果是从已训练模型继续训练，建议使用较小的学习率
+        if resume_from:
+            default_lr0 = 0.001  # 继续训练时使用较小的学习率
+            default_lrf = 0.01
+        else:
+            default_lr0 = 0.01
+            default_lrf = 0.1
+        lr0 = float(training_params.get("lr0", default_lr0))  # 初始学习率
+        lrf = float(training_params.get("lrf", default_lrf))  # 最终学习率（相对于lr0）
         momentum = float(training_params.get("momentum", 0.937))  # 动量
         weight_decay = float(training_params.get("weight_decay", 0.0005))  # 权重衰减
         warmup_epochs = float(training_params.get("warmup_epochs", 3.0))  # 预热轮数
@@ -126,7 +183,7 @@ class MultiBehaviorTrainingService:
         project_dir.mkdir(parents=True, exist_ok=True)
 
         logger.info(
-            "开始 YOLO 检测训练: model=%s epochs=%s imgsz=%s batch=%s device=%s lr0=%s lrf=%s",
+            "开始 YOLO 检测训练: model=%s epochs=%s imgsz=%s batch=%s device=%s lr0=%s lrf=%s (resume=%s)",
             model_name,
             epochs,
             imgsz,
@@ -134,9 +191,124 @@ class MultiBehaviorTrainingService:
             device,
             lr0,
             lrf,
+            bool(resume_from),
         )
 
         model = YOLO(model_name)
+        
+        # 强制检查并设置设备（如果 CUDA 可用但设备选择为 CPU，强制使用 CUDA）
+        import torch as training_torch
+        if device == "cpu" and training_torch.cuda.is_available():
+            logger.warning(f"[设备强制] 检测到 CUDA 可用但选择了 CPU，强制使用 CUDA")
+            logger.warning(f"[设备强制] PyTorch版本: {training_torch.__version__}")
+            logger.warning(f"[设备强制] CUDA设备: {training_torch.cuda.get_device_name(0)}")
+            device = "cuda"
+            logger.info(f"[设备强制] 设备已更改为: {device}")
+
+        # 如果有取消事件，启动一个线程来监控取消事件并停止训练
+        trainer_ref = {}  # 使用字典来存储 trainer 引用，以便在线程中访问
+        training_finished = None  # 训练完成标志
+        if cancel_event:
+            import threading
+            
+            # 确保监控线程在训练结束后能够退出
+            # 通过设置一个标志来通知监控线程训练已结束
+            training_finished = threading.Event()
+            
+            def monitor_cancel():
+                """监控取消事件，如果设置则停止训练"""
+                import time
+                max_wait_time = 300  # 最多等待5分钟让训练开始
+                start_time = time.time()
+                last_stop_check = 0
+                stop_logged = False  # 标记是否已记录停止日志
+                last_trainer_check = 0
+                
+                while True:
+                    # 检查训练是否已完成
+                    if training_finished.is_set():
+                        if not stop_logged:
+                            logger.info("训练已完成，退出监控线程")
+                        break
+                    
+                    current_time = time.time()
+                    
+                    # 检查取消事件
+                    if cancel_event.is_set():
+                        # 取消事件已设置，尝试停止训练
+                        trainer = trainer_ref.get("trainer")
+                        if trainer is None:
+                            # trainer 还未创建，尝试从 model 对象获取（每2秒检查一次，避免频繁检查）
+                            if current_time - last_trainer_check > 2.0:
+                                trainer = getattr(model, "trainer", None)
+                                if trainer is not None:
+                                    trainer_ref["trainer"] = trainer
+                                    logger.debug("已获取 trainer 引用")
+                                last_trainer_check = current_time
+                        
+                        if trainer is not None:
+                            # 每1秒检查一次并设置 stop 标志（减少日志输出频率）
+                            if current_time - last_stop_check > 1.0:
+                                try:
+                                    trainer.stop = True
+                                    if not stop_logged:
+                                        logger.info("检测到取消事件，正在停止训练...")
+                                        logger.info("已设置 trainer.stop = True")
+                                        stop_logged = True
+                                    last_stop_check = current_time
+                                except Exception as e:
+                                    if not stop_logged:
+                                        logger.warning(f"设置 trainer.stop 失败: {e}")
+                                    stop_logged = True
+                            
+                            # 如果训练已经结束，退出监控线程
+                            if hasattr(trainer, 'stop') and getattr(trainer, 'stop', False):
+                                # 检查训练是否真的停止了（通过检查 trainer 的状态）
+                                if hasattr(trainer, 'epoch') and hasattr(trainer, 'epochs'):
+                                    if trainer.epoch >= trainer.epochs:
+                                        if not stop_logged:
+                                            logger.info("训练已完成，退出监控线程")
+                                        break
+                        else:
+                            # trainer 还未创建，继续等待（但不超过最大等待时间）
+                            if current_time - start_time > max_wait_time:
+                                if not stop_logged:
+                                    logger.warning("等待 trainer 创建超时，但取消事件已设置")
+                                break
+                    else:
+                        # 取消事件未设置，定期更新 trainer 引用（每5秒检查一次）
+                        if current_time - last_trainer_check > 5.0:
+                            if not trainer_ref.get("trainer"):
+                                trainer = getattr(model, "trainer", None)
+                                if trainer is not None:
+                                    trainer_ref["trainer"] = trainer
+                                    logger.debug("已更新 trainer 引用")
+                            last_trainer_check = current_time
+                    
+                    # 等待1秒后再次检查（增加等待时间，减少CPU占用和日志输出）
+                    if cancel_event.wait(timeout=1.0):
+                        # 在等待期间取消事件被设置
+                        if not stop_logged:
+                            trainer = trainer_ref.get("trainer")
+                            if trainer is None:
+                                trainer = getattr(model, "trainer", None)
+                                if trainer is not None:
+                                    trainer_ref["trainer"] = trainer
+                            
+                            if trainer is not None:
+                                logger.info("检测到取消事件，正在停止训练...")
+                                try:
+                                    trainer.stop = True
+                                    logger.info("已设置 trainer.stop = True")
+                                    last_stop_check = time.time()
+                                    stop_logged = True
+                                except Exception as e:
+                                    logger.warning(f"设置 trainer.stop 失败: {e}")
+                                    stop_logged = True
+            
+            cancel_monitor = threading.Thread(target=monitor_cancel, daemon=True)
+            cancel_monitor.start()
+            logger.info("已启动取消事件监控线程")
 
         # 抑制 YOLO 的警告（这些警告通常不影响训练）
         # 特别是验证阶段指标计算的警告，这是YOLO的已知问题
@@ -154,6 +326,13 @@ class MultiBehaviorTrainingService:
                 # 注意：YOLO在训练过程中如果遇到验证阶段错误，可能会提前终止
                 # 设置 save_period=1 确保每轮都保存模型（包括第1轮）
                 # 重新启用数据增强以帮助模型学习，但使用更保守的设置
+                
+                # 训练开始前，检查取消事件
+                if cancel_event and cancel_event.is_set():
+                    logger.info("训练开始前检测到取消事件，取消训练")
+                    raise RuntimeError("训练已被取消")
+                
+                # 启动训练
                 model.train(
                     data=str(data_config),
                     epochs=epochs,
@@ -191,6 +370,25 @@ class MultiBehaviorTrainingService:
                     mixup=0.0,  # Mixup增强概率（禁用，避免张量问题）
                     copy_paste=0.0,  # Copy-paste增强（禁用，避免shape问题）
                 )
+                
+                # 训练完成后，设置训练完成标志（如果使用取消监控）
+                if cancel_event and training_finished is not None:
+                    training_finished.set()
+                    logger.info("训练已完成，已设置训练完成标志")
+                
+                # 训练完成后，更新 trainer 引用（如果使用取消监控）
+                if cancel_event:
+                    trainer = getattr(model, "trainer", None)
+                    if trainer is not None:
+                        trainer_ref["trainer"] = trainer
+                
+                # 检查是否因为取消而停止
+                trainer = getattr(model, "trainer", None)
+                if trainer is not None and getattr(trainer, "stop", False):
+                    if cancel_event and cancel_event.is_set():
+                        logger.info("训练已因取消事件而停止")
+                        raise RuntimeError("训练已被取消")
+                        
             except (ValueError, RuntimeError, RuntimeWarning) as exc:
                 # 捕获训练过程中的异常，提供更详细的错误信息
                 error_msg = str(exc)
@@ -453,14 +651,18 @@ class MultiBehaviorTrainingService:
                     logger.warning("CUDA 不可用，回退到 CPU")
                     try:
                         # 检查 PyTorch 是否支持 CUDA
-                        has_cuda_support = hasattr(torch.version, 'cuda') and torch.version.cuda is not None
+                        has_cuda_attr = hasattr(torch.version, 'cuda')
+                        cuda_version = getattr(torch.version, 'cuda', None) if has_cuda_attr else None
+                        has_cuda_support = has_cuda_attr and cuda_version is not None
+                        
                         if not has_cuda_support:
                             logger.warning("  原因: PyTorch 是 CPU 版本，不支持 CUDA")
+                            logger.warning(f"  诊断信息: has_cuda_attr={has_cuda_attr}, cuda_version={cuda_version}")
                             logger.warning("  解决方案: 安装 CUDA 版本的 PyTorch")
                             logger.warning("    pip uninstall torch torchvision")
                             logger.warning("    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121")
                         else:
-                            logger.warning(f"  原因: PyTorch 支持 CUDA (编译版本: {torch.version.cuda})，但运行时检测不到 GPU")
+                            logger.warning(f"  原因: PyTorch 支持 CUDA (编译版本: {cuda_version})，但运行时检测不到 GPU")
                             logger.warning("  可能原因:")
                             logger.warning("    1. NVIDIA 驱动未安装或版本过旧")
                             logger.warning("    2. CUDA 工具包未安装或版本不匹配")
@@ -468,7 +670,7 @@ class MultiBehaviorTrainingService:
                             logger.warning("    4. 系统没有 NVIDIA GPU")
                             logger.warning("  建议运行诊断脚本: python scripts/diagnose_cuda.py")
                     except Exception as diag_error:
-                        logger.debug(f"CUDA 诊断失败: {diag_error}")
+                        logger.warning(f"CUDA 诊断失败: {diag_error}", exc_info=True)
                     return "cpu"
                 if device_req == "mps":
                     mps_available = bool(
@@ -485,14 +687,28 @@ class MultiBehaviorTrainingService:
 
         # 如果device="auto"或未指定，使用ModelConfig选择设备
         try:
+            import torch
+            logger.debug(f"设备选择检查 - PyTorch版本: {torch.__version__}, CUDA可用: {torch.cuda.is_available()}")
+            if hasattr(torch.version, 'cuda') and torch.version.cuda:
+                logger.debug(f"设备选择检查 - CUDA编译版本: {torch.version.cuda}")
+            
             from src.config.model_config import ModelConfig
 
             model_config = ModelConfig()
             device = model_config.select_device(requested=device_request)
             logger.info(f"设备选择: {device_request} -> {device}")
+            
+            # 如果选择了CPU但CUDA可用，输出警告
+            if device == "cpu" and torch.cuda.is_available():
+                logger.warning(f"⚠️  CUDA可用但选择了CPU！PyTorch版本: {torch.__version__}, CUDA可用: {torch.cuda.is_available()}")
+                if hasattr(torch.version, 'cuda') and torch.version.cuda:
+                    logger.warning(f"  CUDA编译版本: {torch.version.cuda}")
+                else:
+                    logger.warning("  PyTorch是CPU版本，不支持CUDA")
+            
             return device
         except Exception as e:
-            logger.warning(f"设备选择失败，使用 CPU: {e}")
+            logger.warning(f"设备选择失败，使用 CPU: {e}", exc_info=True)
             return "cpu"
 
     def _extract_metrics(self, trainer: Any, save_dir: Path) -> Dict[str, Any]:

@@ -246,12 +246,20 @@ class WorkflowDAO:
         session: AsyncSession, workflow_id: str, update_data: Dict[str, Any]
     ) -> Optional[Workflow]:
         """更新工作流"""
-        update_data["updated_at"] = datetime.utcnow()
+        # 过滤掉非数据库字段（虚拟字段和只读字段）
+        # recent_runs 是 to_dict() 返回的虚拟字段，不是数据库列
+        # id, created_at 是只读字段，不应该被更新
+        excluded_fields = {"id", "created_at", "recent_runs"}
+        filtered_data = {
+            k: v for k, v in update_data.items() if k not in excluded_fields
+        }
+        
+        filtered_data["updated_at"] = datetime.utcnow()
 
         result = await session.execute(
             update(Workflow)
             .where(Workflow.id == workflow_id)
-            .values(**update_data)
+            .values(**filtered_data)
             .returning(Workflow)
         )
 
