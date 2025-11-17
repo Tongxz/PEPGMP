@@ -169,7 +169,7 @@ class MultiBehaviorTrainingService:
                     save_period=1,  # 每轮都保存（包括第1轮）
                     rect=False,  # 禁用矩形训练（可能导致张量大小不匹配）
                     augment=True,  # 重新启用数据增强以帮助模型学习
-                    val=False,  # 暂时禁用验证，避免验证阶段错误导致训练失败
+                    val=True,  # 启用验证以获取验证集指标（mAP50, mAP50-95等）
                     # 优化器参数
                     lr0=lr0,  # 初始学习率
                     lrf=lrf,  # 最终学习率（相对于lr0）
@@ -187,8 +187,9 @@ class MultiBehaviorTrainingService:
                     perspective=0.0,  # 透视变换（禁用，避免张量问题）
                     flipud=0.0,  # 上下翻转概率（禁用）
                     fliplr=0.5,  # 左右翻转概率
-                    mosaic=1.0,  # Mosaic增强概率
+                    mosaic=0.5,  # Mosaic增强概率（降低，避免shape mismatch）
                     mixup=0.0,  # Mixup增强概率（禁用，避免张量问题）
+                    copy_paste=0.0,  # Copy-paste增强（禁用，避免shape问题）
                 )
             except (ValueError, RuntimeError, RuntimeWarning) as exc:
                 # 捕获训练过程中的异常，提供更详细的错误信息
@@ -207,17 +208,37 @@ class MultiBehaviorTrainingService:
                 # 检查是否是张量大小不匹配的错误
                 is_tensor_size_error = (
                     "size of tensor" in error_lower and "must match" in error_lower
+                ) or (
+                    "shape mismatch" in error_lower or
+                    "cannot be broadcast" in error_lower
                 )
 
                 if is_tensor_size_error:
-                    logger.error("训练过程中出现张量大小不匹配错误，这通常是由于数据集问题导致的。" "错误: %s", exc)
+                    logger.error(
+                        "训练过程中出现张量形状不匹配错误，这通常是由于数据增强或数据集问题导致的。"
+                        "错误: %s", exc
+                    )
+                    # 检查训练进度，如果已经训练了很多轮，可能是数据增强导致的问题
+                    trainer = getattr(model, "trainer", None)
+                    if trainer is not None:
+                        current_epoch = getattr(trainer, "epoch", 0)
+                        if current_epoch > 10:
+                            # 已经训练了很多轮，可能是数据增强导致的问题
+                            raise ValueError(
+                                f"训练失败：张量形状不匹配（第{current_epoch}轮）。"
+                                f"这通常是由于数据增强（特别是Mosaic）导致的问题。"
+                                f"建议：1) 降低Mosaic增强概率；2) 禁用某些数据增强；"
+                                f"3) 检查数据集中是否有异常的标注文件。原始错误: {error_msg}"
+                            ) from exc
                     raise ValueError(
-                        f"训练失败：张量大小不匹配。这通常是由于："
-                        f"1) 标注文件与图像文件不匹配；"
-                        f"2) 某些图像文件损坏或无法读取；"
-                        f"3) 数据集中存在格式不一致的标注。"
-                        f"建议：1) 检查数据集完整性；2) 验证所有图像和标注文件是否匹配；"
-                        f"3) 尝试重新下载或准备数据集。原始错误: {error_msg}"
+                        f"训练失败：张量形状不匹配。这通常是由于："
+                        f"1) 数据增强（Mosaic等）导致标注索引问题；"
+                        f"2) 标注文件与图像文件不匹配；"
+                        f"3) 某些图像文件损坏或无法读取；"
+                        f"4) 数据集中存在格式不一致的标注。"
+                        f"建议：1) 降低Mosaic增强概率或禁用数据增强；"
+                        f"2) 检查数据集完整性；3) 验证所有图像和标注文件是否匹配；"
+                        f"4) 尝试重新下载或准备数据集。原始错误: {error_msg}"
                     ) from exc
                 elif is_metrics_error:
                     logger.warning("训练过程中出现指标计算警告（通常在验证阶段），这是YOLO的已知问题。" "错误: %s", exc)
@@ -244,20 +265,26 @@ class MultiBehaviorTrainingService:
                         if current_epoch == 0:
                             logger.error(
                                 "训练在验证阶段就失败了（epoch=0），这通常是由于验证集指标计算问题。"
-                                "已设置 val=False 禁用验证，但如果仍然失败，可能是数据集本身的问题。"
+                                "验证已启用（val=True）以获取验证集指标，但如果验证阶段失败，训练会提前终止。"
                             )
                             # 抛出异常，因为训练没有真正开始
                             raise ValueError(
                                 f"训练在验证阶段就失败了（epoch=0）。"
-                                f"即使禁用了验证（val=False），训练仍然失败。"
-                                f"这可能是由于：1) 数据集格式问题；2) 图像文件损坏；"
-                                f"3) 标注文件格式不正确。"
-                                f"建议：1) 检查数据集完整性；2) 验证所有图像和标注文件；"
-                                f"3) 尝试使用更小的批次大小或调整其他训练参数。"
+                                f"验证已启用（val=True）以获取验证集指标（mAP50, mAP50-95等），"
+                                f"但验证阶段计算指标时出现问题。"
+                                f"这可能是由于：1) 验证集中某些类别样本不足；2) 数据集格式问题；"
+                                f"3) 图像文件损坏；4) 标注文件格式不正确。"
+                                f"建议：1) 增加验证集样本数量；2) 检查数据集中各类别是否平衡；"
+                                f"3) 检查数据集完整性；4) 验证所有图像和标注文件；"
+                                f"5) 尝试使用更小的批次大小或调整其他训练参数。"
                             ) from exc
                         elif current_epoch <= 1:
                             logger.warning(
-                                "训练只完成了 %d 轮，YOLO通常在第2轮之后才开始保存模型。" "由于验证阶段错误，训练提前终止。",
+                                "训练只完成了 %d 轮，YOLO通常在第2轮之后才开始保存模型。"
+                                "由于验证阶段错误，训练提前终止。"
+                                "如果验证集指标计算出现问题，可以尝试："
+                                "1) 增加验证集样本数量；2) 检查数据集中各类别是否平衡；"
+                                "3) 尝试减少验证集比例或使用更大的数据集。",
                                 current_epoch,
                             )
                             # 不抛出异常，继续尝试查找模型文件（可能在其他位置）
@@ -469,7 +496,10 @@ class MultiBehaviorTrainingService:
             return "cpu"
 
     def _extract_metrics(self, trainer: Any, save_dir: Path) -> Dict[str, Any]:
+        """提取训练指标，包括验证集指标（mAP50, mAP50-95等）"""
         metrics: Dict[str, Any] = {}
+        
+        # 从trainer对象提取指标
         if trainer is not None:
             trainer_metrics = getattr(trainer, "metrics", None)
             if isinstance(trainer_metrics, dict):
@@ -479,7 +509,32 @@ class MultiBehaviorTrainingService:
                     except Exception as exc:
                         logger.warning("提取指标 %s 失败: %s", key, exc)
                         # 跳过无法序列化的指标，继续处理其他指标
+            
+            # 尝试从trainer的results属性提取验证指标
+            # YOLO的results对象通常包含验证指标，如metrics/mAP50, metrics/mAP50-95等
+            try:
+                results = getattr(trainer, "results", None)
+                if results is not None:
+                    # 尝试获取常见的验证指标
+                    val_metrics = {}
+                    for metric_name in ["metrics/mAP50", "metrics/mAP50-95", "metrics/precision", "metrics/recall"]:
+                        try:
+                            # 尝试从results对象获取指标
+                            if hasattr(results, metric_name.replace("/", "_")):
+                                value = getattr(results, metric_name.replace("/", "_"))
+                                if value is not None:
+                                    val_metrics[metric_name] = self._to_serializable(value)
+                        except Exception:
+                            pass
+                    
+                    # 如果找到了验证指标，添加到metrics中
+                    if val_metrics:
+                        metrics.setdefault("validation_metrics", val_metrics)
+                        logger.info("提取到验证集指标: %s", list(val_metrics.keys()))
+            except Exception as exc:
+                logger.debug("从trainer.results提取验证指标失败: %s", exc)
 
+        # 从results.json文件提取指标（这是YOLO保存指标的主要方式）
         results_json = save_dir / "results.json"
         if results_json.exists():
             try:
@@ -504,11 +559,27 @@ class MultiBehaviorTrainingService:
                                 cleaned_results[key] = cleaned_value
                         except Exception:
                             logger.debug("跳过无效的指标值: %s = %s", key, value)
+                    
+                    # 特别提取验证指标（通常以metrics/开头）
+                    val_metrics_from_file = {}
+                    for key, value in cleaned_results.items():
+                        if key.startswith("metrics/") or "map" in key.lower():
+                            val_metrics_from_file[key] = value
+                    
+                    if val_metrics_from_file:
+                        metrics.setdefault("validation_metrics", val_metrics_from_file)
+                        logger.info("从results.json提取到验证集指标: %s", list(val_metrics_from_file.keys()))
+                    
+                    # 合并到metrics中，优先使用trainer的指标
+                    for key, value in cleaned_results.items():
+                        if key not in metrics:
+                            metrics[key] = value
                     metrics.setdefault("results", cleaned_results)
             except json.JSONDecodeError:
                 logger.debug("无法解析 YOLO 结果文件: %s", results_json)
             except Exception as exc:
                 logger.warning("处理 YOLO 结果文件时出错: %s", exc)
+        
         return metrics
 
     @staticmethod
