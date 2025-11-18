@@ -275,7 +275,7 @@
 
             <!-- 训练参数配置（适用于model_training和multi_behavior_training） -->
             <n-form-item v-if="step.type === 'model_training' || step.type === 'multi_behavior_training' || step.type === 'handwash_training'" label="训练参数">
-              <n-grid :cols="3" :x-gap="12" :y-gap="12">
+              <n-grid :cols="2" :x-gap="12" :y-gap="12">
                 <n-gi>
                   <n-input-group>
                     <n-input-group-label>初始学习率 (lr0)</n-input-group-label>
@@ -345,7 +345,7 @@
                     <n-input-number :value="step.training_params?.image_size || 640" @update:value="(val) => updateTrainingParam(step, 'image_size', val)" :min="128" :max="2048" />
                   </n-input-group>
                 </n-gi>
-                <n-gi v-if="step.type === 'multi_behavior_training'">
+                <n-gi>
                   <n-input-group>
                     <n-input-group-label>动量 (momentum)</n-input-group-label>
                     <n-input-number
@@ -359,7 +359,7 @@
                     />
                   </n-input-group>
                 </n-gi>
-                <n-gi v-if="step.type === 'multi_behavior_training'">
+                <n-gi>
                   <n-input-group>
                     <n-input-group-label>权重衰减 (weight_decay)</n-input-group-label>
                     <n-input-number
@@ -373,7 +373,7 @@
                     />
                   </n-input-group>
                 </n-gi>
-                <n-gi v-if="step.type === 'multi_behavior_training'">
+                <n-gi>
                   <n-input-group>
                     <n-input-group-label>预热轮数 (warmup_epochs)</n-input-group-label>
                     <n-input-number
@@ -382,6 +382,60 @@
                       :min="0"
                       :max="10"
                       placeholder="3"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>早停耐心值 (patience)</n-input-group-label>
+                    <n-input-number
+                      :value="step.training_params?.patience || 15"
+                      @update:value="(val) => updateTrainingParam(step, 'patience', val)"
+                      :min="0"
+                      :max="100"
+                      placeholder="15"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>边界框损失权重 (box)</n-input-group-label>
+                    <n-input-number
+                      :value="step.training_params?.box || 7.5"
+                      @update:value="(val) => updateTrainingParam(step, 'box', val)"
+                      :min="0"
+                      :max="20"
+                      :step="0.1"
+                      :precision="1"
+                      placeholder="7.5"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>分类损失权重 (cls)</n-input-group-label>
+                    <n-input-number
+                      :value="step.training_params?.cls || 0.5"
+                      @update:value="(val) => updateTrainingParam(step, 'cls', val)"
+                      :min="0"
+                      :max="5"
+                      :step="0.1"
+                      :precision="1"
+                      placeholder="0.5"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>DFL损失权重 (dfl)</n-input-group-label>
+                    <n-input-number
+                      :value="step.training_params?.dfl || 1.5"
+                      @update:value="(val) => updateTrainingParam(step, 'dfl', val)"
+                      :min="0"
+                      :max="5"
+                      :step="0.1"
+                      :precision="1"
+                      placeholder="1.5"
                     />
                   </n-input-group>
                 </n-gi>
@@ -588,7 +642,7 @@
             </n-descriptions>
             <n-divider v-if="highlight.metricEntries.length > 0" />
             <div v-if="highlight.metricEntries.length > 0" class="training-metrics">
-              <n-grid :cols="3" :x-gap="12" :y-gap="12">
+              <n-grid :cols="2" :x-gap="12" :y-gap="12">
                 <n-gi v-for="metric in highlight.metricEntries" :key="metric.key">
                   <n-statistic :label="metric.label" :value="metric.value" />
                 </n-gi>
@@ -797,7 +851,7 @@
 
             <!-- 训练参数配置（适用于model_training和multi_behavior_training） -->
             <n-form-item v-if="step.type === 'model_training' || step.type === 'multi_behavior_training' || step.type === 'handwash_training'" label="训练参数">
-              <n-grid :cols="3" :x-gap="12" :y-gap="12">
+              <n-grid :cols="2" :x-gap="12" :y-gap="12">
                 <n-gi>
                   <n-input-group>
                     <n-input-group-label>初始学习率 (lr0)</n-input-group-label>
@@ -867,7 +921,7 @@
                     <n-input-number :value="step.training_params?.image_size || 640" @update:value="(val) => updateTrainingParam(step, 'image_size', val)" :min="128" :max="2048" />
                   </n-input-group>
                 </n-gi>
-                <n-gi v-if="step.type === 'multi_behavior_training'">
+                <n-gi>
                   <n-input-group>
                     <n-input-group-label>动量 (momentum)</n-input-group-label>
                     <n-input-number
@@ -881,7 +935,7 @@
                     />
                   </n-input-group>
                 </n-gi>
-                <n-gi v-if="step.type === 'multi_behavior_training'">
+                <n-gi>
                   <n-input-group>
                     <n-input-group-label>权重衰减 (weight_decay)</n-input-group-label>
                     <n-input-number
@@ -895,7 +949,7 @@
                     />
                   </n-input-group>
                 </n-gi>
-                <n-gi v-if="step.type === 'multi_behavior_training'">
+                <n-gi>
                   <n-input-group>
                     <n-input-group-label>预热轮数 (warmup_epochs)</n-input-group-label>
                     <n-input-number
@@ -904,6 +958,60 @@
                       :min="0"
                       :max="10"
                       placeholder="3"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>早停耐心值 (patience)</n-input-group-label>
+                    <n-input-number
+                      :value="step.training_params?.patience || 15"
+                      @update:value="(val) => updateTrainingParam(step, 'patience', val)"
+                      :min="0"
+                      :max="100"
+                      placeholder="15"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>边界框损失权重 (box)</n-input-group-label>
+                    <n-input-number
+                      :value="step.training_params?.box || 7.5"
+                      @update:value="(val) => updateTrainingParam(step, 'box', val)"
+                      :min="0"
+                      :max="20"
+                      :step="0.1"
+                      :precision="1"
+                      placeholder="7.5"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>分类损失权重 (cls)</n-input-group-label>
+                    <n-input-number
+                      :value="step.training_params?.cls || 0.5"
+                      @update:value="(val) => updateTrainingParam(step, 'cls', val)"
+                      :min="0"
+                      :max="5"
+                      :step="0.1"
+                      :precision="1"
+                      placeholder="0.5"
+                    />
+                  </n-input-group>
+                </n-gi>
+                <n-gi>
+                  <n-input-group>
+                    <n-input-group-label>DFL损失权重 (dfl)</n-input-group-label>
+                    <n-input-number
+                      :value="step.training_params?.dfl || 1.5"
+                      @update:value="(val) => updateTrainingParam(step, 'dfl', val)"
+                      :min="0"
+                      :max="5"
+                      :step="0.1"
+                      :precision="1"
+                      placeholder="1.5"
                     />
                   </n-input-group>
                 </n-gi>
@@ -1421,6 +1529,18 @@ function normalizeStepsForSubmit(steps: WorkflowStep[]) {
       if (step.training_params.warmup_epochs !== undefined) {
         trainingPayload.warmup_epochs = step.training_params.warmup_epochs
       }
+      if (step.training_params.patience !== undefined) {
+        trainingPayload.patience = step.training_params.patience
+      }
+      if (step.training_params.box !== undefined) {
+        trainingPayload.box = step.training_params.box
+      }
+      if (step.training_params.cls !== undefined) {
+        trainingPayload.cls = step.training_params.cls
+      }
+      if (step.training_params.dfl !== undefined) {
+        trainingPayload.dfl = step.training_params.dfl
+      }
       if (Object.keys(trainingPayload).length > 0) {
         if (step.type === 'multi_behavior_training') {
           // 对于multi_behavior_training，将训练参数放在config.training_params中
@@ -1497,13 +1617,40 @@ function prepareStepForForm(step: any): WorkflowStep {
       delete datasetParams.camera_ids
     }
   }
+  // 处理训练参数（从 config.training_params 或 step.training_params 中读取）
+  let trainingParams: WorkflowStep['training_params'] | undefined
+  if (step?.type === 'model_training' || step?.type === 'multi_behavior_training' || step?.type === 'handwash_training') {
+    const configTrainingParams = configObj?.training_params || {}
+    const stepTrainingParams = step?.training_params || {}
+    // 合并配置中的参数和步骤中的参数
+    trainingParams = {
+      ...configTrainingParams,
+      ...stepTrainingParams,
+      // 确保数值类型正确
+      lr0: configTrainingParams.lr0 ?? stepTrainingParams.lr0,
+      lrf: configTrainingParams.lrf ?? stepTrainingParams.lrf,
+      batch_size: configTrainingParams.batch_size ?? stepTrainingParams.batch_size,
+      epochs: configTrainingParams.epochs ?? stepTrainingParams.epochs,
+      image_size: configTrainingParams.image_size ?? stepTrainingParams.image_size,
+      momentum: configTrainingParams.momentum ?? stepTrainingParams.momentum,
+      weight_decay: configTrainingParams.weight_decay ?? stepTrainingParams.weight_decay,
+      warmup_epochs: configTrainingParams.warmup_epochs ?? stepTrainingParams.warmup_epochs,
+      patience: configTrainingParams.patience ?? stepTrainingParams.patience,
+      box: configTrainingParams.box ?? stepTrainingParams.box,
+      cls: configTrainingParams.cls ?? stepTrainingParams.cls,
+      dfl: configTrainingParams.dfl ?? stepTrainingParams.dfl,
+      device: configTrainingParams.device ?? stepTrainingParams.device ?? 'auto',
+      model: configTrainingParams.model ?? stepTrainingParams.model ?? ''
+    }
+  }
+  
   return {
     name: step?.name || '',
     type: step?.type || 'data_processing',
     description: step?.description || '',
     config: JSON.stringify(configObj, null, 2),
     dataset_params: datasetParams,
-    training_params: step?.training_params,
+    training_params: trainingParams,
     deployment_params: step?.deployment_params
   }
 }
@@ -1711,13 +1858,7 @@ function editWorkflow(workflow: Workflow) {
     description: workflow.description,
     steps: workflow.steps.map((step) => {
       const prepared = prepareStepForForm(step)
-      if (step.type === 'model_training') {
-        prepared.training_params = {
-          learning_rate: step.training_params?.learning_rate || '0.001',
-          batch_size: step.training_params?.batch_size || '32',
-          device: step.training_params?.device || 'auto'
-        }
-      }
+      // prepareStepForForm 已经处理了 training_params，这里不需要再次设置
       if (step.type === 'model_deployment') {
         prepared.deployment_params = {
           replicas: step.deployment_params?.replicas || 1,

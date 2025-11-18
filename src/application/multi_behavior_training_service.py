@@ -178,6 +178,10 @@ class MultiBehaviorTrainingService:
         momentum = float(training_params.get("momentum", 0.937))  # 动量
         weight_decay = float(training_params.get("weight_decay", 0.0005))  # 权重衰减
         warmup_epochs = float(training_params.get("warmup_epochs", 3.0))  # 预热轮数
+        # 损失函数权重参数
+        box = float(training_params.get("box", 7.5))  # 边界框损失权重
+        cls = float(training_params.get("cls", 0.5))  # 分类损失权重
+        dfl = float(training_params.get("dfl", 1.5))  # DFL损失权重
 
         project_dir = self._config.output_dir / "runs"
         project_dir.mkdir(parents=True, exist_ok=True)
@@ -355,6 +359,10 @@ class MultiBehaviorTrainingService:
                     momentum=momentum,  # 动量
                     weight_decay=weight_decay,  # 权重衰减
                     warmup_epochs=warmup_epochs,  # 预热轮数
+                    # 损失函数权重参数
+                    box=box,  # 边界框损失权重
+                    cls=cls,  # 分类损失权重
+                    dfl=dfl,  # DFL损失权重
                     # 数据增强参数（保守设置，避免张量大小问题）
                     hsv_h=0.015,  # 色调增强（降低）
                     hsv_s=0.7,  # 饱和度增强
