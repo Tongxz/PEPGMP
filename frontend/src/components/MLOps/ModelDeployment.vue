@@ -110,56 +110,36 @@
     </div>
 
     <!-- 部署模型对话框 -->
-    <n-modal v-model:show="showDeployDialog" preset="dialog" title="部署模型" style="width: 600px;">
-      <n-form :model="deployForm" label-placement="left" label-width="100px">
-        <n-form-item label="模型选择">
-          <n-select v-model:value="deployForm.model_id" placeholder="选择要部署的模型" :options="modelOptions" />
+    <n-modal v-model:show="showDeployDialog" preset="dialog" title="部署模型" style="width: 600px;" @after-enter="fetchModels">
+      <n-form :model="deployForm" label-placement="left" label-width="120px">
+        <n-form-item label="模型选择" required>
+          <n-select 
+            v-model:value="deployForm.model_id" 
+            placeholder="选择要部署的模型" 
+            :options="modelOptions" 
+            :loading="loadingModels"
+            filterable
+            clearable
+          />
+        </n-form-item>
+        <n-form-item label="部署到检测任务" required>
+          <n-select 
+            v-model:value="deployForm.detection_task" 
+            placeholder="选择检测任务" 
+            :options="detectionTaskOptions"
+          />
         </n-form-item>
         <n-form-item label="部署名称">
-          <n-input v-model:value="deployForm.name" placeholder="输入部署名称" />
+          <n-input v-model:value="deployForm.name" placeholder="自动生成（可选）" />
+          <template #feedback>
+            <n-text depth="3" style="font-size: 12px;">如果不填写，将自动生成部署名称</n-text>
+          </template>
         </n-form-item>
-        <n-form-item label="环境">
-          <n-select v-model:value="deployForm.environment" placeholder="选择部署环境" :options="environmentOptions" />
-        </n-form-item>
-        <n-form-item label="实例数">
-          <n-input-number v-model:value="deployForm.replicas" :min="1" :max="10" />
-        </n-form-item>
-        <n-form-item label="资源配置">
-          <n-grid :cols="2" :x-gap="12">
-            <n-gi>
-              <n-input-group>
-                <n-input-group-label>CPU</n-input-group-label>
-                <n-input v-model:value="deployForm.cpu_limit" placeholder="1" />
-                <n-input-group-label>核</n-input-group-label>
-              </n-input-group>
-            </n-gi>
-            <n-gi>
-              <n-input-group>
-                <n-input-group-label>内存</n-input-group-label>
-                <n-input v-model:value="deployForm.memory_limit" placeholder="2" />
-                <n-input-group-label>GB</n-input-group-label>
-              </n-input-group>
-            </n-gi>
-          </n-grid>
-        </n-form-item>
-        <n-form-item label="自动扩缩容">
-          <n-switch v-model:value="deployForm.auto_scaling" />
-        </n-form-item>
-        <n-form-item v-if="deployForm.auto_scaling" label="扩缩容配置">
-          <n-grid :cols="2" :x-gap="12">
-            <n-gi>
-              <n-input-group>
-                <n-input-group-label>最小实例</n-input-group-label>
-                <n-input-number v-model:value="deployForm.min_replicas" :min="1" />
-              </n-input-group>
-            </n-gi>
-            <n-gi>
-              <n-input-group>
-                <n-input-group-label>最大实例</n-input-group-label>
-                <n-input-number v-model:value="deployForm.max_replicas" :min="1" :max="20" />
-              </n-input-group>
-            </n-gi>
-          </n-grid>
+        <n-form-item label="立即应用">
+          <n-switch v-model:value="deployForm.apply_immediately" />
+          <template #feedback>
+            <n-text depth="3" style="font-size: 12px;">启用后立即更新配置，否则需要重启检测服务</n-text>
+          </template>
         </n-form-item>
       </n-form>
       <template #action>
@@ -365,9 +345,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { NCard, NButton, NSpace, NIcon, NEmpty, NList, NListItem, NTag, NDescriptions, NDescriptionsItem, NDivider, NText, NGrid, NGi, NStatistic, NProgress, NModal, NForm, NFormItem, NSelect, NInput, NInputNumber, NInputGroup, NInputGroupLabel, NSwitch, NRadioGroup, NRadio, NP, useMessage } from 'naive-ui'
 import { RefreshOutline, RocketOutline } from '@vicons/ionicons5'
+import { listModels, type ModelInfo } from '../../api/mlops'
 
 interface Deployment {
   id: string
@@ -400,15 +381,16 @@ const updating = ref(false)
 
 const deployForm = ref({
   model_id: '',
+  detection_task: '',
   name: '',
-  environment: 'staging',
-  replicas: 1,
-  cpu_limit: '1',
-  memory_limit: '2',
-  auto_scaling: false,
-  min_replicas: 1,
-  max_replicas: 5
+  apply_immediately: false
 })
+
+const detectionTaskOptions = [
+  { label: '发网检测 (hairnet_detection)', value: 'hairnet_detection', description: '检测人员是否佩戴发网' },
+  { label: '人体检测 (human_detection)', value: 'human_detection', description: '检测图像中的人体目标' },
+  { label: '姿态检测 (pose_detection)', value: 'pose_detection', description: '检测人体姿态关键点' }
+]
 
 const updateForm = ref({
   name: '',
@@ -426,12 +408,50 @@ const updateForm = ref({
   description: ''
 })
 
-const modelOptions = [
-  { label: 'YOLOv8 人体检测模型 v1.0', value: 'yolo_human_v1' },
-  { label: 'YOLOv8 安全帽检测模型 v2.1', value: 'yolo_hairnet_v2' },
-  { label: 'XGBoost 行为分类模型 v1.5', value: 'xgb_behavior_v1' },
-  { label: 'MediaPipe 姿态检测模型 v1.0', value: 'mediapipe_pose_v1' }
-]
+const models = ref<ModelInfo[]>([])
+const loadingModels = ref(false)
+
+// 从模型注册中心获取模型列表
+async function fetchModels() {
+  loadingModels.value = true
+  try {
+    // 获取所有模型（不筛选状态）
+    const allModels = await listModels()
+    console.log('[模型部署] 获取模型列表:', allModels)
+    
+    // 过滤模型：只显示状态为 'active' 或 'ready' 的模型，或者没有状态字段的模型
+    // 排除状态为 'archived' 或 'deprecated' 的模型
+    models.value = allModels.filter(m => {
+      const status = m.status?.toLowerCase()
+      return !status || 
+             status === 'active' || 
+             status === 'ready' ||
+             (status !== 'archived' && status !== 'deprecated' && status !== 'error')
+    })
+    
+    console.log(`[模型部署] 获取到 ${allModels.length} 个模型，其中 ${models.value.length} 个可用`)
+    
+    if (models.value.length === 0 && allModels.length > 0) {
+      console.warn('[模型部署] 所有模型都被过滤掉了，显示所有模型')
+      models.value = allModels
+    }
+  } catch (error) {
+    console.error('获取模型列表失败:', error)
+    message.error('获取模型列表失败: ' + (error instanceof Error ? error.message : String(error)))
+    models.value = []
+  } finally {
+    loadingModels.value = false
+  }
+}
+
+// 模型选项（从模型注册中心动态生成）
+const modelOptions = computed(() => {
+  return models.value.map(model => ({
+    label: `${model.name} v${model.version}`,
+    value: model.id,
+    model: model
+  }))
+})
 
 const environmentOptions = [
   { label: '开发环境', value: 'development' },
@@ -439,16 +459,13 @@ const environmentOptions = [
   { label: '生产环境', value: 'production' }
 ]
 
-const modelVersionOptions = [
-  { label: 'YOLOv8 人体检测模型 v1.0', value: 'yolo_human_v1.0' },
-  { label: 'YOLOv8 人体检测模型 v1.1', value: 'yolo_human_v1.1' },
-  { label: 'YOLOv8 人体检测模型 v1.2', value: 'yolo_human_v1.2' },
-  { label: 'YOLOv8 安全帽检测模型 v2.1', value: 'yolo_hairnet_v2.1' },
-  { label: 'YOLOv8 安全帽检测模型 v2.2', value: 'yolo_hairnet_v2.2' },
-  { label: 'XGBoost 行为分类模型 v1.5', value: 'xgb_behavior_v1.5' },
-  { label: 'XGBoost 行为分类模型 v1.6', value: 'xgb_behavior_v1.6' },
-  { label: 'MediaPipe 姿态检测模型 v1.0', value: 'mediapipe_pose_v1.0' }
-]
+// 模型版本选项（从模型注册中心动态生成）
+const modelVersionOptions = computed(() => {
+  return models.value.map(model => ({
+    label: `${model.name} v${model.version}`,
+    value: model.id
+  }))
+})
 
 // 获取部署列表
 async function fetchDeployments() {
@@ -673,15 +690,63 @@ async function deleteDeployment(deployment: Deployment) {
 
 // 提交部署
 async function submitDeployment() {
+  if (!deployForm.value.model_id) {
+    message.warning('请选择要部署的模型')
+    return
+  }
+  if (!deployForm.value.detection_task) {
+    message.warning('请选择检测任务')
+    return
+  }
+  
   deploying.value = true
   try {
-    // 模拟API调用
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    console.log('部署配置:', deployForm.value)
-    showDeployDialog.value = false
-    refreshDeployments()
+    // 获取选中的模型信息
+    const selectedModel = models.value.find(m => m.id === deployForm.value.model_id)
+    if (!selectedModel) {
+      message.error('选择的模型不存在')
+      return
+    }
+    
+    // 构建部署配置
+    const deploymentConfig = {
+      model_id: selectedModel.id,
+      detection_task: deployForm.value.detection_task,
+      name: deployForm.value.name || undefined, // 如果为空，后端会自动生成
+      apply_immediately: deployForm.value.apply_immediately
+    }
+    
+    // 调用部署API
+    const response = await fetch('/api/v1/mlops/deployments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(deploymentConfig)
+    })
+    
+    if (response.ok) {
+      const result = await response.json()
+      message.success(result.message || '模型部署成功')
+      showDeployDialog.value = false
+      // 重置表单
+      deployForm.value = {
+        model_id: '',
+        detection_task: '',
+        name: '',
+        apply_immediately: false
+      }
+      refreshDeployments()
+      
+      // 显示部署信息
+      if (result.note) {
+        message.info(result.note, { duration: 5000 })
+      }
+    } else {
+      const errorData = await response.json().catch(() => ({ detail: '部署失败' }))
+      throw new Error(errorData.detail || '部署失败')
+    }
   } catch (error) {
     console.error('部署失败:', error)
+    message.error(error instanceof Error ? error.message : '部署失败')
   } finally {
     deploying.value = false
   }
@@ -751,6 +816,7 @@ async function submitUpdate() {
 
 onMounted(() => {
   fetchDeployments()
+  fetchModels()
 })
 </script>
 

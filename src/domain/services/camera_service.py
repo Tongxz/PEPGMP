@@ -77,28 +77,48 @@ class CameraService:
             ValueError: 如果摄像头ID已存在或必填字段缺失
         """
         try:
-            # 验证必填字段
-            required_fields = ["id", "name", "source"]
+            # 验证必填字段（id不再是必填字段，由数据库自动生成）
+            required_fields = ["name", "source"]
             for field in required_fields:
                 if field not in camera_data:
                     raise ValueError(f"缺少必填字段: {field}")
 
-            camera_id = camera_data["id"]
+            # ID由数据库自动生成UUID，如果提供了id则使用（用于更新场景）
+            camera_id = camera_data.get("id")
 
-            # 检查摄像头ID是否已存在
-            existing_camera = await self.camera_repository.find_by_id(camera_id)
-            if existing_camera:
-                raise ValueError(f"摄像头ID已存在: {camera_id}")
+            # 如果提供了ID，检查是否已存在（用于更新场景）
+            if camera_id:
+                existing_camera = await self.camera_repository.find_by_id(camera_id)
+                if existing_camera:
+                    raise ValueError(f"摄像头ID已存在: {camera_id}")
 
             # 创建Camera实体（source存储在metadata中）
+            # id为None时，数据库会自动生成UUID
+            # 处理 status 字段：优先使用 status，如果没有则使用 active 标志
+            status_value = camera_data.get("status")
+            if status_value:
+                try:
+                    camera_status = CameraStatus(status_value)
+                except ValueError:
+                    # 如果 status 值无效，回退到 active 标志
+                    camera_status = CameraStatus.ACTIVE if camera_data.get("active", True) else CameraStatus.INACTIVE
+            else:
+                # 如果没有提供 status，使用 active 标志（兼容旧代码）
+                camera_status = CameraStatus.ACTIVE if camera_data.get("active", True) else CameraStatus.INACTIVE
+            
+            # 处理 camera_type 字段
+            camera_type_value = camera_data.get("camera_type", "fixed")
+            try:
+                camera_type = CameraType(camera_type_value)
+            except ValueError:
+                camera_type = CameraType.FIXED  # 默认类型
+            
             camera = Camera(
-                id=camera_id,
+                id=camera_id if camera_id else "",  # 空字符串表示自动生成
                 name=camera_data["name"],
-                status=CameraStatus.ACTIVE
-                if camera_data.get("active", True)
-                else CameraStatus.INACTIVE,
-                camera_type=CameraType.FIXED,  # 默认类型
-                location=camera_data.get("location", "unknown"),
+                status=camera_status,
+                camera_type=camera_type,
+                location=camera_data.get("location") or "unknown",
                 resolution=tuple(camera_data["resolution"])
                 if camera_data.get("resolution")
                 else (1920, 1080),
@@ -124,8 +144,12 @@ class CameraService:
                 if key in camera_data:
                     camera.metadata[key] = camera_data[key]
 
-            # 保存到数据库（主要数据源）
-            await self.camera_repository.save(camera)
+            # 保存到数据库（主要数据源），获取自动生成的ID
+            generated_id = await self.camera_repository.save(camera)
+            
+            # 更新camera实体的ID（如果之前为空）
+            if not camera_id:
+                camera.id = generated_id
 
             # 同步运行时配置到Redis（如果配置了log_interval等）
             try:
@@ -141,19 +165,19 @@ class CameraService:
                 ]
                 if changed_keys:
                     sync_camera_config_to_redis(
-                        camera_id=camera_id,
+                        camera_id=generated_id,  # 使用生成的ID
                         camera_config=camera.to_dict(),
                         changed_keys=changed_keys,
                     )
             except Exception as e:
                 logger.warning(
-                    f"同步相机配置到Redis失败（不影响创建）: camera_id={camera_id}, error={e}"
+                    f"同步相机配置到Redis失败（不影响创建）: camera_id={generated_id}, error={e}"
                 )
 
             # 注意: YAML写入已移除，数据库是单一数据源
             # 如需备份，使用导出工具: scripts/export_cameras_to_yaml.py
 
-            logger.info(f"摄像头创建成功: camera_id={camera_id}")
+            logger.info(f"摄像头创建成功: camera_id={generated_id}, name={camera.name}")
             return {"ok": True, "camera": camera.to_dict()}
 
         except ValueError:
@@ -189,7 +213,24 @@ class CameraService:
             if "source" in updates:
                 camera.metadata["source"] = updates["source"]
             if "location" in updates:
-                camera.location = updates["location"]
+                camera.location = updates["location"] or "unknown"
+            if "status" in updates:
+                # 处理 status 字段
+                status_value = updates["status"]
+                try:
+                    camera.status = CameraStatus(status_value)
+                except ValueError:
+                    logger.warning(f"无效的status值: {status_value}，保持原值")
+            elif "active" in updates:
+                # 兼容旧代码：使用 active 标志
+                camera.status = CameraStatus.ACTIVE if updates["active"] else CameraStatus.INACTIVE
+            if "camera_type" in updates:
+                # 处理 camera_type 字段
+                camera_type_value = updates["camera_type"]
+                try:
+                    camera.camera_type = CameraType(camera_type_value)
+                except ValueError:
+                    logger.warning(f"无效的camera_type值: {camera_type_value}，保持原值")
             if "resolution" in updates:
                 camera.resolution = (
                     tuple(updates["resolution"])
@@ -200,10 +241,6 @@ class CameraService:
                 camera.fps = updates["fps"]
             if "region_id" in updates:
                 camera.region_id = updates["region_id"]
-            if "active" in updates:
-                camera.status = (
-                    CameraStatus.ACTIVE if updates["active"] else CameraStatus.INACTIVE
-                )
             # 更新metadata中的其他字段（包括log_interval等）
             metadata_fields = [
                 "regions_file",

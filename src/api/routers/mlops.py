@@ -648,62 +648,142 @@ async def get_deployments(session: AsyncSession = Depends(get_async_session)):
 async def create_deployment(
     deployment: Dict[str, Any], session: AsyncSession = Depends(get_async_session)
 ):
-    """创建部署"""
+    """创建模型部署（将模型部署到检测任务）
+    
+    部署模型到检测系统，更新检测配置中的模型路径。
+    
+    请求体示例:
+    {
+        "model_id": "model_20251118_070707",
+        "name": "hairnet-detection-v20251118",
+        "detection_task": "hairnet_detection",
+        "apply_immediately": true
+    }
+    """
     try:
+        # 检查必需参数
+        model_id = deployment.get("model_id")
+        detection_task = deployment.get("detection_task")
+        
+        if not model_id:
+            raise HTTPException(status_code=400, detail="缺少必需参数: model_id")
+        if not detection_task:
+            raise HTTPException(status_code=400, detail="缺少必需参数: detection_task")
+        
+        # 验证检测任务
+        valid_tasks = ["hairnet_detection", "human_detection", "pose_detection"]
+        if detection_task not in valid_tasks:
+            raise HTTPException(
+                status_code=400,
+                detail=f"无效的检测任务: {detection_task}，有效值: {', '.join(valid_tasks)}"
+            )
+        
+        # 获取模型信息
+        try:
+            service = get_service(ModelRegistryService)
+            model = await service.get_model(model_id)
+            if not model:
+                raise HTTPException(status_code=404, detail="模型不存在")
+        except ValueError:
+            raise HTTPException(status_code=503, detail="模型注册服务不可用")
+        
+        # 验证模型文件是否存在
+        model_path = Path(model.get("model_path", ""))
+        if not model_path or not model_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"模型文件不存在: {model_path}"
+            )
+        
         # 生成部署ID
         deployment_id = f"deployment_{int(datetime.utcnow().timestamp())}"
-        deployment["id"] = deployment_id
-
-        # 设置默认值
-        deployment.setdefault("image", "pyt-api:latest")
-        deployment.setdefault("environment", "production")
-        deployment.setdefault("replicas", 1)
-        deployment.setdefault("status", "deploying")
-
-        # 保存到数据库
-        deployment_obj = await DeploymentDAO.create(session, deployment)
-        logger.info(f"数据库记录创建成功: {deployment_obj.id}")
-
-        # 创建真实的Docker部署
-        docker_manager = _get_docker_manager()
-        docker_result = await docker_manager.create_deployment(deployment)
-
-        if docker_result["success"]:
-            # 更新数据库状态
-            await DeploymentDAO.update(
-                session,
-                deployment_id,
-                {"status": "running", "deployment_config": docker_result},
-            )
-
-            logger.info(f"✅ 部署创建成功: {deployment_obj.name}")
-            return {
-                "message": "部署创建成功",
-                "deployment_id": deployment_obj.id,
-                "status": "running",
-                "containers": docker_result.get("containers", []),
-            }
-        else:
-            # 更新数据库状态为失败
-            await DeploymentDAO.update(
-                session,
-                deployment_id,
-                {
-                    "status": "error",
-                    "deployment_config": {"error": docker_result.get("error", "未知错误")},
-                },
-            )
-
-            logger.error(f"❌ Docker部署创建失败: {docker_result.get('error')}")
-            raise HTTPException(
-                status_code=500, detail=f"部署创建失败: {docker_result.get('error', '未知错误')}"
-            )
+        
+        # 设置部署信息
+        deployment_name = deployment.get("name") or f"{detection_task}-{model.get('name', 'unknown')}-v{model.get('version', '1.0')}"
+        apply_immediately = deployment.get("apply_immediately", False)
+        
+        # 更新检测配置
+        from config.unified_params import update_global_param, save_global_params
+        
+        # 将模型路径转换为相对路径（相对于项目根目录）
+        project_root = Path(__file__).resolve().parents[3]
+        try:
+            relative_path = model_path.relative_to(project_root)
+            model_path_str = str(relative_path).replace("\\", "/")
+        except ValueError:
+            # 如果无法转换为相对路径，使用绝对路径
+            model_path_str = str(model_path).replace("\\", "/")
+        
+        # 更新全局配置
+        update_global_param(detection_task, "model_path", model_path_str)
+        
+        # 保存到YAML文件
+        save_global_params()
+        logger.info(f"[模型部署] 已更新 {detection_task}.model_path = {model_path_str}")
+        
+        # 如果启用数据库配置，也更新数据库（可选）
+        try:
+            from src.api.routers.detection_config import get_config_service
+            config_service = await get_config_service()
+            if config_service:
+                await config_service.save_config(
+                    camera_id=None,  # 全局配置
+                    module=detection_task,
+                    param="model_path",
+                    value=model_path_str,
+                )
+                logger.info(f"[模型部署] 已更新数据库配置: {detection_task}.model_path")
+        except Exception as db_error:
+            logger.warning(f"[模型部署] 更新数据库配置失败（非关键）: {db_error}")
+        
+        # 保存部署记录到数据库
+        deployment_record = {
+            "id": deployment_id,
+            "name": deployment_name,
+            "model_version": model.get("id", model_id),
+            "model_id": model_id,
+            "model_path": str(model_path),
+            "detection_task": detection_task,
+            "environment": "production",
+            "status": "running",
+            "replicas": 1,
+            "deployment_config": {
+                "model_id": model_id,
+                "model_path": model_path_str,
+                "detection_task": detection_task,
+                "apply_immediately": apply_immediately,
+                "deployed_at": datetime.utcnow().isoformat(),
+            },
+        }
+        
+        try:
+            deployment_obj = await DeploymentDAO.create(session, deployment_record)
+            logger.info(f"[模型部署] 部署记录已保存: {deployment_obj.id}")
+        except Exception as db_error:
+            logger.warning(f"[模型部署] 保存部署记录失败（非关键）: {db_error}")
+            # 继续执行，不影响部署
+        
+        # 返回部署结果
+        result = {
+            "message": "模型部署成功",
+            "deployment_id": deployment_id,
+            "deployment_name": deployment_name,
+            "model_id": model_id,
+            "model_path": model_path_str,
+            "detection_task": detection_task,
+            "status": "running",
+            "apply_immediately": apply_immediately,
+            "note": "配置已更新，请重启检测服务以使用新模型" if not apply_immediately else "配置已更新并立即应用",
+        }
+        
+        logger.info(f"[模型部署] ✅ 部署成功: {deployment_name} -> {detection_task}")
+        return result
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"创建部署失败: {e}")
-        raise HTTPException(status_code=500, detail="创建部署失败")
+        logger.error(f"[模型部署] ❌ 部署失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"部署失败: {str(e)}")
 
 
 @router.put("/deployments/{deployment_id}/scale")

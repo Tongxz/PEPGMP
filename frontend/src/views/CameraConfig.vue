@@ -186,13 +186,17 @@
       <n-modal v-model:show="modalVisible" :mask-closable="false" :closable="false" transform-origin="center">
         <n-card :title="modalTitle" size="small" style="width: 720px; max-width: 90vw;">
           <n-form ref="formRef" :model="formData" :rules="formRulesComputed" label-placement="top" size="medium">
-            <n-form-item label="ID（唯一标识）" path="id">
+            <!-- 编辑模式下显示ID（只读） -->
+            <n-form-item v-if="mode === 'edit'" label="ID（系统自动生成）" path="id">
               <n-input
                 v-model:value="formData.id"
-                placeholder="例如: cam0"
                 :input-props="{ autocomplete: 'off' }"
-                :disabled="mode === 'edit'"
+                disabled
+                placeholder="系统自动生成的唯一标识"
               />
+              <n-text depth="3" style="margin-left: 12px; font-size: 12px">
+                ID由系统自动生成，不可修改
+              </n-text>
             </n-form-item>
 
             <n-form-item label="名称" path="name">
@@ -200,8 +204,10 @@
                 v-model:value="formData.name"
                 placeholder="例如: 大门口 USB0"
                 :input-props="{ autocomplete: 'off' }"
-                :disabled="mode === 'edit'"
               />
+              <n-text depth="3" style="margin-left: 12px; font-size: 12px" v-if="mode === 'create'">
+                名称用于识别摄像头，建议使用有意义的名称
+              </n-text>
             </n-form-item>
 
             <n-form-item label="来源" path="source">
@@ -210,6 +216,34 @@
                 placeholder="0 或 rtsp://username:password@ip:554/stream"
                 :input-props="{ autocomplete: 'off' }"
               />
+            </n-form-item>
+
+            <n-form-item label="位置（可选）" path="location">
+              <n-input
+                v-model:value="formData.location"
+                placeholder="例如: 大门口、车间1号"
+                :input-props="{ autocomplete: 'off' }"
+              />
+            </n-form-item>
+
+            <n-form-item label="摄像头类型（可选）" path="camera_type">
+              <n-select
+                v-model:value="formData.camera_type"
+                placeholder="选择摄像头类型"
+                :options="cameraTypeOptions"
+                clearable
+              />
+            </n-form-item>
+
+            <n-form-item label="配置状态（可选）" path="status">
+              <n-select
+                v-model:value="formData.status"
+                placeholder="选择配置状态"
+                :options="statusOptions"
+              />
+              <n-text depth="3" style="margin-left: 12px; font-size: 12px">
+                激活：允许启动检测；停用：禁止启动检测
+              </n-text>
             </n-form-item>
 
             <n-form-item label="分辨率（可选）" path="resolution">
@@ -304,7 +338,7 @@
 import { ref, reactive, onMounted, onUnmounted, h, computed, watch } from 'vue'
 import {
   NCard, NForm, NFormItem, NInput, NInputNumber, NButton, NAlert,
-  NDataTable, NText, NTag, NSpace, NPopconfirm, NIcon, NSwitch, NModal, NSlider, NDivider, useMessage
+  NDataTable, NText, NTag, NSpace, NPopconfirm, NIcon, NSwitch, NModal, NSlider, NDivider, NSelect, useMessage
 } from 'naive-ui'
 import type { DataTableColumns, FormInst, FormRules } from 'naive-ui'
 import {
@@ -348,9 +382,12 @@ const currentStreamCamera = ref<{id: string, name: string} | null>(null)
 
 // 表单数据
 const formData = reactive({
-  id: '',
+  id: '',  // 编辑模式下使用，创建模式下不需要
   name: '',
   source: '',
+  location: '',  // 摄像头位置（可选）
+  camera_type: 'fixed',  // 摄像头类型（可选，默认fixed）
+  status: 'inactive',  // 配置状态（可选，默认inactive）
   resolution: '',
   fps: null as number | null,
   regions_file: '',
@@ -358,11 +395,25 @@ const formData = reactive({
   log_interval: 120,
 })
 
+// 摄像头类型选项
+const cameraTypeOptions = [
+  { label: '固定摄像头', value: 'fixed' },
+  { label: 'PTZ摄像头', value: 'ptz' },
+  { label: '移动摄像头', value: 'mobile' },
+  { label: '热成像摄像头', value: 'thermal' },
+]
+
+// 配置状态选项
+const statusOptions = [
+  { label: '激活（允许启动检测）', value: 'active' },
+  { label: '停用（禁止启动检测）', value: 'inactive' },
+  { label: '维护中', value: 'maintenance' },
+  { label: '错误', value: 'error' },
+]
+
 // 表单验证规则
 const formRules: FormRules = {
-  id: [
-    { required: true, message: 'ID 不能为空', trigger: 'blur' }
-  ],
+  // id 不再是必填字段，由系统自动生成
   name: [
     { required: true, message: '名称 不能为空', trigger: 'blur' }
   ],
@@ -373,7 +424,8 @@ const formRules: FormRules = {
 
 // 根据模式动态调整规则
 const formRulesComputed = computed<FormRules>(() => {
-  return mode.value === 'create' ? formRules : { id: formRules.id }
+  // 创建和编辑模式都使用相同的规则（id不需要验证）
+  return formRules
 })
 
 // 计算属性
@@ -794,9 +846,17 @@ async function onSubmitModal() {
 
 // 填充表单
 function fillForm(camera: any) {
+  // ID：编辑模式下需要保留，用于标识要更新的摄像头
   formData.id = camera.id || ''
   formData.name = camera.name || ''
-  formData.source = camera.source || ''
+  // source 从 metadata 中获取，如果没有则从 camera.source 获取
+  formData.source = camera.metadata?.source || camera.source || ''
+  // location：摄像头位置
+  formData.location = camera.location || ''
+  // camera_type：摄像头类型
+  formData.camera_type = camera.camera_type || 'fixed'
+  // status：配置状态（是否允许启动检测）
+  formData.status = camera.status || 'inactive'
   
   // resolution 字段：后端返回的是元组 [width, height]，需要转换为字符串 "widthxheight"
   if (camera.resolution) {
@@ -823,10 +883,18 @@ function fillForm(camera: any) {
 function collectFormData(includeEmpty: boolean) {
   const payload: any = {}
 
-  if (includeEmpty || formData.id.trim()) payload.id = formData.id.trim()
+  // ID处理：
+  // - 创建模式：不包含 id，由后端自动生成UUID
+  // - 编辑模式：包含 id（用于标识要更新的摄像头）
+  if (mode.value === 'edit' && formData.id) {
+    payload.id = formData.id.trim()
+  }
+  // 创建模式下不包含 id，让后端自动生成
   
-  // 创建模式下，name 是必填的
+  // name 字段：创建和编辑模式都需要
   if (mode.value === 'create' && (includeEmpty || formData.name.trim())) {
+    payload.name = formData.name.trim()
+  } else if (mode.value === 'edit' && formData.name.trim()) {
     payload.name = formData.name.trim()
   }
   
@@ -873,6 +941,24 @@ function collectFormData(includeEmpty: boolean) {
   
   if (includeEmpty || formData.fps !== null) payload.fps = formData.fps
   
+  // location 字段：可选
+  if (formData.location && formData.location.trim()) {
+    payload.location = formData.location.trim()
+  }
+  
+  // camera_type 字段：可选，默认 fixed
+  if (formData.camera_type) {
+    payload.camera_type = formData.camera_type
+  }
+  
+  // status 字段：可选，默认 inactive
+  // 注意：后端期望的是 status 字段，同时也会使用 active 标志（用于兼容）
+  if (formData.status) {
+    payload.status = formData.status
+    // 同时设置 active 标志（用于兼容旧代码）
+    payload.active = formData.status === 'active'
+  }
+  
   // regions_file 字段：确保是字符串类型
   // 编辑模式下，如果 regions_file 为空，不包含在 payload 中（保持原值）
   if (formData.regions_file !== undefined && formData.regions_file !== null) {
@@ -902,6 +988,9 @@ function clearForm() {
   formData.id = ''
   formData.name = ''
   formData.source = ''
+  formData.location = ''
+  formData.camera_type = 'fixed'
+  formData.status = 'inactive'
   formData.resolution = ''
   formData.fps = null
   formData.regions_file = ''

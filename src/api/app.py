@@ -319,7 +319,15 @@ async def lifespan(app: FastAPI):  # noqa: C901
     except Exception as e:
         logger.warning(f"工作流加载初始化失败（非关键）: {e}")
 
-    yield
+    try:
+        yield
+    except asyncio.CancelledError:
+        # 当收到 CTRL+C 或其他取消信号时，正常处理关闭流程
+        logger.info("收到关闭信号，开始优雅关闭...")
+        # 继续执行关闭逻辑
+    except Exception as e:
+        logger.error(f"应用程序运行时发生错误: {e}", exc_info=True)
+        raise
 
     # Shutdown
     logger.info("Shutting down the application...")
@@ -408,6 +416,9 @@ async def lifespan(app: FastAPI):  # noqa: C901
             logger.info("工作流停止完成")
         else:
             logger.info("没有正在运行的工作流")
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        # 如果是取消信号，记录但不抛出异常
+        logger.info("关闭过程中收到取消信号，继续关闭流程...")
     except Exception as e:
         logger.warning(f"停止工作流失败（非关键）: {e}", exc_info=True)
 
@@ -415,6 +426,8 @@ async def lifespan(app: FastAPI):  # noqa: C901
     try:
         await shutdown_redis_listener()
         logger.info("Redis监听器已关闭")
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        logger.info("Redis监听器关闭过程中收到取消信号")
     except Exception as e:
         logger.warning(f"Redis监听器关闭失败: {e}")
 
@@ -424,6 +437,8 @@ async def lifespan(app: FastAPI):  # noqa: C901
 
         await shutdown_stream_manager()
         logger.info("视频流管理器已关闭")
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        logger.info("视频流管理器关闭过程中收到取消信号")
     except Exception as e:
         logger.warning(f"视频流管理器关闭失败: {e}")
 
@@ -431,6 +446,8 @@ async def lifespan(app: FastAPI):  # noqa: C901
     try:
         await close_db_service()
         logger.info("数据库服务已关闭")
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        logger.info("数据库服务关闭过程中收到取消信号")
     except Exception as e:
         logger.warning(f"数据库服务关闭失败: {e}")
 
@@ -438,6 +455,8 @@ async def lifespan(app: FastAPI):  # noqa: C901
     try:
         stop_error_monitoring()
         logger.info("错误监控已停止")
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        logger.info("错误监控停止过程中收到取消信号")
     except Exception as e:
         logger.warning(f"错误监控停止失败: {e}")
 
@@ -445,8 +464,12 @@ async def lifespan(app: FastAPI):  # noqa: C901
     try:
         stop_monitoring()
         logger.info("高级监控系统已停止")
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        logger.info("高级监控停止过程中收到取消信号")
     except Exception as e:
         logger.warning(f"高级监控停止失败: {e}")
+    
+    logger.info("应用程序已完全关闭")
 
 
 app = FastAPI(

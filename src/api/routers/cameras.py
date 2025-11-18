@@ -231,10 +231,16 @@ async def create_camera(
         logger.warning(f"领域服务创建摄像头失败，回退到旧实现: {e}")
 
     # 旧实现（回退）
-    required = ["id", "name", "source"]
+    required = ["name", "source"]  # id不再是必填字段
     for k in required:
         if k not in payload:
             raise HTTPException(status_code=400, detail=f"Missing field: {k}")
+    
+    # 如果没有提供id，生成一个临时ID（用于YAML兼容）
+    if "id" not in payload:
+        import uuid
+        payload["id"] = str(uuid.uuid4())
+    
     data = _read_yaml(_cameras_path())
     cams: List[Dict[str, Any]] = list(data.get("cameras", []))
     if any(c.get("id") == payload["id"] for c in cams):
