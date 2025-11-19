@@ -438,8 +438,9 @@ const autoRefresh = ref(true)
 
 const filteredCameras = computed(() => {
   let data = cameraStore.camerasWithStatus  // ← 使用带运行状态的列表
-  if (statusFilter.value === 'enabled') data = data.filter(c => c.enabled)
-  else if (statusFilter.value === 'disabled') data = data.filter(c => !c.enabled)
+  // 兼容 enabled 和 active 字段
+  if (statusFilter.value === 'enabled') data = data.filter(c => c.enabled === true || c.active === true)
+  else if (statusFilter.value === 'disabled') data = data.filter(c => !(c.enabled === true || c.active === true))
   const q = searchQuery.value.trim().toLowerCase()
   if (q) {
     data = data.filter(c =>

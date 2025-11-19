@@ -197,6 +197,8 @@ async def list_cameras(
                     cam_dict[key] = metadata[key]
             # 兼容旧格式：active字段（从Camera实体的is_active属性获取）
             cam_dict["active"] = camera.is_active
+            # 同时返回enabled字段（作为active的别名，兼容前端）
+            cam_dict["enabled"] = camera.is_active
             cameras_dict.append(cam_dict)
         return {"cameras": cameras_dict}
     except HTTPException:

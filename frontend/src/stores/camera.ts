@@ -33,8 +33,9 @@ export const useCameraStore = defineStore('camera', () => {
     })
   })
 
-  const enabledCameras = computed(() => cameras.value.filter(cam => cam.enabled))
-  const disabledCameras = computed(() => cameras.value.filter(cam => !cam.enabled))
+  // 兼容 enabled 和 active 字段
+  const enabledCameras = computed(() => cameras.value.filter(cam => cam.enabled === true || cam.active === true))
+  const disabledCameras = computed(() => cameras.value.filter(cam => !(cam.enabled === true || cam.active === true)))
   const cameraCount = computed(() => cameras.value.length)
 
   // 操作
