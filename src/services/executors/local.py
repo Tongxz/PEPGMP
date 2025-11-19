@@ -224,33 +224,24 @@ class LocalProcessExecutor(AbstractProcessExecutor):
                     logger.info(f"从数据库读取到 {len(cameras)} 个相机配置")
                     return cameras
                 except Exception as e:
-                    logger.warning(f"从数据库读取相机配置失败: {e}，回退到YAML")
-                    # 继续执行YAML回退逻辑
+                    logger.error(f"从数据库读取相机配置失败: {e}", exc_info=True)
+                    raise RuntimeError(
+                        f"无法从数据库读取相机配置: {e}。"
+                        "请确保数据库服务正在运行，并且DATABASE_URL环境变量已正确设置。"
+                    )
 
             except Exception as e:
-                logger.warning(f"从数据库读取相机配置时出错: {e}，回退到YAML")
-                # 继续执行YAML回退逻辑
-
-        # YAML回退（仅用于命令行启动或数据库不可用时）
-        # 注意：在FastAPI环境中，应该通过API层传递相机配置给executor，而不是调用list_cameras()
-        # 这个警告通常表示：
-        # 1. executor在FastAPI环境中被直接调用（不推荐）- 应该传递camera_config参数
-        # 2. 或者数据库连接失败，回退到YAML文件
-        # 3. 或者从命令行直接启动检测进程（这是正常情况）
-        import traceback
-
-        stack_trace = "\n".join(traceback.format_stack()[-5:-1])  # 获取调用堆栈的最后几行
-        logger.warning(
-            f"使用YAML回退模式读取相机配置: {self.cameras_path}。"
-            "注意：YAML文件已不再是主要配置源，建议使用数据库配置。"
-            "在FastAPI环境中，应通过API层传递相机配置给executor，而不是调用list_cameras()。"
-            f"\n调用堆栈:\n{stack_trace}"
+                logger.error(f"从数据库读取相机配置时出错: {e}", exc_info=True)
+                raise RuntimeError(
+                    f"无法从数据库读取相机配置: {e}。"
+                    "请确保数据库服务正在运行，并且DATABASE_URL环境变量已正确设置。"
+                )
+        
+        # 如果到达这里，说明数据库连接未初始化
+        raise RuntimeError(
+            "无法从数据库读取相机配置：数据库连接未初始化。"
+            "请确保数据库服务正在运行，并且DATABASE_URL环境变量已正确设置。"
         )
-        data = _read_yaml(self.cameras_path)
-        if "error" in data:
-            return data  # Propagate the error dictionary
-        logger.debug(f"从YAML读取到 {len(data.get('cameras', []))} 个相机配置（回退模式）")
-        return list(data.get("cameras", []))
 
     def _build_command(self, cam: Dict[str, Any]) -> List[str]:
         python_exe = sys.executable
