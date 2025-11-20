@@ -166,7 +166,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import {
   NCard,
   NSpace,
@@ -358,8 +358,9 @@ onMounted(async () => {
     // 然后刷新摄像头运行状态
     await cameraStore.refreshRuntimeStatus()
 
-    // 等待下一个 tick，确保计算属性已更新
-    await new Promise(resolve => setTimeout(resolve, 100))
+    // 💡 优化：使用 nextTick 等待 DOM 和响应性更新完成
+    // 确保所有计算属性基于最新的 store 状态完成计算
+    await nextTick()
 
     console.log('摄像头列表加载完成:', {
       total: cameras.value.length,

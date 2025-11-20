@@ -350,13 +350,105 @@ if (-not $env:DEBUG_ROI_DIR) {
     $env:DEBUG_ROI_DIR = "debug/roi"
 }
 
+# 自动初始化/迁移数据库
+Write-Host ""
+Write-Host "🔄 检查数据库结构..." -ForegroundColor Cyan
+$initDbOut = Join-Path $env:TEMP "init_db_out_$PID.txt"
+$initDbErr = Join-Path $env:TEMP "init_db_err_$PID.txt"
+$initDbProcess = Start-Process -FilePath "python" -ArgumentList "scripts/init_database.py" -NoNewWindow -Wait -PassThru -RedirectStandardOutput $initDbOut -RedirectStandardError $initDbErr
+if ($initDbProcess.ExitCode -eq 0) {
+    Write-Host "✅ 数据库检查完成" -ForegroundColor Green
+} else {
+    Write-Host "⚠️  数据库初始化警告 (非致命错误，可能是连接问题或数据已存在)" -ForegroundColor Yellow
+    if (Test-Path $initDbErr) {
+        $errorContent = Get-Content $initDbErr -ErrorAction SilentlyContinue
+        if ($errorContent) {
+            Write-Host "错误详情: $($errorContent -join "`n")" -ForegroundColor Yellow
+        }
+    }
+}
+Remove-Item $initDbOut -ErrorAction SilentlyContinue
+Remove-Item $initDbErr -ErrorAction SilentlyContinue
+Write-Host ""
+
+# 检查并清理端口占用
+Write-Host ""
+Write-Host "检查端口占用..." -ForegroundColor Cyan
+$PORT = 8000
+
+# 检查端口是否被占用
+$portCheckOut = Join-Path $env:TEMP "port_check_out_$PID.txt"
+$portCheckErr = Join-Path $env:TEMP "port_check_err_$PID.txt"
+
+# 使用 netstat 检查端口占用（Windows 兼容）
+$netstatProcess = Start-Process -FilePath "netstat" -ArgumentList "-ano" -NoNewWindow -Wait -PassThru -RedirectStandardOutput $portCheckOut -RedirectStandardError $portCheckErr
+$portInUse = $false
+if (Test-Path $portCheckOut) {
+    $netstatOutput = Get-Content $portCheckOut -ErrorAction SilentlyContinue
+    $portInUse = $netstatOutput | Select-String -Pattern ":$PORT\s" | Measure-Object | Select-Object -ExpandProperty Count
+    $portInUse = ($portInUse -gt 0)
+}
+Remove-Item $portCheckOut -ErrorAction SilentlyContinue
+Remove-Item $portCheckErr -ErrorAction SilentlyContinue
+
+if ($portInUse) {
+    Write-Host "⚠️  端口 $PORT 已被占用，正在停止占用进程..." -ForegroundColor Yellow
+    
+    # 获取占用端口的进程ID
+    $netstatProcess2 = Start-Process -FilePath "netstat" -ArgumentList "-ano" -NoNewWindow -Wait -PassThru -RedirectStandardOutput $portCheckOut -RedirectStandardError $portCheckErr
+    if (Test-Path $portCheckOut) {
+        $netstatOutput2 = Get-Content $portCheckOut -ErrorAction SilentlyContinue
+        $portLines = $netstatOutput2 | Select-String -Pattern ":$PORT\s"
+        foreach ($line in $portLines) {
+            # 提取进程ID（最后一列）
+            $pidMatch = $line -match '\s+(\d+)\s*$'
+            if ($pidMatch) {
+                $processId = $matches[1]
+                try {
+                    Write-Host "停止进程 PID: $processId" -ForegroundColor Yellow
+                    Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
+                } catch {
+                    Write-Host "无法停止进程 $processId : $_" -ForegroundColor Yellow
+                }
+            }
+        }
+    }
+    Remove-Item $portCheckOut -ErrorAction SilentlyContinue
+    Remove-Item $portCheckErr -ErrorAction SilentlyContinue
+    
+    # 等待进程停止
+    Start-Sleep -Seconds 2
+    
+    # 再次检查端口
+    $netstatProcess3 = Start-Process -FilePath "netstat" -ArgumentList "-ano" -NoNewWindow -Wait -PassThru -RedirectStandardOutput $portCheckOut -RedirectStandardError $portCheckErr
+    $portStillInUse = $false
+    if (Test-Path $portCheckOut) {
+        $netstatOutput3 = Get-Content $portCheckOut -ErrorAction SilentlyContinue
+        $portStillInUse = ($netstatOutput3 | Select-String -Pattern ":$PORT\s" | Measure-Object | Select-Object -ExpandProperty Count) -gt 0
+    }
+    Remove-Item $portCheckOut -ErrorAction SilentlyContinue
+    Remove-Item $portCheckErr -ErrorAction SilentlyContinue
+    
+    if ($portStillInUse) {
+        Write-Host "❌ 无法停止占用端口 $PORT 的进程，请手动处理" -ForegroundColor Red
+        Write-Host "提示: 可以使用以下命令查看占用端口的进程:" -ForegroundColor Yellow
+        Write-Host "netstat -ano | findstr :$PORT" -ForegroundColor Cyan
+        exit 1
+    } else {
+        Write-Host "✅ 端口 $PORT 已释放" -ForegroundColor Green
+    }
+} else {
+    Write-Host "✅ 端口 $PORT 可用" -ForegroundColor Green
+}
+Write-Host ""
+
 # 启动后端
 Write-Host ""
-Write-Host "启动后端服务..." -ForegroundColor Green
-Write-Host "访问地址: http://localhost:8000" -ForegroundColor Cyan
-Write-Host "API文档: http://localhost:8000/docs" -ForegroundColor Cyan
-Write-Host "ROI调试保存: $env:SAVE_DEBUG_ROI (目录: $env:DEBUG_ROI_DIR)" -ForegroundColor Cyan
-Write-Host "按 Ctrl+C 停止服务" -ForegroundColor Yellow
+Write-Host "✅ 启动后端服务..." -ForegroundColor Green
+Write-Host "   访问地址: http://localhost:8000" -ForegroundColor Cyan
+Write-Host "   API文档: http://localhost:8000/docs" -ForegroundColor Cyan
+Write-Host "   ROI调试保存: $env:SAVE_DEBUG_ROI (目录: $env:DEBUG_ROI_DIR)" -ForegroundColor Cyan
+Write-Host "   按 Ctrl+C 停止服务" -ForegroundColor Yellow
 Write-Host ""
 
 # 启动uvicorn服务器

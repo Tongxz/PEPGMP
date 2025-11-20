@@ -21,7 +21,14 @@ export function useWebSocket() {
         try {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
             const host = window.location.host
-            const wsUrl = `${protocol}//${host}/ws/status`
+
+            // 💡 优化：显式指定 WebSocket 基础路径
+            // 从环境变量读取，默认值为 '/ws'
+            // 如果环境变量未设置，使用默认值 '/ws'
+            const wsBase = (import.meta.env.VITE_WS_PATH ?? '/ws').replace(/\/$/, '')
+
+            // 最终 URL：ws://host/ws/status 或 wss://host/ws/status
+            const wsUrl = `${protocol}//${host}${wsBase}/status`
 
             console.log('连接状态WebSocket:', wsUrl)
 

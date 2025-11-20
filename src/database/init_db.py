@@ -57,7 +57,12 @@ async def create_initial_data():
             ]
             
             for dataset_data in datasets:
-                await DatasetDAO.create(session, dataset_data)
+                # 检查数据集是否已存在
+                existing = await DatasetDAO.get_by_id(session, dataset_data["id"])
+                if existing:
+                    logger.info(f"数据集 {dataset_data['id']} 已存在，跳过创建")
+                else:
+                    await DatasetDAO.create(session, dataset_data)
             
             # 创建示例部署
             deployments = [
@@ -123,7 +128,12 @@ async def create_initial_data():
             ]
             
             for deployment_data in deployments:
-                await DeploymentDAO.create(session, deployment_data)
+                # 检查部署是否已存在
+                existing = await DeploymentDAO.get_by_id(session, deployment_data["id"])
+                if existing:
+                    logger.info(f"部署 {deployment_data['id']} 已存在，跳过创建")
+                else:
+                    await DeploymentDAO.create(session, deployment_data)
             
             # 创建示例工作流
             workflows = [
@@ -213,7 +223,12 @@ async def create_initial_data():
             ]
             
             for workflow_data in workflows:
-                await WorkflowDAO.create(session, workflow_data)
+                # 检查工作流是否已存在
+                existing = await WorkflowDAO.get_by_id(session, workflow_data["id"])
+                if existing:
+                    logger.info(f"工作流 {workflow_data['id']} 已存在，跳过创建")
+                else:
+                    await WorkflowDAO.create(session, workflow_data)
             
             # 创建示例运行记录
             runs = [
@@ -247,7 +262,12 @@ async def create_initial_data():
             ]
             
             for run_data in runs:
-                await WorkflowRunDAO.create(session, run_data)
+                # 检查运行记录是否已存在
+                existing = await WorkflowRunDAO.get_by_id(session, run_data["id"])
+                if existing:
+                    logger.info(f"运行记录 {run_data['id']} 已存在，跳过创建")
+                else:
+                    await WorkflowRunDAO.create(session, run_data)
             
             logger.info("初始数据创建完成")
             break  # 退出生成器循环

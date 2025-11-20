@@ -198,6 +198,15 @@ sed -i 's|context:|# context:|g' docker-compose.yml
 sed -i 's|dockerfile:|# dockerfile:|g' docker-compose.yml
 
 echo "停止旧容器（如果存在）..."
+# 尝试备份数据库
+if docker-compose ps | grep -q "database"; then
+    echo "📦 正在备份数据库..."
+    # 创建备份目录
+    ssh ${PRODUCTION_USER}@${PRODUCTION_HOST} "mkdir -p ${DEPLOY_DIR}/backups"
+    # 执行备份
+    ssh ${PRODUCTION_USER}@${PRODUCTION_HOST} "cd ${DEPLOY_DIR} && docker-compose exec -T database pg_dump -U pyt_prod pyt_production | gzip > backups/pre_deploy_\$(date +%Y%m%d_%H%M%S).sql.gz" || echo "⚠️  数据库备份失败，继续部署..."
+fi
+
 docker-compose down || true
 
 echo "拉取最新镜像..."

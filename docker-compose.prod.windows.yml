@@ -1,0 +1,240 @@
+# 生产环境 Docker Compose 配置 (Windows 优化版)
+# Production Environment Docker Compose Configuration (Windows Optimized)
+
+version: "3.8"
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+    internal: true  # 内部网络，不暴露到外部
+
+# Windows 环境下的 volumes 配置
+# 使用命名 volumes 以获得更好的性能（推荐）
+# 或使用 Windows 绝对路径（如果必须使用 bind mounts）
+volumes:
+  postgres_prod_data:
+    driver: local
+  redis_prod_data:
+    driver: local
+  app_logs:
+    driver: local
+  app_output:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# Docker Secrets（可选，推荐用于敏感信息）
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+  redis_password:
+    file: ./secrets/redis_password.txt
+  admin_password:
+    file: ./secrets/admin_password.txt
+  secret_key:
+    file: ./secrets/secret_key.txt
+
+services:
+  # ==================== PostgreSQL 数据库（生产） ====================
+  database:
+    image: postgres:16-alpine
+    container_name: pyt-postgres-prod
+    environment:
+      POSTGRES_DB: pyt_production
+      POSTGRES_USER: pyt_prod
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      # Windows 优化：使用命名 volume（推荐，性能更好）
+      - postgres_prod_data:/var/lib/postgresql/data
+      # 如果需要备份，可以添加 bind mount（性能较差）
+      # - C:/docker-data/pyt/postgres:/var/lib/postgresql/data/backup:ro
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pyt_prod -d pyt_production"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==================== Redis 缓存（生产） ====================
+  redis:
+    image: redis:7-alpine
+    container_name: pyt-redis-prod
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --tcp-backlog 511
+      --timeout 300
+      --tcp-keepalive 60
+    volumes:
+      # Windows 优化：使用命名 volume
+      - redis_prod_data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==================== API 服务（生产） ====================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    image: pyt-backend:latest
+    container_name: pyt-api-prod
+    env_file:
+      - .env.production
+    environment:
+      - ENVIRONMENT=production
+    volumes:
+      # Windows 优化：使用命名 volumes 存储日志和输出
+      - app_logs:/app/logs
+      - app_output:/app/output
+      # 配置和模型文件使用只读 bind mount（Windows 路径格式）
+      # 注意：使用正斜杠或双反斜杠
+      - ./config:/app/config:ro
+      - ./models:/app/models:ro
+      # 如果需要访问 Windows 路径，使用以下格式：
+      # - C:/docker-data/pyt/config:/app/config:ro
+      # - C:/docker-data/pyt/models:/app/models:ro
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/monitoring/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    # 资源限制
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '2.0'
+          memory: 2G
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ==================== Nginx 反向代理（可选） ====================
+  nginx:
+    image: nginx:alpine
+    container_name: pyt-nginx-prod
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Windows 路径：使用正斜杠
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    networks:
+      - frontend
+    depends_on:
+      - api
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==================== Prometheus 监控（可选） ====================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: pyt-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - frontend
+      - backend
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ==================== Grafana 可视化（可选） ====================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: pyt-grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    ports:
+      - "3000:3000"
+    networks:
+      - frontend
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+

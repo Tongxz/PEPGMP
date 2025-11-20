@@ -130,6 +130,36 @@ echo "   健康检查: http://localhost:${API_PORT:-8000}/api/v1/monitoring/heal
 echo "   按 Ctrl+C 停止服务"
 echo ""
 
+# 自动初始化/迁移数据库
+echo "🔄 检查数据库结构..."
+if python scripts/init_database.py; then
+    echo "✅ 数据库检查完成"
+else
+    echo "⚠️  数据库初始化警告 (非致命错误，可能是连接问题或数据已存在)"
+fi
+echo ""
+
+# 检查并清理端口占用
+echo "检查端口占用..."
+PORT=${API_PORT:-8000}
+if lsof -ti:${PORT} > /dev/null 2>&1; then
+    echo "⚠️  端口 ${PORT} 已被占用，正在停止占用进程..."
+    lsof -ti:${PORT} | xargs kill -9 2>/dev/null || true
+    sleep 2
+    if lsof -ti:${PORT} > /dev/null 2>&1; then
+        echo "❌ 无法停止占用端口 ${PORT} 的进程，请手动处理"
+        echo "提示: 可以使用以下命令查看占用端口的进程:"
+        echo "  lsof -i:${PORT}"
+        echo "  netstat -tulpn | grep :${PORT}"
+        exit 1
+    else
+        echo "✅ 端口 ${PORT} 已释放"
+    fi
+else
+    echo "✅ 端口 ${PORT} 可用"
+fi
+echo ""
+
 # 启动服务（使用Gunicorn）
 gunicorn src.api.app:app \
     --workers ${GUNICORN_WORKERS:-4} \
