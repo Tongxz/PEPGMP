@@ -39,7 +39,7 @@
     <!-- 加载状态 -->
     <n-spin :show="cameraStore.loading">
       <n-card class="control-card" :bordered="false">
-        <n-space align="center" justify="space-between">
+        <div class="control-wrap-container">
           <n-space align="center">
             <n-text strong>布局模式:</n-text>
             <n-radio-group v-model:value="layoutMode" size="small">
@@ -69,7 +69,7 @@
               已连接: {{ connectedCount }} 个
             </n-tag>
           </n-space>
-        </n-space>
+        </div>
       </n-card>
     </n-spin>
 
@@ -428,6 +428,15 @@ onUnmounted(() => {
 .control-card {
   margin: 16px 0;
   flex-shrink: 0;
+}
+
+/* 💡 优化：响应式布局容器，支持自动换行 */
+.control-wrap-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .video-grid-container {

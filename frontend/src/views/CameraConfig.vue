@@ -119,17 +119,19 @@
         <div class="camera-table-section">
           <DataCard title="已配置摄像头" class="table-card">
             <template #extra>
-              <n-tag type="info" size="small">
-                <template #icon>
-                  <n-icon><CameraOutline /></n-icon>
-                </template>
-                共 {{ cameras.length }} 个摄像头
-              </n-tag>
+              <div class="header-extra-container">
+                <n-tag type="info" size="small">
+                  <template #icon>
+                    <n-icon><CameraOutline /></n-icon>
+                  </template>
+                  共 {{ cameras.length }} 个摄像头
+                </n-tag>
+              </div>
             </template>
 
             <!-- 工具栏：搜索 / 筛选 / 刷新状态 / 自动刷新 -->
             <div class="table-toolbar">
-              <n-space justify="space-between" align="center" wrap>
+              <div class="toolbar-wrap-container">
                 <n-space align="center" wrap>
                   <n-input
                     v-model:value="searchQuery"
@@ -153,7 +155,7 @@
                     刷新状态
                   </n-button>
                 </n-space>
-              </n-space>
+              </div>
             </div>
 
             <n-data-table
@@ -163,7 +165,7 @@
               :pagination="false"
               :bordered="false"
               size="medium"
-              :scroll-x="800"
+              :scroll-x="1250"
               class="camera-table"
             />
 
@@ -350,7 +352,13 @@ import {
   InformationCircleOutline,
   PlayOutline,
   StopOutline,
-  TrashOutline
+  TrashOutline,
+  EyeOutline,
+  PencilOutline,
+  PowerOutline,
+  VideocamOutline,
+  CheckmarkCircleOutline,
+  CloseCircleOutline
 } from '@vicons/ionicons5'
 import { useCameraStore } from '@/stores/camera'
 import { PageHeader, DataCard } from '@/components/common'
@@ -456,42 +464,54 @@ const filteredCameras = computed(() => {
 // 表格列定义
 const columns: DataTableColumns = [
   {
-    title: 'ID',
-    key: 'id',
-    width: 100,
-    render: (row: any) => h(NText, { style: { fontFamily: 'monospace', fontSize: '12px' } }, { default: () => row.id })
-  },
-  {
-    title: '名称',
+    // 💡 优化：合并名称和ID列，垂直显示
+    title: '名称 (含 ID)',
     key: 'name',
-    width: 150
+    width: 180,  // 略微减少宽度（从200px减少到180px），为其他列让出空间
+    render: (row: any) => {
+      return h(NSpace, { vertical: true, size: 2 }, {
+        default: () => [
+          h(NText, { strong: true }, { default: () => row.name || '-' }),
+          h(NText, { 
+            style: { fontFamily: 'monospace', fontSize: '11px', color: '#999' }
+          }, { default: () => row.id })
+        ]
+      })
+    }
   },
   {
     title: '来源',
     key: 'source',
-    width: 200,
+    width: 180,  // 略微减少宽度（从200px减少到180px），为其他列让出空间
     render: (row: any) => h(NText, {
       style: { fontFamily: 'monospace', fontSize: '11px', color: '#666' },
       title: row.source
     }, { default: () => row.source })
   },
   {
+    // 💡 优化：新增位置列（固定宽度）
+    title: '位置',
+    key: 'location',
+    width: 100,  // 固定宽度，确保表头不换行
+    render: (row: any) => h(NText, { depth: 3 }, { default: () => row.location || '-' })
+  },
+  {
     title: '分辨率',
     key: 'resolution',
-    width: 100,
+    width: 110,  // 💡 优化：改为固定宽度，确保表头不换行（"分辨率"三个字需要更多空间）
     render: (row: any) => row.resolution || '-'
   },
   {
     title: 'FPS',
     key: 'fps',
-    width: 80,
+    width: 70,  // 固定宽度，FPS三个字母足够
     render: (row: any) => row.fps || '-'
   },
   // 配置状态列
   {
     title: '配置状态',
     key: 'config_status',
-    width: 100,
+    width: 110,  // 💡 优化：改为固定宽度，确保表头不换行（"配置状态"四个字需要更多空间）
     render: (row: any) => {
       const isActive = row.active ?? row.enabled ?? true
       if (isActive) {
@@ -505,7 +525,7 @@ const columns: DataTableColumns = [
   {
     title: '自动启动',
     key: 'auto_start',
-    width: 100,
+    width: 110,  // 💡 优化：改为固定宽度，确保表头不换行（"自动启动"四个字需要更多空间）
     render: (row: any) => {
       const isActive = row.active ?? row.enabled ?? true
       if (!isActive) {
@@ -523,29 +543,23 @@ const columns: DataTableColumns = [
   {
     title: '运行状态',
     key: 'runtime_status',
-    width: 180,
+    width: 120,  // 💡 优化：减少宽度（从170px减少到120px），避免挤压其他列
     render: (row: any) => {
       const isActive = row.active ?? row.enabled ?? true
       if (!isActive) {
-        return h(NSpace, { vertical: true, size: 'small' }, {
-          default: () => [
-            h(NTag, { type: 'default', size: 'small' }, { default: () => '🚫 禁止启动' }),
-            h(NText, { depth: 3, style: { fontSize: '11px' } }, { default: () => '(请先激活)' })
-          ]
-        })
+        // 简化显示，节省空间
+        return h(NTag, { type: 'default', size: 'small' }, { default: () => '🚫 禁止' })
       }
 
-      // ✅ 显示实时运行状态
+      // ✅ 显示实时运行状态（简化显示）
       const status = row.runtime_status
       if (status?.running) {
-        return h(NSpace, { vertical: true, size: 'small' }, {
-          default: () => [
-            h(NTag, { type: 'success', size: 'small' }, { default: () => '🟢 运行中' }),
-            h(NText, { depth: 3, style: { fontSize: '11px' } }, {
-              default: () => `PID: ${status.pid || '-'}`
-            })
-          ]
-        })
+        // 简化显示：只显示状态标签，PID信息通过tooltip显示
+        return h(NTag, { 
+          type: 'success', 
+          size: 'small',
+          title: status.pid ? `PID: ${status.pid}` : '运行中'
+        }, { default: () => '🟢 运行中' })
       } else {
         return h(NTag, { type: 'default', size: 'small' }, { default: () => '⚪ 已停止' })
       }
@@ -554,18 +568,24 @@ const columns: DataTableColumns = [
   {
     title: '操作',
     key: 'actions',
-    width: 350,
+    width: 250,  // 💡 优化：进一步减少宽度（从280px减少到250px），使用图标按钮更紧凑
     render: (row: any) => {
       const isActive = row.active ?? row.enabled ?? true
       const buttons: any[] = []
 
+      // 💡 优化：使用图标按钮，节省空间
       // 详情按钮（始终显示）
       buttons.push(
         h(NButton, {
           size: 'small',
           type: 'info',
-          onClick: () => openStatsModal(row.id)
-        }, { default: () => '详情' })
+          quaternary: true,
+          circle: true,
+          onClick: () => openStatsModal(row.id),
+          title: '查看详情'
+        }, {
+          icon: () => h(NIcon, { component: EyeOutline })
+        })
       )
 
       if (!isActive) {
@@ -574,21 +594,36 @@ const columns: DataTableColumns = [
           h(NButton, {
             size: 'small',
             type: 'success',
+            quaternary: true,
+            circle: true,
             loading: loading.value,
-            onClick: () => activateCameraHandler(row.id)
-          }, { default: () => '激活' }),
+            onClick: () => activateCameraHandler(row.id),
+            title: '激活'
+          }, {
+            icon: () => h(NIcon, { component: CheckmarkCircleOutline })
+          }),
           h(NButton, {
             size: 'small',
-            onClick: () => openEditModal(row)
-          }, { default: () => '编辑' }),
+            quaternary: true,
+            circle: true,
+            onClick: () => openEditModal(row),
+            title: '编辑'
+          }, {
+            icon: () => h(NIcon, { component: PencilOutline })
+          }),
           h(NPopconfirm, {
             onPositiveClick: () => deleteCamera(row.id)
           }, {
             trigger: () => h(NButton, {
               size: 'small',
               type: 'error',
-              loading: loading.value
-            }, { default: () => '删除' }),
+              quaternary: true,
+              circle: true,
+              loading: loading.value,
+              title: '删除'
+            }, {
+              icon: () => h(NIcon, { component: TrashOutline })
+            }),
             default: () => `确认删除摄像头 ${row.id}?`
           })
         )
@@ -601,25 +636,45 @@ const columns: DataTableColumns = [
             trigger: () => h(NButton, {
               size: 'small',
               type: 'warning',
-              loading: loading.value
-            }, { default: () => '停用' }),
+              quaternary: true,
+              circle: true,
+              loading: loading.value,
+              title: '停用'
+            }, {
+              icon: () => h(NIcon, { component: CloseCircleOutline })
+            }),
             default: () => '停用将停止检测进程，确认?'
           }),
           h(NButton, {
             size: 'small',
             type: 'primary',
+            quaternary: true,
+            circle: true,
             loading: loading.value,
-            onClick: () => startCamera(row.id)
-          }, { default: () => '启动' }),
+            onClick: () => startCamera(row.id),
+            title: '启动'
+          }, {
+            icon: () => h(NIcon, { component: PlayOutline })
+          }),
           h(NButton, {
             size: 'small',
+            quaternary: true,
+            circle: true,
             loading: loading.value,
-            onClick: () => stopCamera(row.id)
-          }, { default: () => '停止' }),
+            onClick: () => stopCamera(row.id),
+            title: '停止'
+          }, {
+            icon: () => h(NIcon, { component: StopOutline })
+          }),
           h(NButton, {
             size: 'small',
-            onClick: () => openEditModal(row)
-          }, { default: () => '编辑' })
+            quaternary: true,
+            circle: true,
+            onClick: () => openEditModal(row),
+            title: '编辑'
+          }, {
+            icon: () => h(NIcon, { component: PencilOutline })
+          })
         )
 
         // 查看视频按钮（只在运行时显示）
@@ -629,8 +684,13 @@ const columns: DataTableColumns = [
             h(NButton, {
               size: 'small',
               type: 'info',
-              onClick: () => openVideoStream(row)
-            }, { default: () => '📹 查看视频' })
+              quaternary: true,
+              circle: true,
+              onClick: () => openVideoStream(row),
+              title: '查看视频'
+            }, {
+              icon: () => h(NIcon, { component: VideocamOutline })
+            })
           )
         }
       }
@@ -1094,7 +1154,8 @@ watch(autoRefresh, (val) => {
 
 .camera-content {
   flex: 1;
-  overflow: hidden;
+  overflow: visible; /* 💡 优化：改为 visible，允许内容换行后显示 */
+  min-width: 0; /* 允许收缩 */
 }
 
 .camera-layout {
@@ -1119,16 +1180,91 @@ watch(autoRefresh, (val) => {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0; /* 💡 优化：允许收缩 */
+  overflow: visible; /* 💡 优化：允许内容换行后显示 */
 }
 
 .table-card {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-width: 0; /* 💡 优化：允许卡片收缩 */
+  overflow: visible; /* 💡 优化：改为 visible，允许 header 和 toolbar 换行后显示 */
+}
+
+/* 💡 优化：确保 DataCard 容器宽度正确 */
+.table-card :deep(.n-card) {
+  min-width: 0;
+  width: 100%; /* 确保占满父容器 */
+  overflow: visible; /* 💡 优化：改为 visible，允许 header 换行后显示 */
+}
+
+.table-card :deep(.n-card__header) {
+  min-width: 0;
+  width: 100%; /* 确保占满父容器 */
+  overflow: visible; /* header 允许换行 */
+  box-sizing: border-box; /* 确保包含 padding */
+}
+
+.table-card :deep(.n-card__content) {
+  min-width: 0;
+  overflow: auto; /* content 区域可以滚动 */
+}
+
+/* 💡 优化：响应式工具栏容器，允许换行，确保右侧内容始终可见 */
+.toolbar-wrap-container {
+  display: flex;
+  justify-content: space-between; /* 将左右两组内容推向两端 */
+  align-items: center;
+  flex-wrap: wrap; /* 💡 关键：允许内容在空间不足时换行 */
+  gap: 12px 0; /* 水平间距 12px，垂直间距 0（换行后上下有间距） */
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: visible; /* 💡 优化：确保换行后的内容可见 */
 }
 
 .table-toolbar {
   margin-bottom: var(--space-medium);
+}
+
+/* 💡 优化：头部extra区域容器，避免挤压，但允许换行 */
+.header-extra-container {
+  flex-shrink: 0;
+  min-width: fit-content;
+  /* 移除 max-width 限制，让它在空间不足时能够换行 */
+  width: auto;
+}
+
+/* 💡 优化：响应式下，DataCard header 允许换行，确保右侧内容始终可见 */
+:deep(.data-card-header) {
+  display: flex !important;
+  justify-content: space-between !important; /* 将左右两组内容推向两端 */
+  align-items: center !important;
+  flex-wrap: wrap !important; /* 💡 关键：允许内容在空间不足时换行 */
+  gap: 12px 0 !important; /* 水平间距 12px，垂直间距 0（换行后上下有间距） */
+  min-width: 0 !important;
+  max-width: 100% !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* 💡 优化：标题区域允许收缩 */
+:deep(.data-card-title) {
+  flex-shrink: 1;
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden; /* 标题过长时截断 */
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 💡 优化：extra区域在空间不足时能够换行 */
+:deep(.data-card-extra) {
+  flex-shrink: 0;
+  min-width: fit-content;
+  flex: 0 0 auto;
 }
 
 .camera-table {

@@ -146,8 +146,10 @@ const trendType = computed(() => {
 
 .data-card-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: space-between; /* 💡 优化：左右分散对齐 */
   align-items: center;
+  flex-wrap: wrap; /* 💡 优化：允许换行，确保右侧内容在空间不足时能下移 */
+  gap: 12px 0; /* 💡 优化：水平间距 12px，垂直间距 0（换行后上下有间距） */
 }
 
 .data-card-title {
@@ -155,6 +157,17 @@ const trendType = computed(() => {
   align-items: center;
   gap: 8px;
   font-weight: 500;
+  flex-shrink: 1; /* 💡 优化：允许收缩 */
+  min-width: 0; /* 💡 优化：允许收缩到0 */
+  overflow: hidden; /* 💡 优化：标题过长时截断 */
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-card-extra {
+  flex-shrink: 0; /* 💡 优化：不收缩 */
+  min-width: fit-content; /* 💡 优化：至少适应内容宽度 */
+  flex: 0 0 auto; /* 💡 优化：不收缩，保持内容宽度 */
 }
 
 .data-card-icon {

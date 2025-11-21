@@ -11,6 +11,7 @@ export interface RuntimeStatus {
 export interface Camera {
   id: string
   name: string
+  location?: string      // 摄像头位置
   source: string
   resolution?: string
   fps?: number

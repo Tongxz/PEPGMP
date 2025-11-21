@@ -2,7 +2,7 @@
   <div class="video-stream-card" :class="{ 'full-size': fullSize }">
     <!-- 摄像头标题栏 -->
     <div class="video-header">
-      <n-space justify="space-between" align="center">
+      <div class="header-wrap-container">
         <n-space align="center">
           <n-tag :type="connected ? 'success' : 'error'" size="small">
             {{ connected ? '🟢 已连接' : '⚪ 未连接' }}
@@ -32,10 +32,10 @@
             等待数据...
           </n-tag>
           <n-tag v-if="latency > 0" size="small" type="info">
-            延迟: {{ latency.toFixed(1) }}s
+            帧间隔: {{ latency.toFixed(1) }}s
           </n-tag>
         </n-space>
-      </n-space>
+      </div>
     </div>
 
     <!-- 视频显示区 -->
@@ -201,6 +201,8 @@ const currentFps = ref(0)
 const latency = ref(0)
 const frameCount = ref(0)
 const connectionStartTime = ref(0)
+const reconnectAttempts = ref(0)
+const MAX_RECONNECT_ATTEMPTS = 10 // 最大重连次数
 
 // 配置相关
 const showConfigModal = ref(false)
@@ -271,6 +273,7 @@ function connect() {
       console.log(`[VideoStreamCard] WebSocket连接成功: ${props.cameraId}`)
       connected.value = true
       connectionStartTime.value = Date.now()
+      reconnectAttempts.value = 0 // 💡 优化：连接成功后重置重连尝试次数
       emit('connected')
       startFpsCounter()
 
@@ -294,13 +297,10 @@ function connect() {
         const blob = new Blob([event.data], { type: 'image/jpeg' })
         const url = URL.createObjectURL(blob)
 
-        if (frameQueue.length >= 2) {
-          const oldUrl = frameQueue.shift()
-          if (oldUrl) {
-            URL.revokeObjectURL(oldUrl)
-          }
-        }
-        frameQueue.push(url)
+        // 💡 优化 1：接收新帧时，立即清理并撤销所有旧的待渲染帧 URL
+        // 丢弃所有旧帧，只保留最新帧（以最小化延迟）
+        frameQueue.forEach((oldUrl) => URL.revokeObjectURL(oldUrl))
+        frameQueue = [url] // 队列中只留下最新收到的帧
 
         if (!isRendering) {
           requestAnimationFrame(() => {
@@ -340,15 +340,17 @@ function connect() {
       stopHeartbeat()
       emit('disconnected')
 
-      // 如果不是正常关闭，尝试重连（延迟5秒）
-      if (event.code !== 1000) {
-        console.log(`[VideoStreamCard] 连接异常关闭，5秒后尝试重连: ${props.cameraId}`)
+      // 💡 优化 2：如果不是正常关闭，且重试次数未达上限，尝试重连（延迟5秒）
+      if (event.code !== 1000 && reconnectAttempts.value < MAX_RECONNECT_ATTEMPTS) {
+        console.log(`[VideoStreamCard] 连接异常关闭，5秒后尝试重连 (${reconnectAttempts.value + 1}/${MAX_RECONNECT_ATTEMPTS}): ${props.cameraId}`)
+        reconnectAttempts.value++ // 增加尝试次数
         setTimeout(() => {
           if (!connected.value) {
-            console.log(`[VideoStreamCard] 尝试重连: ${props.cameraId}`)
-            reconnect()
+            reconnect() // reconnect 函数内部会调用 connect()
           }
         }, 5000)
+      } else if (event.code !== 1000) {
+        console.error(`[VideoStreamCard] 已达到最大重连次数 (${MAX_RECONNECT_ATTEMPTS} 次)，停止重试: ${props.cameraId}`)
       }
     }
   } catch (error) {
@@ -366,29 +368,20 @@ function renderNextFrame() {
 
   isRendering = true
 
+  // 💡 优化 2：简单取出并清空队列
+  const url = frameQueue.pop()! // 取出唯一的最新帧 URL
+
   if (currentFrame.value) {
     URL.revokeObjectURL(currentFrame.value)
   }
 
-  const url = frameQueue.pop() || frameQueue[0]
-  if (url) {
-    frameQueue.forEach((oldUrl) => {
-      if (oldUrl !== url) {
-        URL.revokeObjectURL(oldUrl)
-      }
-    })
-    frameQueue = [url]
-    currentFrame.value = url
-    frameCount.value++
-  }
+  currentFrame.value = url
+  frameCount.value++
 
+  // 渲染完成后，isRendering 标志置为 false，等待下一个 onmessage 触发 rAF
   isRendering = false
 
-  if (frameQueue.length > 1) {
-    requestAnimationFrame(() => {
-      renderNextFrame()
-    })
-  }
+  // 移除原有的队列处理逻辑，因为我们已经在新帧到达时清理了队列
 }
 
 function startFpsCounter() {
@@ -434,10 +427,13 @@ function reconnect() {
   if (ws) {
     ws.close()
   }
+  // 重置状态
   currentFrame.value = null
   frameCount.value = 0
   currentFps.value = 0
   fpsCounter = 0
+  // 💡 优化：手动重连时重置重连次数（允许重新尝试）
+  reconnectAttempts.value = 0
   connect()
 }
 
@@ -560,6 +556,15 @@ onBeforeUnmount(() => {
   background: rgba(0, 0, 0, 0.8);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
+}
+
+/* 💡 优化：响应式布局容器，支持自动换行 */
+.header-wrap-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .video-wrapper {
