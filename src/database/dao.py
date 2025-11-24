@@ -253,7 +253,7 @@ class WorkflowDAO:
         filtered_data = {
             k: v for k, v in update_data.items() if k not in excluded_fields
         }
-        
+
         filtered_data["updated_at"] = datetime.utcnow()
 
         result = await session.execute(
@@ -329,7 +329,7 @@ class WorkflowRunDAO:
         # 处理时区问题：如果传入的datetime是带时区的，转换为不带时区的（naive）
         # 因为数据库字段是 TIMESTAMP WITHOUT TIME ZONE
         processed_data = run_data.copy()
-        
+
         # 处理 started_at
         if "started_at" in processed_data:
             started_at = processed_data["started_at"]
@@ -338,16 +338,16 @@ class WorkflowRunDAO:
                 processed_data["started_at"] = started_at.astimezone(
                     timezone.utc
                 ).replace(tzinfo=None)
-        
+
         # 处理 ended_at
         if "ended_at" in processed_data:
             ended_at = processed_data["ended_at"]
             if isinstance(ended_at, datetime) and ended_at.tzinfo is not None:
                 # 转换为UTC时间，然后移除时区信息
-                processed_data["ended_at"] = ended_at.astimezone(
-                    timezone.utc
-                ).replace(tzinfo=None)
-        
+                processed_data["ended_at"] = ended_at.astimezone(timezone.utc).replace(
+                    tzinfo=None
+                )
+
         # 处理 created_at（如果传入）
         if "created_at" in processed_data:
             created_at = processed_data["created_at"]
@@ -356,7 +356,7 @@ class WorkflowRunDAO:
                 processed_data["created_at"] = created_at.astimezone(
                     timezone.utc
                 ).replace(tzinfo=None)
-        
+
         run = WorkflowRun(**processed_data)
         session.add(run)
         await session.commit()
@@ -437,6 +437,14 @@ class WorkflowRunDAO:
             update_data.update(additional_data)
 
         return await WorkflowRunDAO.update(session, run_id, update_data)
+
+    @staticmethod
+    async def get_running_runs(session: AsyncSession) -> List[WorkflowRun]:
+        """获取所有状态为 running 的运行记录"""
+        result = await session.execute(
+            select(WorkflowRun).where(WorkflowRun.status == "running")
+        )
+        return result.scalars().all()
 
 
 class ModelRegistryDAO:

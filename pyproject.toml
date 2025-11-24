@@ -82,6 +82,9 @@ dependencies = [
     "pyyaml>=6.0",
     "requests>=2.31.0",
     "tqdm>=4.65.0",
+
+    # Docker 部署支持
+    "aiodocker>=0.24.0",
 ]
 
 [project.optional-dependencies]

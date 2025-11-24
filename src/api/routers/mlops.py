@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import shutil
+import tarfile
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +23,7 @@ from src.application.dataset_generation_service import (
     DatasetGenerationRequest,
     DatasetGenerationService,
 )
+from src.application.dataset_validation_service import DatasetValidationService
 from src.application.model_registry_service import (
     ModelRegistrationInfo,
     ModelRegistryService,
@@ -29,11 +31,14 @@ from src.application.model_registry_service import (
 from src.container.service_container import get_service
 from src.database.connection import get_async_session
 from src.database.dao import DatasetDAO, DeploymentDAO, WorkflowDAO, WorkflowRunDAO
+from src.domain.interfaces.deployment_interface import IDeploymentService
 
 try:
     from src.deployment.docker_manager import DockerManager
 except ModuleNotFoundError:  # pragma: no cover - optional dependency
     DockerManager = None  # type: ignore[assignment]
+except ImportError:
+    DockerManager = None
 
 from src.workflow.workflow_engine import workflow_engine
 
@@ -41,17 +46,18 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/mlops", tags=["MLOps"])
 
-if DockerManager is None:
-    logger.warning("DockerManager 模块未找到，部署相关接口将不可用")
-
 
 def _get_docker_manager():
-    if DockerManager is None:
-        raise HTTPException(
-            status_code=503,
-            detail="部署管理模块未启用，无法执行此操作",
-        )
-    return DockerManager()
+    """保留用于向后兼容，建议直接使用 get_service(IDeploymentService)"""
+    try:
+        return get_service(IDeploymentService)
+    except Exception:
+        if DockerManager is None:
+            raise HTTPException(
+                status_code=503,
+                detail="部署管理模块未启用，无法执行此操作",
+            )
+        return DockerManager()
 
 
 def _normalize_step_config(step: Dict[str, Any]) -> Dict[str, Any]:
@@ -227,17 +233,35 @@ async def upload_dataset(
     dataset_name: str = Form(...),
     dataset_type: str = Form("detection"),
     description: str = Form(""),
+    validate_files: bool = Form(True, description="是否验证文件完整性"),
     session: AsyncSession = Depends(get_async_session),
 ):
-    """上传数据集"""
-    try:
-        dataset_id = f"dataset_{int(datetime.utcnow().timestamp())}"
-        base_dir = Path("data/datasets")
-        dataset_dir = base_dir / dataset_id
-        dataset_dir.mkdir(parents=True, exist_ok=True)
+    """上传数据集（带文件完整性校验）"""
+    dataset_id = f"dataset_{int(datetime.utcnow().timestamp())}"
+    base_dir = Path("data/datasets")
+    dataset_dir = base_dir / dataset_id
+    dataset_dir.mkdir(parents=True, exist_ok=True)
 
+    try:
+        # 1. 文件校验阶段
+        if validate_files:
+            logger.info(f"开始验证 {len(files)} 个文件...")
+            all_valid, errors = await DatasetValidationService.validate_files(
+                files, validate_content=True
+            )
+            if not all_valid:
+                # 清理已创建的目录
+                if dataset_dir.exists():
+                    shutil.rmtree(dataset_dir, ignore_errors=True)
+                error_msg = "文件校验失败:\n" + "\n".join(f"  - {e}" for e in errors)
+                logger.error(error_msg)
+                raise HTTPException(status_code=400, detail=error_msg)
+            logger.info("所有文件校验通过")
+
+        # 2. 文件上传阶段
         uploaded_files = []
         total_size = 0
+        archive_files = []  # 记录压缩文件，用于后续解压和结构验证
 
         for file in files:
             file_path = dataset_dir / file.filename
@@ -246,6 +270,39 @@ async def upload_dataset(
                 buffer.write(content)
                 total_size += len(content)
                 uploaded_files.append(file.filename)
+
+            # 记录压缩文件
+            filename_lower = file.filename.lower() if file.filename else ""
+            if filename_lower.endswith((".zip", ".tar", ".tar.gz", ".tgz")):
+                archive_files.append(file_path)
+
+        # 3. 如果是压缩文件，解压并验证结构
+        if archive_files and validate_files:
+            for archive_path in archive_files:
+                try:
+                    logger.info(f"解压文件: {archive_path.name}")
+                    if archive_path.suffix.lower() == ".zip":
+                        with zipfile.ZipFile(archive_path, "r") as zip_file:
+                            zip_file.extractall(dataset_dir)
+                    elif archive_path.suffix.lower() in (".tar", ".gz", ".tgz"):
+                        mode = "r:gz" if archive_path.suffix.endswith("gz") else "r"
+                        with tarfile.open(archive_path, mode) as tar_file:
+                            tar_file.extractall(dataset_dir)
+
+                    # 验证数据集结构（如果是 YOLO 格式）
+                    (
+                        is_valid,
+                        error_msg,
+                    ) = await DatasetValidationService.validate_dataset_structure(
+                        dataset_dir, require_yolo_format=False
+                    )
+                    if not is_valid:
+                        logger.warning(f"数据集结构验证警告: {error_msg}")
+                        # 不阻止上传，只记录警告
+
+                except Exception as e:
+                    logger.warning(f"解压或验证文件 {archive_path.name} 时出错: {e}")
+                    # 不阻止上传，只记录警告
 
         # 保存数据集元数据到数据库
         dataset_data = {
@@ -442,7 +499,9 @@ async def get_dataset_samples(
                             # 标准化路径（统一使用 / 分隔符）
                             normalized_path = image_path.replace("\\", "/")
                             annotations_map[normalized_path] = {
-                                "has_violation": row.get("has_violation", "False").lower()
+                                "has_violation": row.get(
+                                    "has_violation", "False"
+                                ).lower()
                                 in ("true", "1", "yes"),
                                 "violation_type": row.get("violation_type", ""),
                                 "camera_id": row.get("camera_id", ""),
@@ -467,7 +526,9 @@ async def get_dataset_samples(
                         continue
 
                 # 跳过 annotations.csv 等非样本文件
-                if filename in {"annotations.csv", "data.yaml"} or filename.startswith("."):
+                if filename in {"annotations.csv", "data.yaml"} or filename.startswith(
+                    "."
+                ):
                     continue
 
                 # 标准化路径用于匹配标注
@@ -649,9 +710,9 @@ async def create_deployment(
     deployment: Dict[str, Any], session: AsyncSession = Depends(get_async_session)
 ):
     """创建模型部署（将模型部署到检测任务）
-    
+
     部署模型到检测系统，更新检测配置中的模型路径。
-    
+
     请求体示例:
     {
         "model_id": "model_20251118_070707",
@@ -664,20 +725,20 @@ async def create_deployment(
         # 检查必需参数
         model_id = deployment.get("model_id")
         detection_task = deployment.get("detection_task")
-        
+
         if not model_id:
             raise HTTPException(status_code=400, detail="缺少必需参数: model_id")
         if not detection_task:
             raise HTTPException(status_code=400, detail="缺少必需参数: detection_task")
-        
+
         # 验证检测任务
         valid_tasks = ["hairnet_detection", "human_detection", "pose_detection"]
         if detection_task not in valid_tasks:
             raise HTTPException(
                 status_code=400,
-                detail=f"无效的检测任务: {detection_task}，有效值: {', '.join(valid_tasks)}"
+                detail=f"无效的检测任务: {detection_task}，有效值: {', '.join(valid_tasks)}",
             )
-        
+
         # 获取模型信息
         try:
             service = get_service(ModelRegistryService)
@@ -686,25 +747,25 @@ async def create_deployment(
                 raise HTTPException(status_code=404, detail="模型不存在")
         except ValueError:
             raise HTTPException(status_code=503, detail="模型注册服务不可用")
-        
+
         # 验证模型文件是否存在
         model_path = Path(model.get("model_path", ""))
         if not model_path or not model_path.exists():
-            raise HTTPException(
-                status_code=404,
-                detail=f"模型文件不存在: {model_path}"
-            )
-        
+            raise HTTPException(status_code=404, detail=f"模型文件不存在: {model_path}")
+
         # 生成部署ID
         deployment_id = f"deployment_{int(datetime.utcnow().timestamp())}"
-        
+
         # 设置部署信息
-        deployment_name = deployment.get("name") or f"{detection_task}-{model.get('name', 'unknown')}-v{model.get('version', '1.0')}"
+        deployment_name = (
+            deployment.get("name")
+            or f"{detection_task}-{model.get('name', 'unknown')}-v{model.get('version', '1.0')}"
+        )
         apply_immediately = deployment.get("apply_immediately", False)
-        
+
         # 更新检测配置
-        from config.unified_params import update_global_param, save_global_params
-        
+        from config.unified_params import save_global_params, update_global_param
+
         # 将模型路径转换为相对路径（相对于项目根目录）
         project_root = Path(__file__).resolve().parents[3]
         try:
@@ -713,17 +774,18 @@ async def create_deployment(
         except ValueError:
             # 如果无法转换为相对路径，使用绝对路径
             model_path_str = str(model_path).replace("\\", "/")
-        
+
         # 更新全局配置
         update_global_param(detection_task, "model_path", model_path_str)
-        
+
         # 保存到YAML文件
         save_global_params()
         logger.info(f"[模型部署] 已更新 {detection_task}.model_path = {model_path_str}")
-        
+
         # 如果启用数据库配置，也更新数据库（可选）
         try:
             from src.api.routers.detection_config import get_config_service
+
             config_service = await get_config_service()
             if config_service:
                 await config_service.save_config(
@@ -735,7 +797,7 @@ async def create_deployment(
                 logger.info(f"[模型部署] 已更新数据库配置: {detection_task}.model_path")
         except Exception as db_error:
             logger.warning(f"[模型部署] 更新数据库配置失败（非关键）: {db_error}")
-        
+
         # 保存部署记录到数据库
         deployment_record = {
             "id": deployment_id,
@@ -755,14 +817,14 @@ async def create_deployment(
                 "deployed_at": datetime.utcnow().isoformat(),
             },
         }
-        
+
         try:
             deployment_obj = await DeploymentDAO.create(session, deployment_record)
             logger.info(f"[模型部署] 部署记录已保存: {deployment_obj.id}")
         except Exception as db_error:
             logger.warning(f"[模型部署] 保存部署记录失败（非关键）: {db_error}")
             # 继续执行，不影响部署
-        
+
         # 返回部署结果
         result = {
             "message": "模型部署成功",
@@ -775,7 +837,7 @@ async def create_deployment(
             "apply_immediately": apply_immediately,
             "note": "配置已更新，请重启检测服务以使用新模型" if not apply_immediately else "配置已更新并立即应用",
         }
-        
+
         logger.info(f"[模型部署] ✅ 部署成功: {deployment_name} -> {detection_task}")
         return result
 
@@ -803,7 +865,14 @@ async def scale_deployment(
         docker_manager = _get_docker_manager()
         scale_result = await docker_manager.scale_deployment(deployment_id, replicas)
 
-        if scale_result["success"]:
+        # 适配新的 IDeploymentService 返回 bool 的情况
+        success = scale_result
+
+        if isinstance(scale_result, dict):
+            success = scale_result.get("success", False)
+            scale_result.get("error", "未知错误")
+
+        if success:
             # 更新数据库
             await DeploymentDAO.update(
                 session,
@@ -869,7 +938,14 @@ async def delete_deployment(
         docker_manager = _get_docker_manager()
         delete_result = await docker_manager.delete_deployment(deployment_id)
 
-        if delete_result["success"]:
+        # 适配新的 IDeploymentService 返回 bool 的情况
+        success = delete_result
+
+        if isinstance(delete_result, dict):
+            success = delete_result.get("success", False)
+            delete_result.get("error", "未知错误")
+
+        if success:
             # 从数据库删除记录
             await DeploymentDAO.delete(session, deployment_id)
 
@@ -922,6 +998,7 @@ async def create_workflow(
         # 设置默认值
         workflow.setdefault("status", "inactive")
         workflow.setdefault("trigger", "manual")
+        workflow.setdefault("type", "custom")
         workflow.setdefault("run_count", 0)
         workflow.setdefault("success_rate", 0.0)
         workflow.setdefault("avg_duration", 0.0)
@@ -995,12 +1072,14 @@ async def update_workflow(
                         if stop_result.get("success"):
                             logger.info(f"工作流 {workflow_id} 正在运行，已停止")
                         else:
-                            logger.warning(f"停止工作流 {workflow_id} 失败: {stop_result.get('message', '未知错误')}")
+                            logger.warning(
+                                f"停止工作流 {workflow_id} 失败: {stop_result.get('message', '未知错误')}"
+                            )
                             # 即使停止失败，也继续更新状态（可能工作流已经完成）
                     except Exception as e:
                         logger.warning(f"停止工作流 {workflow_id} 异常: {e}", exc_info=True)
                         # 即使停止失败，也继续更新状态
-        
+
         if "steps" in workflow:
             workflow["steps"] = [
                 _normalize_step_config(step) for step in workflow.get("steps", [])
@@ -1032,7 +1111,7 @@ async def run_workflow(
         if not workflow:
             logger.error(f"[API] 工作流不存在: workflow_id={workflow_id}")
             raise HTTPException(status_code=404, detail="工作流不存在")
-        
+
         logger.info(f"[API] 工作流存在: name={workflow.name}, status={workflow.status}")
 
         # 创建工作流运行记录
@@ -1045,26 +1124,34 @@ async def run_workflow(
         }
 
         run_record = await WorkflowRunDAO.create(session, run_data)
-        logger.info(f"[工作流启动] 运行记录创建成功: run_id={run_record.id}, workflow_id={workflow_id}")
+        logger.info(
+            f"[工作流启动] 运行记录创建成功: run_id={run_record.id}, workflow_id={workflow_id}"
+        )
 
         # 执行工作流
         workflow_dict = workflow.to_dict()
         workflow_dict["steps"] = [
             _normalize_step_config(step) for step in workflow_dict.get("steps", [])
         ]
-        
+
         logger.info(f"[工作流启动] 准备执行工作流: name={workflow.name}, workflow_id={workflow_id}")
-        logger.info(f"[工作流启动] 工作流配置: steps_count={len(workflow_dict.get('steps', []))}, steps={[s.get('name', '') for s in workflow_dict.get('steps', [])]}")
-        
+        logger.info(
+            f"[工作流启动] 工作流配置: steps_count={len(workflow_dict.get('steps', []))}, steps={[s.get('name', '') for s in workflow_dict.get('steps', [])]}"
+        )
+
         # 创建工作流执行任务（后台异步执行，不阻塞API响应）
         async def execute_and_update():
             """后台执行工作流并更新数据库状态"""
             # 使用新的数据库会话
             async for db_session in get_async_session():
                 try:
-                    engine_result = await workflow_engine.run_workflow(workflow_id, workflow_dict)
-                    logger.info(f"工作流执行完成: workflow_id={workflow_id}, success={engine_result.get('success')}")
-                    
+                    engine_result = await workflow_engine.run_workflow(
+                        workflow_id, workflow_dict
+                    )
+                    logger.info(
+                        f"工作流执行完成: workflow_id={workflow_id}, success={engine_result.get('success')}"
+                    )
+
                     if engine_result["success"]:
                         # 更新运行记录状态
                         outputs_json = json.dumps(
@@ -1078,23 +1165,35 @@ async def run_workflow(
                                 "run_log": outputs_json,
                             },
                         )
-                        
+
                         # 更新工作流统计
-                        workflow_for_update = await WorkflowDAO.get_by_id(db_session, workflow_id)
+                        workflow_for_update = await WorkflowDAO.get_by_id(
+                            db_session, workflow_id
+                        )
                         if workflow_for_update:
                             await WorkflowDAO.update(
                                 db_session,
                                 workflow_id,
-                                {"run_count": workflow_for_update.run_count + 1, "last_run": datetime.utcnow()},
+                                {
+                                    "run_count": workflow_for_update.run_count + 1,
+                                    "last_run": datetime.utcnow(),
+                                },
                             )
-                        
+
                         logger.info(f"✅ 工作流运行成功: {workflow_id}")
                     else:
                         # 检查是否是取消
-                        error_message = engine_result.get("error") or engine_result.get("message") or "未知错误"
-                        is_cancelled = "取消" in error_message or "cancelled" in error_message.lower()
+                        error_message = (
+                            engine_result.get("error")
+                            or engine_result.get("message")
+                            or "未知错误"
+                        )
+                        is_cancelled = (
+                            "取消" in error_message
+                            or "cancelled" in error_message.lower()
+                        )
                         status = "cancelled" if is_cancelled else "failed"
-                        
+
                         # 更新运行记录状态
                         outputs_json = json.dumps(
                             engine_result.get("outputs", []), ensure_ascii=False
@@ -1106,7 +1205,7 @@ async def run_workflow(
                             error_message if not is_cancelled else None,
                             additional_data={"run_log": outputs_json},
                         )
-                        
+
                         if is_cancelled:
                             logger.info(f"工作流已取消: {workflow_id}")
                         else:
@@ -1124,13 +1223,15 @@ async def run_workflow(
                         logger.error(f"更新运行记录状态失败: {update_error}")
                 finally:
                     break  # 退出生成器循环
-        
+
         # 启动后台任务
         asyncio.create_task(execute_and_update())
-        
+
         # 立即返回，不等待工作流完成
-        logger.info(f"[工作流启动] 工作流已启动，正在后台执行: workflow_id={workflow_id}, run_id={run_record.id}")
-        
+        logger.info(
+            f"[工作流启动] 工作流已启动，正在后台执行: workflow_id={workflow_id}, run_id={run_record.id}"
+        )
+
         return {
             "message": "工作流已启动，正在后台执行",
             "workflow_id": workflow_id,
@@ -1152,25 +1253,27 @@ async def stop_workflow(
     """停止正在运行的工作流"""
     try:
         logger.info(f"收到停止工作流请求: {workflow_id}")
-        
+
         # 检查工作流是否存在
         workflow = await WorkflowDAO.get_by_id(session, workflow_id)
         if not workflow:
             raise HTTPException(status_code=404, detail="工作流不存在")
-        
+
         # 检查是否有正在运行的记录
-        recent_runs = await WorkflowRunDAO.get_by_workflow_id(session, workflow_id, limit=1)
+        recent_runs = await WorkflowRunDAO.get_by_workflow_id(
+            session, workflow_id, limit=1
+        )
         running_run = None
         if recent_runs and recent_runs[0].status == "running":
             running_run = recent_runs[0]
             logger.info(f"找到正在运行的记录: {running_run.id}")
-        
+
         # 停止工作流
         result = await workflow_engine.stop_workflow(workflow_id)
-        
+
         if result.get("success"):
             logger.info(f"✅ 工作流停止成功: {workflow_id}")
-            
+
             # 如果有关联的运行记录，更新其状态
             if running_run:
                 try:
@@ -1179,12 +1282,16 @@ async def stop_workflow(
                         running_run.id,
                         "cancelled",
                         None,  # 取消时没有错误消息
-                        additional_data={"run_log": json.dumps({"cancelled": True}, ensure_ascii=False)},
+                        additional_data={
+                            "run_log": json.dumps(
+                                {"cancelled": True}, ensure_ascii=False
+                            )
+                        },
                     )
                     logger.info(f"已更新运行记录状态为 cancelled: {running_run.id}")
                 except Exception as e:
                     logger.warning(f"更新运行记录状态失败: {e}")
-            
+
             return {
                 "success": True,
                 "message": "工作流已停止",
@@ -1196,7 +1303,7 @@ async def stop_workflow(
             error_msg = result.get("message", "停止工作流失败")
             logger.warning(f"停止工作流失败: {workflow_id} - {error_msg}")
             raise HTTPException(status_code=400, detail=error_msg)
-            
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1216,11 +1323,11 @@ async def get_workflow_run(
         run = await WorkflowRunDAO.get_by_id(session, run_id)
         if not run:
             raise HTTPException(status_code=404, detail="运行记录不存在")
-        
+
         # 验证运行记录是否属于该工作流
         if run.workflow_id != workflow_id:
             raise HTTPException(status_code=404, detail="运行记录不属于该工作流")
-        
+
         # 解析运行日志
         step_outputs = []
         if run.run_log:
@@ -1233,7 +1340,7 @@ async def get_workflow_run(
                     step_outputs = parsed.get("outputs", [])
             except json.JSONDecodeError:
                 logger.warning(f"解析运行日志失败: run_id={run_id}")
-        
+
         return {
             "id": run.id,
             "workflow_id": run.workflow_id,
@@ -1262,7 +1369,7 @@ async def delete_workflow(workflow_id: str):
             await workflow_engine.stop_workflow(workflow_id)
         except Exception:
             pass  # 如果停止失败，继续删除
-        
+
         # 这里应该从工作流引擎删除
         logger.info(f"删除工作流: {workflow_id}")
         return {"message": "工作流删除成功"}

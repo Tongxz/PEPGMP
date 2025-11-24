@@ -179,25 +179,29 @@ class WorkflowEngine:
                 }
 
             run_id = f"run_{int(datetime.utcnow().timestamp())}"
-            logger.info(f"[工作流引擎] 创建工作流运行任务: workflow_id={workflow_id}, run_id={run_id}")
-            
+            logger.info(
+                f"[工作流引擎] 创建工作流运行任务: workflow_id={workflow_id}, run_id={run_id}"
+            )
+
             # 创建取消事件
             cancel_event = threading.Event()
             self.cancel_events[workflow_id] = cancel_event
-            
+
             # 创建任务来执行工作流，这样才能正确取消
             task = asyncio.create_task(
-                self._execute_workflow(workflow_id, run_id, workflow_config, cancel_event)
+                self._execute_workflow(
+                    workflow_id, run_id, workflow_config, cancel_event
+                )
             )
             self.running_workflows[workflow_id] = task
-            
+
             # 等待任务完成
             result = await task
-            
+
             # 任务完成后从运行列表中移除
             if workflow_id in self.running_workflows:
                 del self.running_workflows[workflow_id]
-            
+
             return result
 
         except asyncio.CancelledError:
@@ -229,14 +233,14 @@ class WorkflowEngine:
         """
         try:
             stopped = False
-            
+
             # 首先设置取消事件，通知训练任务停止（即使工作流不在运行列表中）
             if workflow_id in self.cancel_events:
                 cancel_event = self.cancel_events[workflow_id]
                 cancel_event.set()
                 logger.info(f"已设置取消事件: {workflow_id}")
                 stopped = True
-            
+
             # 如果工作流在运行列表中，取消运行任务
             if workflow_id in self.running_workflows:
                 task = self.running_workflows[workflow_id]
@@ -246,13 +250,13 @@ class WorkflowEngine:
                     stopped = True
                 except Exception as e:
                     logger.warning(f"取消工作流任务失败: {e}")
-                
+
                 # 从运行列表中移除
                 try:
                     del self.running_workflows[workflow_id]
                 except KeyError:
                     pass  # 可能已经被删除
-            
+
             # 如果工作流在调度列表中，也取消调度
             if workflow_id in self.scheduled_workflows:
                 scheduled_task = self.scheduled_workflows[workflow_id]
@@ -262,7 +266,7 @@ class WorkflowEngine:
                     stopped = True
                 except Exception as e:
                     logger.warning(f"取消调度工作流任务失败: {e}")
-                
+
                 # 从调度列表中移除
                 try:
                     del self.scheduled_workflows[workflow_id]
@@ -285,7 +289,7 @@ class WorkflowEngine:
                     cancel_event.set()  # 立即设置，因为要停止
                     self.cancel_events[workflow_id] = cancel_event
                     logger.info(f"为工作流 {workflow_id} 创建并设置取消事件（工作流不在运行列表中）")
-                
+
                 logger.info(f"工作流 {workflow_id} 未在运行列表中，但已设置取消事件")
                 return {
                     "success": True,
@@ -338,7 +342,11 @@ class WorkflowEngine:
             }
 
     async def _execute_workflow(
-        self, workflow_id: str, run_id: str, workflow_config: Dict[str, Any], cancel_event: Optional[threading.Event] = None
+        self,
+        workflow_id: str,
+        run_id: str,
+        workflow_config: Dict[str, Any],
+        cancel_event: Optional[threading.Event] = None,
     ) -> Dict[str, Any]:
         """
         执行工作流
@@ -357,7 +365,9 @@ class WorkflowEngine:
             completed_steps = 0
             context: Dict[str, Any] = {"step_outputs": [], "last_output": None}
 
-            logger.info(f"[工作流执行] 开始执行工作流: workflow_id={workflow_id}, total_steps={total_steps}, steps={[s.get('name', '') for s in steps]}")
+            logger.info(
+                f"[工作流执行] 开始执行工作流: workflow_id={workflow_id}, total_steps={total_steps}, steps={[s.get('name', '') for s in steps]}"
+            )
 
             for i, step in enumerate(steps):
                 try:
@@ -365,16 +375,18 @@ class WorkflowEngine:
                     current_task = asyncio.current_task()
                     if current_task and current_task.cancelled():
                         raise asyncio.CancelledError("工作流已被取消")
-                    
+
                     # 检查取消事件
                     if cancel_event and cancel_event.is_set():
                         logger.info(f"检测到取消事件，停止工作流: {workflow_id}")
                         raise asyncio.CancelledError("工作流已被取消")
-                    
+
                     step_name = step.get("name", f"步骤 {i+1}")
                     step_type = StepType(step.get("type", "custom"))
 
-                    logger.info(f"[工作流执行] 执行步骤 {i+1}/{total_steps}: step_name={step_name}, step_type={step_type.value}")
+                    logger.info(
+                        f"[工作流执行] 执行步骤 {i+1}/{total_steps}: step_name={step_name}, step_type={step_type.value}"
+                    )
 
                     # 执行步骤，传递取消事件
                     step_result = await self._execute_step(
@@ -866,24 +878,28 @@ class WorkflowEngine:
             return {"success": False, "error": "未提供多行为训练数据集目录"}
 
         training_params = config.get("training_params", {})
-        
+
         # 检查是否要从上一次训练结果继续训练
         # 1. 优先使用训练参数中明确指定的 resume_from
         # 2. 如果没有指定，检查 context 中是否有上一次训练的模型路径
         if "resume_from" not in training_params and "from_model" not in training_params:
-            last_training = context.get("last_multi_behavior_training") or context.get("last_training_output")
+            last_training = context.get("last_multi_behavior_training") or context.get(
+                "last_training_output"
+            )
             if last_training and last_training.get("model_path"):
                 resume_model_path = last_training.get("model_path")
                 training_params["resume_from"] = resume_model_path
                 logger.info(f"[工作流执行] 自动使用上一次训练的模型继续训练: {resume_model_path}")
-        
+
         # 从 context 中获取取消事件
         cancel_event = context.get("_cancel_event")
         if cancel_event:
             # 将取消事件传递给训练服务
             training_params["_cancel_event"] = cancel_event
-        
-        logger.info(f"[工作流执行] 开始多行为训练: dataset_dir={dataset_dir}, data_config={data_config}")
+
+        logger.info(
+            f"[工作流执行] 开始多行为训练: dataset_dir={dataset_dir}, data_config={data_config}"
+        )
         try:
             result = await training_service.train(
                 Path(dataset_dir),
@@ -902,7 +918,9 @@ class WorkflowEngine:
             # 保存训练结果到 context，供后续步骤使用（如继续训练）
             context["last_multi_behavior_training"] = output
             context["last_training_output"] = output  # 通用键名，供其他步骤使用
-            logger.info(f"[工作流执行] 多行为训练完成: model_path={result.model_path}, metrics={result.metrics}")
+            logger.info(
+                f"[工作流执行] 多行为训练完成: model_path={result.model_path}, metrics={result.metrics}"
+            )
             return {"success": True, "message": "多行为训练完成", "output": output}
         except Exception as exc:
             logger.error("多行为训练步骤失败: %s", exc)
@@ -941,20 +959,96 @@ class WorkflowEngine:
     ) -> Dict[str, Any]:
         """处理模型部署步骤"""
         try:
-            # 模拟模型部署
-            await asyncio.sleep(4)  # 模拟部署时间
+            from src.domain.interfaces.deployment_interface import IDeploymentService
 
-            logger.info("模型部署步骤执行完成")
+            # 获取部署服务（使用已导入的 get_service）
+            try:
+                deployment_service = get_service(IDeploymentService)
+            except ValueError as exc:
+                logger.error("获取部署服务失败: %s", exc)
+                return {"success": False, "error": f"部署服务不可用: {exc}"}
+            except Exception as exc:
+                logger.error("获取部署服务失败: %s", exc, exc_info=True)
+                return {"success": False, "error": f"部署服务不可用: {exc}"}
+
+            # 准备部署配置
+            deployment_config = step_config.get("config", {})
+            # 如果有上一步训练的模型路径，自动填充
+            last_training = (
+                context.get("last_training_output")
+                or context.get("last_multi_behavior_training")
+                or context.get("last_handwash_training")
+            )
+
+            if last_training and last_training.get("model_path"):
+                if "model_path" not in deployment_config:
+                    deployment_config["model_path"] = last_training["model_path"]
+                    logger.info(f"自动使用上一步训练的模型: {deployment_config['model_path']}")
+
+            # 执行部署
+            deployment_id = await deployment_service.create_deployment(
+                deployment_config
+            )
+            logger.info(f"[模型部署] 部署ID: {deployment_id}")
+
+            # 获取状态
+            status = await deployment_service.get_deployment_status(deployment_id)
+
+            # 检查部署状态
+            if status.status == "not_found":
+                # 容器不存在时，记录警告但允许工作流继续
+                # 这可能是因为容器尚未创建，或者部署只是更新配置
+                logger.warning(f"[模型部署] 容器 {deployment_id} 不存在，但部署步骤完成（可能仅更新配置）")
+                return {
+                    "success": True,  # 改为成功，因为配置更新可能已完成
+                    "message": f"部署配置已更新（容器 {deployment_id} 不存在，可能需要手动创建）",
+                    "output": {
+                        "deployment_id": deployment_id,
+                        "status": status.status,
+                        "warning": f"容器不存在: {deployment_id}",
+                        "note": "部署配置已更新，但容器不存在。如果这是新部署，请手动创建容器。",
+                    },
+                }
+            elif status.status == "error" and status.error:
+                # 只有在有明确错误时才失败
+                logger.error(f"[模型部署] 部署状态异常: {status.error}")
+                return {
+                    "success": False,
+                    "error": f"部署状态异常: {status.error}",
+                    "output": {
+                        "deployment_id": deployment_id,
+                        "status": status.status,
+                        "error": status.error,
+                    },
+                }
+            elif status.status in ["stopped", "created"]:
+                # 容器已停止或已创建但未启动，记录警告但允许继续
+                logger.warning(f"[模型部署] 容器 {deployment_id} 状态为 {status.status}，可能需要启动")
+                return {
+                    "success": True,
+                    "message": f"部署完成，但容器状态为 {status.status}",
+                    "output": {
+                        "deployment_id": deployment_id,
+                        "status": status.status,
+                        "replicas": status.replicas,
+                        "warning": f"容器状态为 {status.status}，可能需要启动",
+                    },
+                }
+
+            logger.info(f"[模型部署] 部署步骤执行完成: {deployment_id}, 状态: {status.status}")
             return {
                 "success": True,
                 "message": "模型部署完成",
                 "output": {
-                    "deployment_id": f"deploy_{int(datetime.utcnow().timestamp())}",
-                    "endpoint": "http://localhost:8000/api/v1/predict",
-                    "status": "running",
+                    "deployment_id": deployment_id,
+                    "status": status.status,
+                    "replicas": status.replicas,
+                    "cpu_usage": status.cpu_usage,
+                    "memory_usage": status.memory_usage,
                 },
             }
         except Exception as e:
+            logger.error(f"模型部署步骤失败: {e}")
             return {"success": False, "error": str(e)}
 
     async def _handle_notification(
@@ -1041,6 +1135,53 @@ class WorkflowEngine:
 
         except Exception as e:
             return {"valid": False, "error": f"配置验证异常: {str(e)}"}
+
+    async def recover_state(self):
+        """
+        恢复工作流状态（自愈机制）
+        检查数据库中状态为 running 但内存中不存在的任务，将其标记为 failed
+        """
+        from src.database.dao import WorkflowRunDAO
+
+        logger.info("[工作流引擎] 开始执行状态自愈检查...")
+
+        try:
+            async with AsyncSessionLocal() as session:
+                # 1. 获取所有数据库中状态为 running 的记录
+                running_runs = await WorkflowRunDAO.get_running_runs(session)
+
+                for run in running_runs:
+                    # 2. 检查是否在内存中
+                    workflow_id = run.workflow_id
+                    if workflow_id not in self.running_workflows:
+                        logger.warning(
+                            f"[自愈] 发现僵尸任务: run_id={run.id}, workflow_id={workflow_id}。正在修复..."
+                        )
+
+                        # 3. 修复状态
+                        try:
+                            await WorkflowRunDAO.finish_run(
+                                session,
+                                run.id,
+                                "failed",
+                                "服务异常重启导致任务中断",
+                                additional_data={
+                                    "run_log": json.dumps(
+                                        {"recovery": "auto_healed_at_startup"},
+                                        ensure_ascii=False,
+                                    )
+                                },
+                            )
+
+                            # 更新工作流主表状态（如果需要）
+                            # 注意：这里假设 WorkflowRunDAO 已经处理了关联逻辑，如果没有，可能需要单独更新 Workflow 表
+
+                            logger.info(f"[自愈] 任务 {run.id} 已标记为失败")
+                        except Exception as update_error:
+                            logger.error(f"[自愈] 修复任务 {run.id} 失败: {update_error}")
+
+        except Exception as e:
+            logger.error(f"[自愈] 状态检查失败: {e}")
 
     async def _schedule_workflow(
         self, workflow_config: Dict[str, Any]

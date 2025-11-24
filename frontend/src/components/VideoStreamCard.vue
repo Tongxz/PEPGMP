@@ -40,13 +40,12 @@
 
     <!-- 视频显示区 -->
     <div class="video-wrapper" ref="videoWrapper">
-      <img
-        v-if="currentFrame"
-        :src="currentFrame"
-        alt="实时视频"
+      <canvas
+        ref="canvasRef"
         class="video-frame"
-      />
-      <div v-else class="video-placeholder">
+        v-show="hasFirstFrame"
+      ></canvas>
+      <div v-if="!hasFirstFrame" class="video-placeholder">
         <n-spin size="large" />
         <p style="margin-top: 16px; color: #fff">正在连接视频流...</p>
       </div>
@@ -196,13 +195,18 @@ const emit = defineEmits<{
 // 响应式数据
 const connected = ref(false)
 const paused = ref(false)
-const currentFrame = ref<string | null>(null)
+const canvasRef = ref<HTMLCanvasElement | null>(null)
+const hasFirstFrame = ref(false)
 const currentFps = ref(0)
 const latency = ref(0)
 const frameCount = ref(0)
 const connectionStartTime = ref(0)
 const reconnectAttempts = ref(0)
 const MAX_RECONNECT_ATTEMPTS = 10 // 最大重连次数
+
+// Canvas 上下文
+let ctx: CanvasRenderingContext2D | null = null
+let pendingFrame: ImageBitmap | null = null
 
 // 配置相关
 const showConfigModal = ref(false)
@@ -295,18 +299,22 @@ function connect() {
       // 处理二进制数据（JPEG帧）
       try {
         const blob = new Blob([event.data], { type: 'image/jpeg' })
-        const url = URL.createObjectURL(blob)
 
-        // 💡 优化 1：接收新帧时，立即清理并撤销所有旧的待渲染帧 URL
-        // 丢弃所有旧帧，只保留最新帧（以最小化延迟）
-        frameQueue.forEach((oldUrl) => URL.revokeObjectURL(oldUrl))
-        frameQueue = [url] // 队列中只留下最新收到的帧
+        // 💡 优化 1：使用 createImageBitmap 替代 URL.createObjectURL
+        // 异步创建位图，性能更好且无需手动管理 URL 生命周期
+        createImageBitmap(blob).then(bitmap => {
+          // 流量控制：如果有积压的帧，关闭旧的，保留新的
+          if (pendingFrame) {
+            pendingFrame.close()
+          }
+          pendingFrame = bitmap
 
-        if (!isRendering) {
-          requestAnimationFrame(() => {
-            renderNextFrame()
-          })
-        }
+          if (!isRendering) {
+            requestAnimationFrame(renderLoop)
+          }
+        }).catch(err => {
+          console.error(`[VideoStreamCard] 创建位图失败:`, err)
+        })
 
         const now = Date.now()
         if (lastFrameTime > 0) {
@@ -360,28 +368,49 @@ function connect() {
   }
 }
 
-function renderNextFrame() {
-  if (frameQueue.length === 0) {
+function renderLoop() {
+  if (!pendingFrame || !canvasRef.value) {
     isRendering = false
     return
   }
 
   isRendering = true
+  const canvas = canvasRef.value
 
-  // 💡 优化 2：简单取出并清空队列
-  const url = frameQueue.pop()! // 取出唯一的最新帧 URL
-
-  if (currentFrame.value) {
-    URL.revokeObjectURL(currentFrame.value)
+  // 初始化上下文
+  if (!ctx) {
+    ctx = canvas.getContext('2d', { alpha: false }) // alpha: false 优化性能
   }
 
-  currentFrame.value = url
-  frameCount.value++
+  if (ctx && pendingFrame) {
+    // 💡 优化：自动调整 Canvas 分辨率以匹配视频源
+    // 这确保了绘制清晰度，同时由 CSS 控制显示大小
+    if (canvas.width !== pendingFrame.width || canvas.height !== pendingFrame.height) {
+      canvas.width = pendingFrame.width
+      canvas.height = pendingFrame.height
+    }
 
-  // 渲染完成后，isRendering 标志置为 false，等待下一个 onmessage 触发 rAF
+    // 绘制帧
+    ctx.drawImage(pendingFrame, 0, 0)
+
+    // 释放位图资源（关键！防止显存泄漏）
+    pendingFrame.close()
+    pendingFrame = null
+
+    // 标记已收到首帧
+    if (!hasFirstFrame.value) {
+      hasFirstFrame.value = true
+    }
+
+    frameCount.value++
+  }
+
   isRendering = false
 
-  // 移除原有的队列处理逻辑，因为我们已经在新帧到达时清理了队列
+  // 如果在渲染期间又有新帧到达（虽然我们主要靠 onmessage 触发，但检查一下是个好习惯）
+  if (pendingFrame) {
+     requestAnimationFrame(renderLoop)
+  }
 }
 
 function startFpsCounter() {
@@ -428,7 +457,16 @@ function reconnect() {
     ws.close()
   }
   // 重置状态
-  currentFrame.value = null
+  hasFirstFrame.value = false
+  if (pendingFrame) {
+    pendingFrame.close()
+    pendingFrame = null
+  }
+  // 清空 Canvas
+  if (ctx && canvasRef.value) {
+    ctx.clearRect(0, 0, canvasRef.value.width, canvasRef.value.height)
+  }
+
   frameCount.value = 0
   currentFps.value = 0
   fpsCounter = 0
@@ -524,14 +562,14 @@ onBeforeUnmount(() => {
     ws.close(1000, 'Component unmounting')
     ws = null
   }
-  if (currentFrame.value) {
-    URL.revokeObjectURL(currentFrame.value)
-    currentFrame.value = null
+
+  // 清理 Canvas 资源
+  if (pendingFrame) {
+    pendingFrame.close()
+    pendingFrame = null
   }
-  frameQueue.forEach((url) => {
-    URL.revokeObjectURL(url)
-  })
-  frameQueue = []
+  ctx = null
+  hasFirstFrame.value = false
 })
 </script>
 

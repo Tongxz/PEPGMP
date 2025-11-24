@@ -22,7 +22,22 @@ class ServiceContainer:
         self._instances: Dict[Type, Any] = {}  # 接口 -> 预注册实例
         self._transient_cache: Dict[Type, Any] = {}  # 瞬态服务缓存（用于循环依赖检测）
 
+        # 注册核心服务
+        self._register_core_services()
+
         logger.info("服务容器初始化完成")
+
+    def _register_core_services(self):
+        """注册核心服务"""
+        try:
+            from src.domain.interfaces.deployment_interface import IDeploymentService
+            from src.infrastructure.deployment.docker_service import (
+                DockerDeploymentService,
+            )
+
+            self.register_singleton(IDeploymentService, DockerDeploymentService)
+        except ImportError:
+            pass  # 可能是循环导入或依赖未安装
 
     def register_singleton(self, interface: Type[T], implementation: Type[T]) -> None:
         """

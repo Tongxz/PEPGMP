@@ -262,6 +262,7 @@ def _configure_other_services():
     _configure_training_services()
     _configure_handwash_services()
     _configure_multi_behavior_services()
+    _configure_deployment_services()
 
     # 领域服务开关
     use_domain_service = os.getenv("USE_DOMAIN_SERVICE", "false").lower() == "true"
@@ -400,6 +401,20 @@ def _configure_model_registry_services():
         logger.info("模型注册服务已注册")
     except Exception as exc:
         logger.error(f"注册模型注册服务失败: {exc}")
+
+
+def _configure_deployment_services():
+    """配置部署服务"""
+    try:
+        from src.domain.interfaces.deployment_interface import IDeploymentService
+        from src.infrastructure.deployment.docker_service import DockerDeploymentService
+
+        container.register_singleton(IDeploymentService, DockerDeploymentService)
+        logger.info("部署服务已注册: DockerDeploymentService")
+    except ImportError as exc:
+        logger.warning(f"部署服务导入失败（可能缺少 aiodocker 依赖）: {exc}")
+    except Exception as exc:
+        logger.error(f"注册部署服务失败: {exc}")
 
 
 def _log_registered_services():
