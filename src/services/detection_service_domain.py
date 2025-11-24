@@ -1184,6 +1184,135 @@ class DetectionServiceDomain:
             logger.error(f"获取实时统计失败: {e}")
             raise
 
+    async def get_detection_realtime_stats(self) -> Dict[str, Any]:
+        """
+        获取智能检测实时统计数据（用于首页检测面板）
+
+        Returns:
+            Dict[str, Any]: 包含处理效率、FPS、帧数、场景分布、性能监控等数据
+        """
+        try:
+            from datetime import timedelta
+            import psutil
+
+            # 获取最近1小时的记录用于计算统计
+            end_time = datetime.now(timezone.utc)
+            start_time = end_time - timedelta(hours=1)
+
+            # 获取检测记录
+            records = await self.detection_repository.find_by_time_range(
+                start_time, end_time, None, limit=1000
+            )
+
+            # 计算处理统计
+            total_frames = len(records)
+            processed_frames = 0
+            skipped_frames = 0
+            total_fps = 0.0
+            fps_count = 0
+
+            # 场景分布统计
+            static_scenes = 0
+            dynamic_scenes = 0
+            critical_scenes = 0
+
+            for record in records:
+                # 统计处理帧数
+                if hasattr(record, 'processing_time') and record.processing_time > 0:
+                    processed_frames += 1
+                else:
+                    skipped_frames += 1
+
+                # 统计FPS
+                if hasattr(record, 'fps') and record.fps:
+                    fps_value = record.fps if isinstance(record.fps, (int, float)) else 0.0
+                    if fps_value > 0:
+                        total_fps += fps_value
+                        fps_count += 1
+
+                # 场景分布（根据元数据判断）
+                metadata = record.metadata if hasattr(record, 'metadata') else {}
+                scene_type = metadata.get('scene_type', '').lower()
+                if scene_type == 'static':
+                    static_scenes += 1
+                elif scene_type == 'dynamic':
+                    dynamic_scenes += 1
+                elif scene_type == 'critical':
+                    critical_scenes += 1
+                else:
+                    # 默认根据对象数量判断
+                    obj_count = len(record.objects) if hasattr(record, 'objects') else 0
+                    if obj_count == 0:
+                        static_scenes += 1
+                    elif obj_count > 3:
+                        critical_scenes += 1
+                    else:
+                        dynamic_scenes += 1
+
+            # 计算平均FPS
+            avg_fps = total_fps / fps_count if fps_count > 0 else 0.0
+
+            # 计算处理效率（已处理帧数 / 总帧数 * 100）
+            processing_efficiency = (
+                (processed_frames / total_frames * 100) if total_frames > 0 else 0.0
+            )
+
+            # 获取系统性能监控
+            cpu_usage = 0.0
+            memory_usage = 0.0
+            gpu_usage = 0.0
+
+            try:
+                # CPU使用率
+                cpu_usage = psutil.cpu_percent(interval=0.1)
+                # 内存使用率
+                memory = psutil.virtual_memory()
+                memory_usage = memory.percent
+                # GPU使用率（如果可用）
+                try:
+                    import pynvml
+                    pynvml.nvmlInit()
+                    handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+                    utilization = pynvml.nvmlDeviceGetUtilizationRates(handle)
+                    gpu_usage = float(utilization.gpu)
+                except (ImportError, Exception):
+                    gpu_usage = 0.0
+            except Exception as e:
+                logger.warning(f"获取系统性能数据失败: {e}")
+
+            # 获取活跃摄像头数
+            active_cameras = await self.camera_repository.find_active()
+            active_camera_count = len(active_cameras)
+
+            # 检查连接状态（通过检查是否有最近的检测记录）
+            connected = total_frames > 0 or active_camera_count > 0
+
+            return {
+                "processing_efficiency": round(processing_efficiency, 1),
+                "avg_fps": round(avg_fps, 2),
+                "processed_frames": processed_frames,
+                "skipped_frames": skipped_frames,
+                "scene_distribution": {
+                    "static": static_scenes,
+                    "dynamic": dynamic_scenes,
+                    "critical": critical_scenes,
+                },
+                "performance": {
+                    "cpu_usage": round(cpu_usage, 1),
+                    "memory_usage": round(memory_usage, 1),
+                    "gpu_usage": round(gpu_usage, 1),
+                },
+                "connection_status": {
+                    "connected": connected,
+                    "active_cameras": active_camera_count,
+                },
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+
+        except Exception as e:
+            logger.error(f"获取检测实时统计失败: {e}", exc_info=True)
+            raise
+
     async def get_cameras(self, active_only: bool = False) -> List[Dict[str, Any]]:
         """
         获取摄像头列表

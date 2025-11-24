@@ -144,7 +144,7 @@
         <n-form-item label="数据集名称" path="datasetName">
           <n-input
             v-model:value="generateForm.datasetName"
-            placeholder="例如：detection_export_20241105"
+            placeholder="例如：detection_export_20251105"
             maxlength="64"
             show-count
           />
@@ -682,8 +682,8 @@ async function fetchDatasets() {
           accuracy: 88,
           consistency: 85
         },
-        created_at: '2024-01-15T10:30:00Z',
-        updated_at: '2024-01-15T10:30:00Z',
+        created_at: '2025-01-15T10:30:00Z',
+        updated_at: '2025-01-15T10:30:00Z',
         description: '洗手行为检测数据集',
         tags: ['handwash', 'detection', 'behavior']
       },
@@ -701,8 +701,8 @@ async function fetchDatasets() {
           accuracy: 90,
           consistency: 92
         },
-        created_at: '2024-01-10T14:20:00Z',
-        updated_at: '2024-01-12T16:45:00Z',
+        created_at: '2025-01-10T14:20:00Z',
+        updated_at: '2025-01-12T16:45:00Z',
         description: '安全帽检测数据集',
         tags: ['hairnet', 'detection', 'safety']
       },
@@ -716,8 +716,8 @@ async function fetchDatasets() {
         label_count: 17,
         quality_score: undefined,
         quality_metrics: undefined,
-        created_at: '2024-01-20T09:15:00Z',
-        updated_at: '2024-01-20T09:15:00Z',
+        created_at: '2025-01-20T09:15:00Z',
+        updated_at: '2025-01-20T09:15:00Z',
         description: '姿态检测数据集',
         tags: ['pose', 'detection', 'keypoints']
       }
@@ -741,8 +741,8 @@ async function fetchDatasets() {
           accuracy: 88,
           consistency: 85
         },
-        created_at: '2024-01-15T10:30:00Z',
-        updated_at: '2024-01-15T10:30:00Z',
+        created_at: '2025-01-15T10:30:00Z',
+        updated_at: '2025-01-15T10:30:00Z',
         description: '洗手行为检测数据集',
         tags: ['handwash', 'detection', 'behavior']
       }

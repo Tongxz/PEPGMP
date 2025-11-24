@@ -57,6 +57,8 @@ class PostgreSQLAlertRuleRepository(IAlertRuleRepository):
 
     async def find_all(
         self,
+        limit: int = 100,
+        offset: int = 0,
         camera_id: Optional[str] = None,
         enabled: Optional[bool] = None,
     ) -> List[AlertRule]:
@@ -73,9 +75,12 @@ class PostgreSQLAlertRuleRepository(IAlertRuleRepository):
                     WHERE ($1::VARCHAR IS NULL OR camera_id = $1)
                       AND ($2::BOOLEAN IS NULL OR enabled = $2)
                     ORDER BY created_at DESC
+                    LIMIT $3 OFFSET $4
                     """,
                     camera_id,
                     enabled,
+                    limit,
+                    offset,
                 )
 
                 rules = []
@@ -88,6 +93,32 @@ class PostgreSQLAlertRuleRepository(IAlertRuleRepository):
         except Exception as e:
             logger.error(f"查询告警规则列表失败: {e}")
             raise RepositoryError(f"查询告警规则列表失败: {e}")
+
+    async def count(
+        self,
+        camera_id: Optional[str] = None,
+        enabled: Optional[bool] = None,
+    ) -> int:
+        """统计告警规则总数（用于分页）."""
+        try:
+            conn = await self._get_connection()
+            try:
+                count = await conn.fetchval(
+                    """
+                    SELECT COUNT(*)
+                    FROM alert_rules
+                    WHERE ($1::VARCHAR IS NULL OR camera_id = $1)
+                      AND ($2::BOOLEAN IS NULL OR enabled = $2)
+                    """,
+                    camera_id,
+                    enabled,
+                )
+                return count or 0
+            finally:
+                await self.pool.release(conn)
+        except Exception as e:
+            logger.error(f"统计告警规则总数失败: {e}")
+            raise RepositoryError(f"统计告警规则总数失败: {e}")
 
     async def save(self, rule: AlertRule) -> int:
         """保存告警规则."""

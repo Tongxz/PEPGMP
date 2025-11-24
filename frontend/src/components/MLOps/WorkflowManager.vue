@@ -1681,16 +1681,16 @@ async function fetchWorkflows() {
           { name: '模型评估', type: 'model_evaluation', description: '评估模型性能', config: '{}' },
           { name: '模型部署', type: 'model_deployment', description: '部署到生产环境', config: '{}' }
         ],
-        last_run: '2024-01-20T02:00:00Z',
-        next_run: '2024-01-21T02:00:00Z',
+        last_run: '2025-01-20T02:00:00Z',
+        next_run: '2025-01-21T02:00:00Z',
         run_count: 15,
         success_rate: 93.3,
         avg_duration: 45,
-        created_at: '2024-01-01T10:00:00Z',
+        created_at: '2025-01-01T10:00:00Z',
         recent_runs: [
-          { id: '1', status: 'success', started_at: '2024-01-20T02:00:00Z', duration: 42 },
-          { id: '2', status: 'success', started_at: '2024-01-19T02:00:00Z', duration: 38 },
-          { id: '3', status: 'failed', started_at: '2024-01-18T02:00:00Z', duration: 15, error_message: '数据加载失败' }
+          { id: '1', status: 'success', started_at: '2025-01-20T02:00:00Z', duration: 42 },
+          { id: '2', status: 'success', started_at: '2025-01-19T02:00:00Z', duration: 38 },
+          { id: '3', status: 'failed', started_at: '2025-01-18T02:00:00Z', duration: 15, error_message: '数据加载失败' }
         ]
       },
       {
@@ -1705,15 +1705,15 @@ async function fetchWorkflows() {
           { name: '模型评估', type: 'model_evaluation', description: '评估模型性能指标', config: '{}' },
           { name: '报告生成', type: 'notification', description: '生成评估报告', config: '{}' }
         ],
-        last_run: '2024-01-20T14:30:00Z',
+        last_run: '2025-01-20T14:30:00Z',
         next_run: undefined,
         run_count: 8,
         success_rate: 100,
         avg_duration: 12,
-        created_at: '2024-01-10T15:00:00Z',
+        created_at: '2025-01-10T15:00:00Z',
         recent_runs: [
-          { id: '4', status: 'success', started_at: '2024-01-20T14:30:00Z', duration: 11 },
-          { id: '5', status: 'success', started_at: '2024-01-19T16:45:00Z', duration: 13 }
+          { id: '4', status: 'success', started_at: '2025-01-20T14:30:00Z', duration: 11 },
+          { id: '5', status: 'success', started_at: '2025-01-19T16:45:00Z', duration: 13 }
         ]
       },
       {
@@ -1728,14 +1728,14 @@ async function fetchWorkflows() {
           { name: '数据标注', type: 'data_processing', description: '自动标注数据', config: '{}' },
           { name: '质量检查', type: 'data_validation', description: '检查数据质量', config: '{}' }
         ],
-        last_run: '2024-01-15T09:00:00Z',
+        last_run: '2025-01-15T09:00:00Z',
         next_run: undefined,
         run_count: 3,
         success_rate: 66.7,
         avg_duration: 25,
-        created_at: '2024-01-05T11:00:00Z',
+        created_at: '2025-01-05T11:00:00Z',
         recent_runs: [
-          { id: '6', status: 'failed', started_at: '2024-01-15T09:00:00Z', duration: 8, error_message: '存储空间不足' }
+          { id: '6', status: 'failed', started_at: '2025-01-15T09:00:00Z', duration: 8, error_message: '存储空间不足' }
         ]
       }
     ]

@@ -26,17 +26,37 @@ class IAlertRuleRepository(ABC):
     @abstractmethod
     async def find_all(
         self,
+        limit: int = 100,
+        offset: int = 0,
         camera_id: Optional[str] = None,
         enabled: Optional[bool] = None,
     ) -> List[AlertRule]:
         """查询告警规则列表.
 
         Args:
+            limit: 返回数量限制
+            offset: 偏移量（用于分页）
             camera_id: 摄像头ID过滤（可选）
             enabled: 是否启用过滤（可选）
 
         Returns:
             告警规则列表
+        """
+
+    @abstractmethod
+    async def count(
+        self,
+        camera_id: Optional[str] = None,
+        enabled: Optional[bool] = None,
+    ) -> int:
+        """统计告警规则总数（用于分页）.
+
+        Args:
+            camera_id: 摄像头ID过滤（可选）
+            enabled: 是否启用过滤（可选）
+
+        Returns:
+            符合条件的告警规则总数
         """
 
     @abstractmethod

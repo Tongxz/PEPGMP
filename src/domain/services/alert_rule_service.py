@@ -25,26 +25,45 @@ class AlertRuleService:
 
     async def list_alert_rules(
         self,
+        limit: int = 100,
+        offset: int = 0,
         camera_id: Optional[str] = None,
         enabled: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """列出告警规则.
 
         Args:
+            limit: 返回数量限制
+            offset: 偏移量（用于分页）
             camera_id: 摄像头ID过滤（可选）
             enabled: 是否启用过滤（可选）
 
         Returns:
-            包含告警规则列表和总数的字典
+            包含告警规则列表、总数和分页信息的字典
         """
         try:
-            rules = await self.alert_rule_repository.find_all(
+            # 获取总数
+            total = await self.alert_rule_repository.count(
                 camera_id=camera_id, enabled=enabled
+            )
+
+            # 获取告警规则列表
+            rules = await self.alert_rule_repository.find_all(
+                limit=limit,
+                offset=offset,
+                camera_id=camera_id,
+                enabled=enabled,
             )
 
             items = [rule.to_dict() for rule in rules]
 
-            return {"count": len(items), "items": items}
+            return {
+                "count": len(items),
+                "total": total,
+                "items": items,
+                "limit": limit,
+                "offset": offset,
+            }
 
         except Exception as e:
             logger.error(f"列出告警规则失败: {e}")

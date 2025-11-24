@@ -4,7 +4,7 @@
 备用检测方案和多模型融合策略。
 
 Author: Trae AI Assistant
-Date: 2024
+Date: 2025
 """
 
 from dataclasses import dataclass

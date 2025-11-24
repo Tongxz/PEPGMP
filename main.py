@@ -5,7 +5,7 @@ Human Behavior Detection System Main Entry Point
 
 作者: AI Assistant
 版本: 1.0.0
-创建时间: 2024
+创建时间: 2025
 """
 
 import argparse

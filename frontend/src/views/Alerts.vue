@@ -4,9 +4,25 @@
     <n-space vertical size="large">
       <n-card title="历史告警" size="small">
         <n-space align="center" wrap>
-          <n-input v-model:value="filters.cameraId" placeholder="摄像头ID(可选)" style="width: 200px" />
-          <n-input v-model:value="filters.alertType" placeholder="告警类型(可选)" style="width: 200px" />
-          <n-input-number v-model:value="filters.limit" :min="1" :max="500" placeholder="数量" />
+          <n-input v-model:value="filters.cameraId" placeholder="摄像头ID(可选)" style="width: 200px" @keyup.enter="fetchHistory" />
+          <n-input v-model:value="filters.alertType" placeholder="告警类型(可选)" style="width: 200px" @keyup.enter="fetchHistory" />
+          <n-select
+            v-model:value="historySort.sortBy"
+            :options="[
+              { label: '按时间', value: 'timestamp' },
+              { label: '按摄像头', value: 'camera_id' },
+              { label: '按类型', value: 'alert_type' },
+            ]"
+            placeholder="排序字段"
+            style="width: 120px"
+            @update:value="() => handleHistorySort(historySort.sortBy || 'timestamp')"
+          />
+          <n-button
+            :type="historySort.sortOrder === 'desc' ? 'primary' : 'default'"
+            @click="handleHistorySort(historySort.sortBy || 'timestamp')"
+          >
+            {{ historySort.sortOrder === 'desc' ? '↓ 降序' : '↑ 升序' }}
+          </n-button>
           <n-button type="primary" :loading="loading.history" @click="fetchHistory">刷新</n-button>
         </n-space>
         <n-data-table
@@ -15,7 +31,7 @@
           :loading="loading.history"
           :bordered="false"
           size="small"
-          @update:sorter="handleHistorySorter"
+          :pagination="historyPaginationConfig"
         />
       </n-card>
 
@@ -34,6 +50,7 @@
           :loading="loading.rules"
           :bordered="false"
           size="small"
+          :pagination="rulePaginationConfig"
         />
       </n-card>
     </n-space>
@@ -127,7 +144,7 @@
 </template>
 
 <script setup lang="ts">
-import { h, onMounted, reactive, ref } from 'vue'
+import { h, onMounted, reactive, ref, computed } from 'vue'
 import { NButton, NTag, NModal, NDescriptions, NDescriptionsItem, useMessage, useDialog, type DataTableColumns } from 'naive-ui'
 import { alertsApi, type AlertHistoryItem, type AlertRuleItem } from '@/api/alerts'
 
@@ -136,10 +153,26 @@ const dialog = useDialog()
 
 const loading = reactive({ history: false, rules: false })
 
-const filters = reactive({ limit: 100, cameraId: '', alertType: '' })
+// 告警历史筛选和分页
+const filters = reactive({ limit: 20, cameraId: '', alertType: '' })
+const historyPagination = reactive({
+  page: 1,
+  pageSize: 20,
+  total: 0,
+})
+const historySort = reactive({
+  sortBy: 'timestamp' as string | undefined,
+  sortOrder: 'desc' as 'asc' | 'desc',
+})
 const history = reactive<{ items: AlertHistoryItem[] }>({ items: [] })
 
+// 告警规则筛选和分页
 const ruleFilters = reactive<{ cameraId: string; enabled: boolean | null }>({ cameraId: '', enabled: null })
+const rulePagination = reactive({
+  page: 1,
+  pageSize: 20,
+  total: 0,
+})
 const rules = reactive<{ items: AlertRuleItem[] }>({ items: [] })
 
 // 弹窗状态
@@ -155,7 +188,6 @@ const historyColumns: DataTableColumns<AlertHistoryItem> = [
     title: '时间',
     key: 'timestamp',
     width: 180,
-    sorter: (row1, row2) => new Date(row1.timestamp).getTime() - new Date(row2.timestamp).getTime(),
     render: (row) => new Date(row.timestamp).toLocaleString('zh-CN')
   },
   { title: '摄像头', key: 'camera_id', width: 120 },
@@ -237,15 +269,55 @@ const rulesColumns: DataTableColumns<AlertRuleItem> = [
   },
 ]
 
+// 告警历史分页配置
+const historyPaginationConfig = computed(() => ({
+  page: historyPagination.page,
+  pageSize: historyPagination.pageSize,
+  itemCount: historyPagination.total,
+  showSizePicker: true,
+  pageSizes: [10, 20, 50, 100],
+  onChange: (page: number) => {
+    historyPagination.page = page
+    fetchHistory()
+  },
+  onUpdatePageSize: (pageSize: number) => {
+    historyPagination.pageSize = pageSize
+    historyPagination.page = 1
+    fetchHistory()
+  },
+}))
+
+// 告警规则分页配置
+const rulePaginationConfig = computed(() => ({
+  page: rulePagination.page,
+  pageSize: rulePagination.pageSize,
+  itemCount: rulePagination.total,
+  showSizePicker: true,
+  pageSizes: [10, 20, 50, 100],
+  onChange: (page: number) => {
+    rulePagination.page = page
+    fetchRules()
+  },
+  onUpdatePageSize: (pageSize: number) => {
+    rulePagination.pageSize = pageSize
+    rulePagination.page = 1
+    fetchRules()
+  },
+}))
+
 async function fetchHistory() {
   loading.history = true
   try {
     const res = await alertsApi.getHistory({
-      limit: filters.limit,
+      limit: historyPagination.pageSize,
+      page: historyPagination.page,
       camera_id: filters.cameraId || undefined,
       alert_type: filters.alertType || undefined,
+      sort_by: historySort.sortBy,
+      sort_order: historySort.sortOrder,
     })
     history.items = res.items
+    historyPagination.total = res.total || res.count || 0
   } catch (e: any) {
     message.error(e?.message || '获取历史告警失败')
   } finally {
@@ -257,10 +329,13 @@ async function fetchRules() {
   loading.rules = true
   try {
     const res = await alertsApi.listRules({
+      limit: rulePagination.pageSize,
+      page: rulePagination.page,
       camera_id: ruleFilters.cameraId || undefined,
       enabled: ruleFilters.enabled === null ? undefined : ruleFilters.enabled,
     })
     rules.items = res.items
+    rulePagination.total = res.total || res.count || 0
   } catch (e: any) {
     message.error(e?.message || '获取规则失败')
   } finally {
@@ -309,10 +384,18 @@ async function confirmDeleteRule() {
   }
 }
 
-// 处理历史记录排序
-function handleHistorySorter(sorter: any) {
-  console.log('排序:', sorter)
-  // 可以在这里实现排序逻辑
+// 处理历史记录排序（通过修改排序参数并重新获取数据）
+function handleHistorySort(sortBy: string) {
+  if (historySort.sortBy === sortBy) {
+    // 切换排序方向
+    historySort.sortOrder = historySort.sortOrder === 'desc' ? 'asc' : 'desc'
+  } else {
+    // 设置新的排序字段
+    historySort.sortBy = sortBy
+    historySort.sortOrder = 'desc'
+  }
+  historyPagination.page = 1 // 重置到第一页
+  fetchHistory()
 }
 
 onMounted(() => {

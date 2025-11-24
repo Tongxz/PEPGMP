@@ -473,7 +473,7 @@ function getViolationImageUrl(snapshotPath: string): string {
     return snapshotPath
   }
 
-  // 处理相对路径（快照路径通常是相对路径，如 "camera_id/2024/11/13/123456_123456_no_hairnet_abc123.jpg"）
+  // 处理相对路径（快照路径通常是相对路径，如 "camera_id/2025/11/13/123456_123456_no_hairnet_abc123.jpg"）
   // 直接使用相对路径，后端会尝试在多个目录中查找
   const url = `/api/v1/download/image/${encodeURIComponent(snapshotPath.replace(/\\/g, '/'))}`
   console.log('[CameraStatsModal] 生成的图片URL:', url)

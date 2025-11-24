@@ -59,19 +59,35 @@ def _ensure_alert_rule_service():
 
 @router.get("/alerts/history-db", summary="查询告警历史（数据库）")
 async def get_alert_history_db(
-    limit: int = Query(100, ge=1, le=1000),
-    camera_id: Optional[str] = Query(None),
-    alert_type: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=1000, description="每页数量"),
+    offset: int = Query(0, ge=0, description="偏移量（用于分页）"),
+    page: Optional[int] = Query(None, ge=1, description="页码（如果提供，将覆盖offset）"),
+    camera_id: Optional[str] = Query(None, description="摄像头ID过滤"),
+    alert_type: Optional[str] = Query(None, description="告警类型过滤"),
+    sort_by: Optional[str] = Query(
+        None, description="排序字段: timestamp, camera_id, alert_type, id"
+    ),
+    sort_order: str = Query("desc", description="排序方向: asc 或 desc"),
 ):
-    """从 alert_history 表查询告警历史."""
+    """从 alert_history 表查询告警历史（支持分页和排序）."""
     try:
         get_service = _ensure_alert_service()
         alert_service = await get_service()
         if alert_service is None:
             raise HTTPException(status_code=503, detail="告警领域服务未初始化，请联系系统管理员")
 
+        # 如果提供了page参数，计算offset
+        actual_offset = offset
+        if page is not None:
+            actual_offset = (page - 1) * limit
+
         result = await alert_service.get_alert_history(
-            limit=limit, camera_id=camera_id, alert_type=alert_type
+            limit=limit,
+            offset=actual_offset,
+            camera_id=camera_id,
+            alert_type=alert_type,
+            sort_by=sort_by,
+            sort_order=sort_order,
         )
         return result
     except HTTPException:
@@ -83,18 +99,29 @@ async def get_alert_history_db(
 
 @router.get("/alerts/rules", summary="列出告警规则")
 async def list_alert_rules(
-    camera_id: Optional[str] = Query(None),
-    enabled: Optional[bool] = Query(None),
+    limit: int = Query(100, ge=1, le=1000, description="每页数量"),
+    offset: int = Query(0, ge=0, description="偏移量（用于分页）"),
+    page: Optional[int] = Query(None, ge=1, description="页码（如果提供，将覆盖offset）"),
+    camera_id: Optional[str] = Query(None, description="摄像头ID过滤"),
+    enabled: Optional[bool] = Query(None, description="是否启用过滤"),
 ):
-    """列出告警规则."""
+    """列出告警规则（支持分页）."""
     try:
         get_service = _ensure_alert_rule_service()
         alert_rule_service = await get_service()
         if alert_rule_service is None:
             raise HTTPException(status_code=503, detail="告警规则领域服务未初始化，请联系系统管理员")
 
+        # 如果提供了page参数，计算offset
+        actual_offset = offset
+        if page is not None:
+            actual_offset = (page - 1) * limit
+
         result = await alert_rule_service.list_alert_rules(
-            camera_id=camera_id, enabled=enabled
+            limit=limit,
+            offset=actual_offset,
+            camera_id=camera_id,
+            enabled=enabled,
         )
         return result
     except HTTPException:

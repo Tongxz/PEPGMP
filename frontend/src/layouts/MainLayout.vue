@@ -144,7 +144,7 @@
                   <!-- 底部信息栏 -->
                   <n-layout-footer bordered class="layout-footer" v-if="!isMobile">
                     <div class="footer-content">
-                      <span class="copyright">© 2024 智能监控系统</span>
+                      <span class="copyright">© 2025 智能监控系统</span>
                       <div class="footer-info">
                         <span>版本: v1.0.0</span>
                         <n-divider vertical />

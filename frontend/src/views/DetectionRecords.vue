@@ -220,9 +220,11 @@ import {
 } from '@vicons/ionicons5'
 import { http } from '@/lib/http'
 import { exportApi, downloadBlob } from '@/api/export'
+import { useCameraStore } from '@/stores/camera'
 
 const message = useMessage()
 const dialog = useDialog()
+const cameraStore = useCameraStore()
 
 // 详情弹窗
 const showRecordDetail = ref(false)
@@ -233,15 +235,22 @@ const showStatusUpdate = ref(false)
 const selectedViolation = ref<any>(null)
 const newStatus = ref<string>('')
 
-// 摄像头选项
-const cameraOptions = ref([
-  { label: '全部摄像头', value: 'all' },
-  { label: 'USB0', value: 'cam0' },
-  { label: '测试视频', value: 'vid1' },
-])
+// 摄像头选项（动态生成）
+const cameraOptions = computed(() => {
+  const options = [
+    { label: '全部摄像头', value: 'all' }
+  ]
+  cameraStore.cameras.forEach(cam => {
+    options.push({
+      label: `${cam.name || cam.id} (${cam.id})`,
+      value: cam.id
+    })
+  })
+  return options
+})
 
 // 筛选条件
-const selectedCamera = ref('cam0')
+const selectedCamera = ref<string>('')
 // 默认时间范围：最近1小时（优化性能，避免首次加载超时）
 const defaultDateRange: [number, number] = [
   Date.now() - 60 * 60 * 1000, // 1小时前
@@ -689,7 +698,20 @@ async function exportViolations() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // 先加载摄像头列表
+  try {
+    await cameraStore.fetchCameras()
+    // 如果有摄像头，默认选中第一个（排除'all'选项）
+    if (cameraStore.cameras.length > 0 && !selectedCamera.value) {
+      selectedCamera.value = cameraStore.cameras[0].id
+    }
+  } catch (error: any) {
+    console.error('加载摄像头列表失败:', error)
+    message.warning('加载摄像头列表失败，将使用默认选项')
+  }
+  
+  // 加载数据
   loadRecords()
   loadViolations()
 })

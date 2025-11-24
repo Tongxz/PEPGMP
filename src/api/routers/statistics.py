@@ -51,6 +51,37 @@ async def get_realtime_statistics() -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"获取实时统计失败: {str(e)}")
 
 
+@router.get("/statistics/detection-realtime", summary="智能检测实时统计接口")
+async def get_detection_realtime_statistics() -> Dict[str, Any]:
+    """获取智能检测实时统计数据（用于首页检测面板）.
+
+    Returns:
+        包含处理效率、FPS、帧数、场景分布、性能监控等数据的字典:
+        - processing_efficiency: 处理效率 (0-100)
+        - avg_fps: 平均FPS
+        - processed_frames: 已处理帧数
+        - skipped_frames: 已跳过帧数
+        - scene_distribution: 场景分布 {static, dynamic, critical}
+        - performance: 性能监控 {cpu_usage, memory_usage, gpu_usage}
+        - connection_status: 连接状态 {connected, active_cameras}
+        - timestamp: 时间戳
+
+    Raises:
+        HTTPException: 如果领域服务不可用
+    """
+    try:
+        domain_service = _ensure_domain_service()
+        result = await domain_service.get_detection_realtime_stats()
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取检测实时统计失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"获取检测实时统计失败: {str(e)}"
+        )
+
+
 @router.get("/statistics/summary", summary="事件统计汇总")
 async def get_statistics_summary(
     minutes: int = Query(60, ge=1, le=24 * 60),

@@ -27,18 +27,40 @@ class IAlertRepository(ABC):
     async def find_all(
         self,
         limit: int = 100,
+        offset: int = 0,
         camera_id: Optional[str] = None,
         alert_type: Optional[str] = None,
+        sort_by: Optional[str] = None,
+        sort_order: str = "desc",
     ) -> List[Alert]:
         """查询告警历史.
 
         Args:
             limit: 返回数量限制
+            offset: 偏移量（用于分页）
+            camera_id: 摄像头ID过滤（可选）
+            alert_type: 告警类型过滤（可选）
+            sort_by: 排序字段（可选，默认: timestamp）
+            sort_order: 排序方向，asc 或 desc（默认: desc）
+
+        Returns:
+            告警列表，按指定字段和方向排序
+        """
+
+    @abstractmethod
+    async def count(
+        self,
+        camera_id: Optional[str] = None,
+        alert_type: Optional[str] = None,
+    ) -> int:
+        """统计告警总数（用于分页）.
+
+        Args:
             camera_id: 摄像头ID过滤（可选）
             alert_type: 告警类型过滤（可选）
 
         Returns:
-            告警列表，按时间倒序
+            符合条件的告警总数
         """
 
     @abstractmethod

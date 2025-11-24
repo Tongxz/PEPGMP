@@ -57,26 +57,35 @@ class PostgreSQLAlertRepository(IAlertRepository):
     async def find_all(
         self,
         limit: int = 100,
+        offset: int = 0,
         camera_id: Optional[str] = None,
         alert_type: Optional[str] = None,
+        sort_by: Optional[str] = None,
+        sort_order: str = "desc",
     ) -> List[Alert]:
         """查询告警历史."""
         try:
             conn = await self._get_connection()
             try:
+                # 验证排序字段
+                valid_sort_fields = ["timestamp", "camera_id", "alert_type", "id"]
+                sort_field = sort_by if sort_by in valid_sort_fields else "timestamp"
+                sort_direction = "DESC" if sort_order.lower() == "desc" else "ASC"
+
                 rows = await conn.fetch(
-                    """
+                    f"""
                     SELECT id, rule_id, camera_id, alert_type, message, details,
                            notification_sent, notification_channels_used, timestamp
                     FROM alert_history
                     WHERE ($1::VARCHAR IS NULL OR camera_id = $1)
                       AND ($2::VARCHAR IS NULL OR alert_type = $2)
-                    ORDER BY timestamp DESC
-                    LIMIT $3
+                    ORDER BY {sort_field} {sort_direction}
+                    LIMIT $3 OFFSET $4
                     """,
                     camera_id,
                     alert_type,
                     limit,
+                    offset,
                 )
 
                 alerts = []
@@ -89,6 +98,32 @@ class PostgreSQLAlertRepository(IAlertRepository):
         except Exception as e:
             logger.error(f"查询告警历史失败: {e}")
             raise RepositoryError(f"查询告警历史失败: {e}")
+
+    async def count(
+        self,
+        camera_id: Optional[str] = None,
+        alert_type: Optional[str] = None,
+    ) -> int:
+        """统计告警总数（用于分页）."""
+        try:
+            conn = await self._get_connection()
+            try:
+                count = await conn.fetchval(
+                    """
+                    SELECT COUNT(*)
+                    FROM alert_history
+                    WHERE ($1::VARCHAR IS NULL OR camera_id = $1)
+                      AND ($2::VARCHAR IS NULL OR alert_type = $2)
+                    """,
+                    camera_id,
+                    alert_type,
+                )
+                return count or 0
+            finally:
+                await self.pool.release(conn)
+        except Exception as e:
+            logger.error(f"统计告警总数失败: {e}")
+            raise RepositoryError(f"统计告警总数失败: {e}")
 
     async def save(self, alert: Alert) -> int:
         """保存告警."""

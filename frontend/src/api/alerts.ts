@@ -27,19 +27,39 @@ export interface AlertRuleItem {
 }
 
 export const alertsApi = {
-    async getHistory(params?: { limit?: number; camera_id?: string; alert_type?: string }) {
-        const response = await http.get<{ count: number; items: AlertHistoryItem[] }>(
-            '/alerts/history-db',
-            { params }
-        )
+    async getHistory(params?: {
+        limit?: number
+        offset?: number
+        page?: number
+        camera_id?: string
+        alert_type?: string
+        sort_by?: string
+        sort_order?: 'asc' | 'desc'
+    }) {
+        const response = await http.get<{
+            count: number
+            total: number
+            items: AlertHistoryItem[]
+            limit: number
+            offset: number
+        }>('/alerts/history-db', { params })
         return response.data
     },
 
-    async listRules(params?: { camera_id?: string; enabled?: boolean }) {
-        const response = await http.get<{ count: number; items: AlertRuleItem[] }>(
-            '/alerts/rules',
-            { params }
-        )
+    async listRules(params?: {
+        limit?: number
+        offset?: number
+        page?: number
+        camera_id?: string
+        enabled?: boolean
+    }) {
+        const response = await http.get<{
+            count: number
+            total: number
+            items: AlertRuleItem[]
+            limit: number
+            offset: number
+        }>('/alerts/rules', { params })
         return response.data
     },
 

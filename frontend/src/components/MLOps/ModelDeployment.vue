@@ -494,8 +494,8 @@ async function fetchDeployments() {
         error_rate: 0.5,
         total_requests: 172800,
         success_rate: 99.5,
-        deployed_at: '2024-01-15T10:30:00Z',
-        updated_at: '2024-01-20T14:20:00Z'
+        deployed_at: '2025-01-15T10:30:00Z',
+        updated_at: '2025-01-20T14:20:00Z'
       },
       {
         id: '2',
@@ -512,8 +512,8 @@ async function fetchDeployments() {
         error_rate: 1.2,
         total_requests: 43200,
         success_rate: 98.8,
-        deployed_at: '2024-01-18T09:15:00Z',
-        updated_at: '2024-01-19T16:30:00Z'
+        deployed_at: '2025-01-18T09:15:00Z',
+        updated_at: '2025-01-19T16:30:00Z'
       },
       {
         id: '3',
@@ -529,8 +529,8 @@ async function fetchDeployments() {
         error_rate: 0,
         total_requests: 0,
         success_rate: 0,
-        deployed_at: '2024-01-20T11:00:00Z',
-        updated_at: '2024-01-20T11:00:00Z'
+        deployed_at: '2025-01-20T11:00:00Z',
+        updated_at: '2025-01-20T11:00:00Z'
       }
     ]
     }
@@ -553,8 +553,8 @@ async function fetchDeployments() {
         error_rate: 0.5,
         total_requests: 172800,
         success_rate: 99.5,
-        deployed_at: '2024-01-15T10:30:00Z',
-        updated_at: '2024-01-20T14:20:00Z'
+        deployed_at: '2025-01-15T10:30:00Z',
+        updated_at: '2025-01-20T14:20:00Z'
       }
     ]
   } finally {

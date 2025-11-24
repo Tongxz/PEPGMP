@@ -131,14 +131,14 @@ class TestTimestamp:
 
     def test_timestamp_from_iso(self):
         """测试从ISO字符串创建"""
-        iso_string = "2024-01-01T12:00:00"
+        iso_string = "2025-01-01T12:00:00"
         timestamp = Timestamp.from_iso(iso_string)
         assert timestamp.iso_string == iso_string
 
     def test_timestamp_operations(self):
         """测试时间戳运算"""
-        timestamp1 = Timestamp.from_iso("2024-01-01T12:00:00")
-        timestamp2 = Timestamp.from_iso("2024-01-01T12:05:00")
+        timestamp1 = Timestamp.from_iso("2025-01-01T12:00:00")
+        timestamp2 = Timestamp.from_iso("2025-01-01T12:05:00")
 
         assert timestamp1.is_before(timestamp2)
         assert timestamp2.is_after(timestamp1)

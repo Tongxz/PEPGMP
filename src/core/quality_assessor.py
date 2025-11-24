@@ -4,7 +4,7 @@
 包括关键点完整性、稳定性、形状合理性和运动连续性评估。
 
 Author: Trae AI Assistant
-Date: 2024
+Date: 2025
 """
 
 from collections import deque

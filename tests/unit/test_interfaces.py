@@ -131,7 +131,7 @@ class TestDetectionRecord:
             id="test-id",
             camera_id="cam1",
             objects=[{"class": "person", "confidence": 0.95}],
-            timestamp=datetime(2024, 1, 1, 12, 0, 0),
+            timestamp=datetime(2025, 1, 1, 12, 0, 0),
             confidence=0.95,
             processing_time=0.05,
         )
@@ -147,7 +147,7 @@ class TestDetectionRecord:
             "id": "test-id",
             "camera_id": "cam1",
             "objects": [{"class": "person", "confidence": 0.95}],
-            "timestamp": "2024-01-01T12:00:00",
+            "timestamp": "2025-01-01T12:00:00",
             "confidence": 0.95,
             "processing_time": 0.05,
         }

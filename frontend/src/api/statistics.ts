@@ -192,6 +192,34 @@ export const statisticsApi = {
   },
 
   /**
+   * 获取智能检测实时统计数据（用于首页检测面板）
+   */
+  async getDetectionRealtimeStats(): Promise<{
+    processing_efficiency: number
+    avg_fps: number
+    processed_frames: number
+    skipped_frames: number
+    scene_distribution: {
+      static: number
+      dynamic: number
+      critical: number
+    }
+    performance: {
+      cpu_usage: number
+      memory_usage: number
+      gpu_usage: number
+    }
+    connection_status: {
+      connected: boolean
+      active_cameras: number
+    }
+    timestamp: string
+  }> {
+    const response = await http.get('/statistics/detection-realtime')
+    return response.data
+  },
+
+  /**
    * 获取近期事件历史
    * @param minutes 要查询的最近分钟数，默认60分钟
    * @param limit 返回事件的最大数量，默认100
