@@ -14,7 +14,19 @@ logger = logging.getLogger(__name__)
 
 # 数据库配置
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://pepgmp_dev:pepgmp_dev_password@localhost:5432/pepgmp_development")
-ASYNC_DATABASE_URL = os.getenv("ASYNC_DATABASE_URL", "postgresql+asyncpg://pepgmp_dev:pepgmp_dev_password@localhost:5432/pepgmp_development")
+
+# 如果 ASYNC_DATABASE_URL 未设置，从 DATABASE_URL 自动生成
+_async_db_url = os.getenv("ASYNC_DATABASE_URL")
+if _async_db_url:
+    ASYNC_DATABASE_URL = _async_db_url
+else:
+    # 从 DATABASE_URL 自动生成异步数据库URL
+    # 将 postgresql:// 替换为 postgresql+asyncpg://
+    if DATABASE_URL.startswith("postgresql://"):
+        ASYNC_DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+    else:
+        # 如果格式不匹配，使用默认值
+        ASYNC_DATABASE_URL = "postgresql+asyncpg://pepgmp_dev:pepgmp_dev_password@localhost:5432/pepgmp_development"
 
 # 同步数据库引擎（用于Alembic迁移）
 sync_engine = create_engine(DATABASE_URL, echo=False)
