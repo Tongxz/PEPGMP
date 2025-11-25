@@ -34,7 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libjpeg-dev \
     libpng-dev \
     libtiff-dev \
-    libatlas-base-dev \
+    libopenblas-dev \
     gfortran \
     # 开发工具
     wget \

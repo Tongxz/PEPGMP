@@ -1,0 +1,21 @@
+开发环境数据备份信息
+====================
+备份时间: Tue Nov 25 13:33:59 CST 2025
+备份目录: ./backups/dev
+时间戳: 20251125_133358
+
+数据库信息:
+- 容器: pyt-postgres-dev
+- 用户: pyt_dev
+- 数据库: pyt_development
+
+Redis信息:
+- 容器: pyt-redis-dev
+
+备份文件:
+- 数据库: ./backups/dev/db/backup_pyt_development_20251125_133358.sql.gz
+- Redis: ./backups/dev/redis/backup_redis_20251125_133358.rdb
+
+恢复说明:
+1. 数据库恢复: bash scripts/restore_dev_data.sh ./backups/dev 20251125_133358
+2. 或使用: docker exec -i pepgmp-postgres-dev psql -U pepgmp_dev -d pepgmp_development < <(gunzip -c ./backups/dev/db/backup_pyt_development_20251125_133358.sql.gz)
