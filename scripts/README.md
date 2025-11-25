@@ -31,7 +31,7 @@ scripts/
 │   └── start_prod_wsl.sh         # WSL环境启动生产
 │
 ├── 数据库脚本/
-│   ├── init_db.sql              # 数据库初始化SQL
+│   ├── init_db.sql              # 数据库初始化SQL（Docker容器自动执行）
 │   ├── init_database.py         # 数据库初始化Python
 │   └── validate_config.py       # 配置验证
 │
