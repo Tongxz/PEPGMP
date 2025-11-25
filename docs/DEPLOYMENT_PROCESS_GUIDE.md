@@ -296,14 +296,21 @@ docker tag 192.168.30.83:5433/pepgmp-backend:latest pepgmp-backend:latest
 docker compose -f docker-compose.prod.yml up -d
 # 或使用 V1 命令（如已安装）: docker-compose -f docker-compose.prod.yml up -d
 
-# 3. 验证部署
+# 3. ⚠️ 重要：等待数据库初始化（首次部署需要60-70秒）
+echo "等待数据库初始化..."
+sleep 60
+
+# 4. 验证数据库初始化
+bash scripts/check_database_init.sh pepgmp-postgres-prod pepgmp_prod pepgmp_production
+
+# 5. 验证部署
 docker compose -f docker-compose.prod.yml ps
 # 或: docker-compose -f docker-compose.prod.yml ps
 
-# 4. 验证服务健康
+# 6. 验证服务健康
 curl http://localhost:8000/api/v1/monitoring/health
 
-# 5. 查看日志
+# 7. 查看日志
 docker compose -f docker-compose.prod.yml logs -f api
 # 或: docker-compose -f docker-compose.prod.yml logs -f api
 ```
@@ -313,6 +320,16 @@ docker compose -f docker-compose.prod.yml logs -f api
 - ✅ 如使用 V1，确保已安装 `docker-compose`（带连字符）
 - ✅ 内网环境需要确保所有服务可在内网访问
 - ✅ 容器间通信使用 Docker 网络，无需配置防火墙规则
+- ⚠️ **数据库初始化**: 首次部署时，PostgreSQL需要60-70秒完成初始化（创建用户和数据库）
+- ⚠️ **数据卷检查**: 如果从旧环境迁移，确保清理旧数据卷（`pyt_postgres_prod_data`）
+- ⚠️ **初始化验证**: 使用 `scripts/check_database_init.sh` 验证数据库初始化状态
+
+**数据库初始化说明**:
+- PostgreSQL Docker容器在**首次启动**时会根据环境变量自动创建用户和数据库
+- 如果数据卷已存在，PostgreSQL会**跳过初始化**，不会创建新用户
+- **首次部署**: 确保数据卷不存在或为空，等待60-70秒完成初始化
+- **从旧环境迁移**: 需要清理旧数据卷，重新创建数据卷，等待初始化完成
+- 详细说明请参考: [数据库用户初始化问题分析](./DATABASE_USER_INITIALIZATION_ANALYSIS.md)
 
 ---
 

@@ -1,5 +1,15 @@
 #!/bin/bash
 
+# 检查数据库初始化状态（在部署后）
+check_database_init() {
+    echo "检查数据库初始化状态..."
+    if [ -f "scripts/check_database_init.sh" ]; then
+        bash scripts/check_database_init.sh pepgmp-postgres-prod pepgmp_prod pepgmp_production || {
+            echo "⚠️  数据库初始化检查失败，请手动检查"
+        }
+    fi
+}
+
 ################################################################################
 # 从私有Registry部署到生产环境
 # 用途: 从私有镜像仓库拉取镜像并部署到Ubuntu生产服务器
@@ -217,6 +227,14 @@ docker-compose up -d
 
 echo "等待服务启动..."
 sleep 15
+
+# 等待数据库初始化（首次部署需要60-70秒）
+echo "等待数据库初始化（首次部署需要60-70秒）..."
+echo "如果这是首次部署，请等待数据库完全初始化..."
+sleep 30
+
+# 检查数据库初始化状态
+check_database_init
 
 echo "检查容器状态..."
 docker-compose ps
