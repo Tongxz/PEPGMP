@@ -11,7 +11,23 @@ from src.domain.services.camera_service import CameraService
 @pytest.fixture
 def mock_camera_service():
     """创建Mock摄像头服务."""
+    from src.domain.entities.camera import Camera, CameraStatus
+    from src.domain.repositories.camera_repository import ICameraRepository
+    
+    # 创建Mock仓储
+    mock_repo = MagicMock(spec=ICameraRepository)
+    mock_repo.find_by_id = AsyncMock(return_value=Camera(
+        id="camera_001",
+        name="测试摄像头",
+        location="测试位置",
+        status=CameraStatus.ACTIVE,
+        region_id="region_001"
+    ))
+    mock_repo.find_all = AsyncMock(return_value=[])
+    
+    # 创建Mock服务
     service = MagicMock(spec=CameraService)
+    service.camera_repository = mock_repo
     service.update_camera = AsyncMock()
     return service
 
@@ -30,13 +46,13 @@ def mock_scheduler():
         return_value={"ok": True, "pid": 12346, "log": "/tmp/log.txt"}
     )
     scheduler.get_status = MagicMock(
-        return_value={"running": True, "pid": 12345, "log": "/tmp/log.txt"}
+        return_value={"running": False, "pid": None, "log": None}
     )
     scheduler.status = MagicMock(
         return_value={"running": True, "pid": 12345, "log": "/tmp/log.txt"}
     )
     scheduler.get_batch_status = MagicMock(
-        return_value={"camera_001": {"running": True, "pid": 12345}}
+        return_value={}  # 默认返回空字典，表示没有运行中的摄像头
     )
 
     return scheduler
@@ -51,23 +67,29 @@ def camera_control_service(mock_camera_service, mock_scheduler):
 class TestStartCamera:
     """测试启动摄像头."""
 
-    def test_start_camera_success(self, camera_control_service, mock_scheduler):
+    @pytest.mark.asyncio
+    async def test_start_camera_success(self, camera_control_service, mock_scheduler):
         """测试成功启动摄像头."""
         camera_id = "camera_001"
 
-        result = camera_control_service.start_camera(camera_id)
+        result = await camera_control_service.start_camera(camera_id)
 
         assert result["ok"] is True
         assert "pid" in result
-        mock_scheduler.start_detection.assert_called_once_with(camera_id)
+        # start_detection接收camera_id和camera_config两个参数
+        mock_scheduler.start_detection.assert_called_once()
+        call_args = mock_scheduler.start_detection.call_args
+        assert call_args[0][0] == camera_id
+        assert isinstance(call_args[0][1], dict)
 
-    def test_start_camera_failure(self, camera_control_service, mock_scheduler):
+    @pytest.mark.asyncio
+    async def test_start_camera_failure(self, camera_control_service, mock_scheduler):
         """测试启动摄像头失败."""
         camera_id = "camera_001"
         mock_scheduler.start_detection.return_value = {"ok": False, "error": "摄像头不存在"}
 
         with pytest.raises(ValueError):
-            camera_control_service.start_camera(camera_id)
+            await camera_control_service.start_camera(camera_id)
 
 
 class TestStopCamera:
@@ -94,23 +116,29 @@ class TestStopCamera:
 class TestRestartCamera:
     """测试重启摄像头."""
 
-    def test_restart_camera_success(self, camera_control_service, mock_scheduler):
+    @pytest.mark.asyncio
+    async def test_restart_camera_success(self, camera_control_service, mock_scheduler):
         """测试成功重启摄像头."""
         camera_id = "camera_001"
 
-        result = camera_control_service.restart_camera(camera_id)
+        result = await camera_control_service.restart_camera(camera_id)
 
         assert result["ok"] is True
         assert "pid" in result
-        mock_scheduler.restart_detection.assert_called_once_with(camera_id)
+        # restart_detection接收camera_id和camera_config两个参数
+        mock_scheduler.restart_detection.assert_called_once()
+        call_args = mock_scheduler.restart_detection.call_args
+        assert call_args[0][0] == camera_id
+        assert isinstance(call_args[0][1], dict)
 
-    def test_restart_camera_failure(self, camera_control_service, mock_scheduler):
+    @pytest.mark.asyncio
+    async def test_restart_camera_failure(self, camera_control_service, mock_scheduler):
         """测试重启摄像头失败."""
         camera_id = "camera_001"
         mock_scheduler.restart_detection.return_value = {"ok": False, "error": "重启失败"}
 
         with pytest.raises(ValueError):
-            camera_control_service.restart_camera(camera_id)
+            await camera_control_service.restart_camera(camera_id)
 
 
 class TestGetCameraStatus:

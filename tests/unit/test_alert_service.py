@@ -20,15 +20,37 @@ class MockAlertRepository(IAlertRepository):
     async def find_all(
         self,
         limit: int = 100,
+        offset: int = 0,
         camera_id: str | None = None,
         alert_type: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str = "desc",
     ) -> list[Alert]:
-        result = self._alerts[:limit]
+        result = self._alerts.copy()
         if camera_id:
             result = [a for a in result if a.camera_id == camera_id]
         if alert_type:
             result = [a for a in result if a.alert_type == alert_type]
-        return result
+        
+        # 排序
+        if sort_by == "timestamp":
+            reverse = sort_order == "desc"
+            result.sort(key=lambda a: a.timestamp, reverse=reverse)
+        
+        # 分页
+        return result[offset:offset + limit]
+
+    async def count(
+        self,
+        camera_id: str | None = None,
+        alert_type: str | None = None,
+    ) -> int:
+        result = self._alerts.copy()
+        if camera_id:
+            result = [a for a in result if a.camera_id == camera_id]
+        if alert_type:
+            result = [a for a in result if a.alert_type == alert_type]
+        return len(result)
 
     async def save(self, alert: Alert) -> int:
         alert.id = len(self._alerts) + 1

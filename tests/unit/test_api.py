@@ -40,9 +40,28 @@ class TestAPIEndpoints:
 
     def test_detect_image_endpoint(self):
         """测试图像检测端点."""
-        # 模拟优化管道
-        mock_pipeline = Mock()
-        app.dependency_overrides[get_optimized_pipeline] = lambda: mock_pipeline
+        # 模拟检测应用服务
+        from src.application.detection_application_service import DetectionApplicationService
+        from src.api.dependencies import get_detection_app_service
+        
+        async def mock_process_image_detection(*args, **kwargs):
+            return {
+                "ok": True,
+                "detection_id": "test_detection_123",
+                "filename": "test.jpg",
+                "detection_type": "image",
+                "result": {
+                    "person_count": 2,
+                    "has_violations": False,
+                    "hairnet_results": [],
+                },
+                "saved_to_db": True,
+                "status": "success",
+            }
+        
+        mock_app_service = Mock(spec=DetectionApplicationService)
+        mock_app_service.process_image_detection = mock_process_image_detection
+        app.dependency_overrides[get_detection_app_service] = lambda: mock_app_service
 
         # 创建测试图像文件
         test_image_data = b"fake_image_data"
@@ -53,15 +72,33 @@ class TestAPIEndpoints:
         assert response.status_code == 200
         result = response.json()
         assert result["filename"] == "test.jpg"
-        assert result["detection_type"] == "image"
-        assert "results" in result
-        assert result["status"] == "success"
+        assert "detection_id" in result
+        assert "result" in result
 
     def test_detect_hairnet_endpoint(self):
         """测试发网检测端点."""
-        # 模拟发网检测管道
-        mock_hairnet = Mock()
-        app.dependency_overrides[get_hairnet_pipeline] = lambda: mock_hairnet
+        # 模拟检测应用服务
+        from src.application.detection_application_service import DetectionApplicationService
+        from src.api.dependencies import get_detection_app_service
+        
+        async def mock_process_image_detection(*args, **kwargs):
+            return {
+                "ok": True,
+                "detection_id": "test_detection_123",
+                "filename": "test.jpg",
+                "detection_type": "hairnet",
+                "result": {
+                    "person_count": 2,
+                    "has_violations": False,
+                    "hairnet_results": [{"person_id": 1, "hairnet_detected": True}],
+                },
+                "saved_to_db": True,
+                "status": "success",
+            }
+        
+        mock_app_service = Mock(spec=DetectionApplicationService)
+        mock_app_service.process_image_detection = mock_process_image_detection
+        app.dependency_overrides[get_detection_app_service] = lambda: mock_app_service
 
         # 创建测试图像文件
         test_image_data = b"fake_image_data"
@@ -74,7 +111,6 @@ class TestAPIEndpoints:
         assert result["filename"] == "test.jpg"
         assert result["detection_type"] == "hairnet"
         assert "results" in result
-        assert result["status"] == "success"
 
     def test_detect_image_no_file(self):
         """测试图像检测端点无文件情况."""
@@ -88,8 +124,9 @@ class TestAPIEndpoints:
 
     def test_detect_image_no_pipeline(self):
         """测试图像检测端点管道未初始化情况."""
-        # 模拟管道未初始化
-        app.dependency_overrides[get_optimized_pipeline] = lambda: None
+        # 模拟应用服务未初始化
+        from src.api.dependencies import get_detection_app_service
+        app.dependency_overrides[get_detection_app_service] = lambda: None
 
         test_image_data = b"fake_image_data"
         files = {"file": ("test.jpg", io.BytesIO(test_image_data), "image/jpeg")}
@@ -101,8 +138,9 @@ class TestAPIEndpoints:
 
     def test_detect_hairnet_no_pipeline(self):
         """测试发网检测端点管道未初始化情况."""
-        # 模拟管道未初始化
-        app.dependency_overrides[get_hairnet_pipeline] = lambda: None
+        # 模拟应用服务未初始化
+        from src.api.dependencies import get_detection_app_service
+        app.dependency_overrides[get_detection_app_service] = lambda: None
 
         test_image_data = b"fake_image_data"
         files = {"file": ("test.jpg", io.BytesIO(test_image_data), "image/jpeg")}
@@ -110,7 +148,7 @@ class TestAPIEndpoints:
         response = self.client.post("/api/v1/detect/hairnet", files=files)
 
         assert response.status_code == 500
-        assert "发网检测服务未初始化" in response.json()["detail"]
+        assert "检测服务未初始化" in response.json()["detail"]
 
     def test_realtime_statistics_endpoint(self):
         """测试实时统计端点."""

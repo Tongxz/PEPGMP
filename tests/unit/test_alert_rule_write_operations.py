@@ -19,14 +19,34 @@ class MockAlertRuleRepository(IAlertRuleRepository):
         """根据ID查找告警规则."""
         return self.rules.get(rule_id)
 
-    async def find_all(self, camera_id=None, enabled=None):
+    async def find_all(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        camera_id: str | None = None,
+        enabled: bool | None = None,
+    ) -> list[AlertRule]:
         """查询告警规则列表."""
         rules = list(self.rules.values())
         if camera_id is not None:
             rules = [r for r in rules if r.camera_id == camera_id]
         if enabled is not None:
             rules = [r for r in rules if r.enabled == enabled]
-        return rules
+        # 分页
+        return rules[offset:offset + limit]
+
+    async def count(
+        self,
+        camera_id: str | None = None,
+        enabled: bool | None = None,
+    ) -> int:
+        """统计告警规则总数."""
+        rules = list(self.rules.values())
+        if camera_id is not None:
+            rules = [r for r in rules if r.camera_id == camera_id]
+        if enabled is not None:
+            rules = [r for r in rules if r.enabled == enabled]
+        return len(rules)
 
     async def save(self, rule: AlertRule) -> int:
         """保存告警规则."""

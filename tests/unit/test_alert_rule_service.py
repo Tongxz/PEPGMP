@@ -18,14 +18,31 @@ class MockAlertRuleRepository(IAlertRuleRepository):
         return next((r for r in self._rules if r.id == rule_id), None)
 
     async def find_all(
-        self, camera_id: str | None = None, enabled: bool | None = None
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        camera_id: str | None = None,
+        enabled: bool | None = None,
     ) -> list[AlertRule]:
         result = self._rules.copy()
         if camera_id:
             result = [r for r in result if r.camera_id == camera_id]
         if enabled is not None:
             result = [r for r in result if r.enabled == enabled]
-        return result
+        # 分页
+        return result[offset:offset + limit]
+
+    async def count(
+        self,
+        camera_id: str | None = None,
+        enabled: bool | None = None,
+    ) -> int:
+        result = self._rules.copy()
+        if camera_id:
+            result = [r for r in result if r.camera_id == camera_id]
+        if enabled is not None:
+            result = [r for r in result if r.enabled == enabled]
+        return len(result)
 
     async def save(self, rule: AlertRule) -> int:
         rule.id = len(self._rules) + 1
