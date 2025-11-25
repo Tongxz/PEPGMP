@@ -12,7 +12,7 @@
 
 ### 1. Redis订阅数为0 ⚠️
 
-**现象**：`docker exec pyt-redis-dev redis-cli -a pyt_dev_redis PUBSUB NUMSUB video:vid1` 返回 `0`
+**现象**：`docker exec pyt-redis-dev redis-cli -a pepgmp_dev_redis PUBSUB NUMSUB video:vid1` 返回 `0`
 
 **原因**：API服务器的Redis订阅任务没有成功启动或连接失败
 
@@ -60,7 +60,7 @@ echo $REDIS_PASSWORD
 **如果没有设置**，API服务器会使用默认值：
 - `REDIS_HOST=localhost`
 - `REDIS_PORT=6379`
-- `REDIS_PASSWORD=pyt_dev_redis`（已修复，现在有默认值）
+- `REDIS_PASSWORD=pepgmp_dev_redis`（已修复，现在有默认值）
 - `REDIS_DB=0`
 
 ### 步骤3：重启API服务器
@@ -105,7 +105,7 @@ tail -f logs/detect_vid1.log | grep -i "视频\|推送\|redis\|stream"
 重启API服务器后，检查Redis订阅数：
 
 ```bash
-docker exec pyt-redis-dev redis-cli -a pyt_dev_redis PUBSUB NUMSUB video:vid1
+docker exec pyt-redis-dev redis-cli -a pepgmp_dev_redis PUBSUB NUMSUB video:vid1
 ```
 
 **应该返回**：`1`（表示有1个订阅者）
@@ -115,7 +115,7 @@ docker exec pyt-redis-dev redis-cli -a pyt_dev_redis PUBSUB NUMSUB video:vid1
 在另一个终端监控Redis频道：
 
 ```bash
-docker exec -it pyt-redis-dev redis-cli -a pyt_dev_redis
+docker exec -it pyt-redis-dev redis-cli -a pepgmp_dev_redis
 > PSUBSCRIBE video:*
 ```
 
@@ -124,8 +124,8 @@ docker exec -it pyt-redis-dev redis-cli -a pyt_dev_redis
 ## 已应用的修复
 
 ### 1. Redis密码默认值 ✅
-- `VideoStreamManager._redis_subscribe_loop()` 现在使用默认密码 `pyt_dev_redis`
-- `VideoStreamApplicationService._push_via_redis()` 现在使用默认密码 `pyt_dev_redis`
+- `VideoStreamManager._redis_subscribe_loop()` 现在使用默认密码 `pepgmp_dev_redis`
+- `VideoStreamApplicationService._push_via_redis()` 现在使用默认密码 `pepgmp_dev_redis`
 - `LocalProcessExecutor` 现在自动设置Redis环境变量
 
 ### 2. 增强日志 ✅

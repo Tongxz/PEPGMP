@@ -14,7 +14,7 @@ async def check_cameras():
     """检查数据库中的摄像头数据"""
     database_url = os.getenv(
         "DATABASE_URL",
-        "postgresql://pyt_dev:pyt_dev_password@localhost:5432/pyt_development",
+        "postgresql://pepgmp_dev:pepgmp_dev_password@localhost:5432/pepgmp_development",
     )
     
     try:

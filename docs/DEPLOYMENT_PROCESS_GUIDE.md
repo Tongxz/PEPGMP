@@ -229,10 +229,10 @@ bash scripts/quick_deploy.sh 192.168.1.100 ubuntu
 
 ```bash
 # 在开发机器上构建生产镜像
-docker build -f Dockerfile.prod -t pyt-backend:latest .
+docker build -f Dockerfile.prod -t pepgmp-backend:latest .
 
 # 验证镜像
-docker images pyt-backend:latest
+docker images pepgmp-backend:latest
 ```
 
 #### 步骤2: 推送镜像
@@ -242,7 +242,7 @@ docker images pyt-backend:latest
 bash scripts/push_to_registry.sh latest v1.0.0
 
 # 验证推送
-curl http://192.168.30.83:5433/v2/pyt-backend/tags/list
+curl http://192.168.30.83:5433/v2/pepgmp-backend/tags/list
 ```
 
 #### 步骤3: 准备生产服务器
@@ -289,8 +289,8 @@ chmod 600 .env.production
 cd /opt/pyt
 
 # 1. 从内网Registry拉取镜像
-docker pull 192.168.30.83:5433/pyt-backend:latest
-docker tag 192.168.30.83:5433/pyt-backend:latest pyt-backend:latest
+docker pull 192.168.30.83:5433/pepgmp-backend:latest
+docker tag 192.168.30.83:5433/pepgmp-backend:latest pepgmp-backend:latest
 
 # 2. 启动服务（Ubuntu 22.04 使用 Docker Compose V2）
 docker compose -f docker-compose.prod.yml up -d
@@ -673,7 +673,7 @@ bash scripts/quick_deploy.sh <SERVER_IP> ubuntu
 
 ```bash
 # 1. 构建新镜像
-docker build -f Dockerfile.prod -t pyt-backend:latest .
+docker build -f Dockerfile.prod -t pepgmp-backend:latest .
 
 # 2. 推送到Registry
 bash scripts/push_to_registry.sh latest v1.1.0
@@ -689,7 +689,7 @@ docker-compose up -d
 
 ```bash
 # 1. 查看可用版本
-curl http://192.168.30.83:5433/v2/pyt-backend/tags/list
+curl http://192.168.30.83:5433/v2/pepgmp-backend/tags/list
 
 # 2. 回滚到特定版本
 bash scripts/deploy_from_registry.sh <SERVER_IP> ubuntu v1.0.0
@@ -774,7 +774,7 @@ docker ps | grep postgres
 docker-compose -f docker-compose.prod.yml logs database
 
 # 测试连接
-docker exec pyt-postgres-prod pg_isready -U pyt_prod
+docker exec pepgmp-postgres-prod pg_isready -U pepgmp_prod
 ```
 
 #### 问题4: 健康检查失败

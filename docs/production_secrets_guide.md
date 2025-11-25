@@ -155,7 +155,7 @@ python -c "import secrets; print(secrets.token_urlsafe(64))"
 
 ```bash
 # 步骤1：在数据库中创建新密码
-psql -U postgres -c "ALTER USER pyt_prod PASSWORD 'new_password';"
+psql -U postgres -c "ALTER USER pepgmp_prod PASSWORD 'new_password';"
 
 # 步骤2：更新配置文件
 nano .env.production
@@ -368,7 +368,7 @@ grep JWT_SECRET_KEY .env.production
 
 ```bash
 # 验证数据库密码
-psql "postgresql://pyt_prod:${DATABASE_PASSWORD}@localhost:5432/pyt_production" -c "SELECT 1;"
+psql "postgresql://pepgmp_prod:${DATABASE_PASSWORD}@localhost:5432/pepgmp_production" -c "SELECT 1;"
 
 # 验证Redis密码
 redis-cli -a "${REDIS_PASSWORD}" PING

@@ -34,7 +34,7 @@ docker-compose -f docker-compose.prod.full.yml down
 ```
 
 **包含服务**:
-- ✅ API服务 (pyt-backend)
+- ✅ API服务 (pepgmp-backend)
 - ✅ PostgreSQL数据库
 - ✅ Redis缓存
 
@@ -117,7 +117,7 @@ JWT_SECRET_KEY=your_jwt_secret
 
 ```bash
 # 方式1: 单独构建（已完成）
-docker build -f Dockerfile.prod -t pyt-backend:latest .
+docker build -f Dockerfile.prod -t pepgmp-backend:latest .
 
 # 方式2: docker-compose自动构建
 docker-compose -f docker-compose.prod.full.yml build
@@ -312,7 +312,7 @@ docker-compose -f docker-compose.prod.full.yml \
 ```bash
 # 备份PostgreSQL
 docker-compose -f docker-compose.prod.full.yml exec database \
-  pg_dump -U pyt_prod pyt_production > backup_$(date +%Y%m%d).sql
+  pg_dump -U pepgmp_prod pepgmp_production > backup_$(date +%Y%m%d).sql
 
 # 备份Redis
 docker-compose -f docker-compose.prod.full.yml exec redis \
@@ -330,7 +330,7 @@ docker run --rm \
 ```bash
 # 恢复PostgreSQL
 cat backup_20251103.sql | docker-compose -f docker-compose.prod.full.yml exec -T database \
-  psql -U pyt_prod -d pyt_production
+  psql -U pepgmp_prod -d pepgmp_production
 
 # 恢复Redis
 docker-compose -f docker-compose.prod.full.yml exec redis \
@@ -358,14 +358,14 @@ docker-compose -f docker-compose.prod.full.yml ps
 
 ```bash
 # 检查数据库健康状态
-docker-compose -f docker-compose.prod.full.yml exec database pg_isready -U pyt_prod
+docker-compose -f docker-compose.prod.full.yml exec database pg_isready -U pepgmp_prod
 
 # 查看数据库日志
 docker-compose -f docker-compose.prod.full.yml logs database
 
 # 手动连接测试
 docker-compose -f docker-compose.prod.full.yml exec database \
-  psql -U pyt_prod -d pyt_production -c "SELECT 1;"
+  psql -U pepgmp_prod -d pepgmp_production -c "SELECT 1;"
 ```
 
 #### 3. Redis连接失败
@@ -465,7 +465,7 @@ api:
 ```bash
 # 调整PostgreSQL配置
 docker-compose -f docker-compose.prod.full.yml exec database \
-  psql -U pyt_prod -d pyt_production -c "SHOW all;"
+  psql -U pepgmp_prod -d pepgmp_production -c "SHOW all;"
 ```
 
 ## 📝 总结
@@ -483,7 +483,7 @@ docker-compose -f docker-compose.prod.full.yml exec database \
 
 ```bash
 # 1. 构建镜像（可选，docker-compose也能自动构建）
-docker build -f Dockerfile.prod -t pyt-backend:latest .
+docker build -f Dockerfile.prod -t pepgmp-backend:latest .
 
 # 2. 启动完整环境
 docker-compose -f docker-compose.prod.full.yml up -d

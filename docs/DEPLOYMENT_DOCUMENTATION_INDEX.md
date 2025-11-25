@@ -289,13 +289,13 @@ bash scripts/check_deployment_readiness.sh
 
 ```bash
 # 构建镜像
-docker build -f Dockerfile.prod -t pyt-backend:latest .
+docker build -f Dockerfile.prod -t pepgmp-backend:latest .
 
 # 推送镜像
 bash scripts/push_to_registry.sh latest v1.0.0
 
 # 拉取镜像
-docker pull 192.168.30.83:5433/pyt-backend:latest
+docker pull 192.168.30.83:5433/pepgmp-backend:latest
 ```
 
 ### 部署管理

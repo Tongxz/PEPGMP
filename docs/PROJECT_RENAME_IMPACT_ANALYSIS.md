@@ -16,15 +16,15 @@
 |--------|--------|------|
 | `Pyt` | `pepGMP` | 项目名称 |
 | `pyt` | `pepgmp` | 小写项目名称（用于标识符） |
-| `pyt_development` | `pepgmp_development` | 开发环境数据库名 |
-| `pyt_production` | `pepgmp_production` | 生产环境数据库名 |
-| `pyt_dev` | `pepgmp_dev` | 开发环境数据库用户 |
-| `pyt_prod` | `pepgmp_prod` | 生产环境数据库用户 |
-| `pyt-backend` | `pepgmp-backend` | Docker镜像名称 |
-| `pyt-api-prod` | `pepgmp-api-prod` | API容器名称 |
-| `pyt-postgres-prod` | `pepgmp-postgres-prod` | PostgreSQL容器名称 |
-| `pyt-redis-prod` | `pepgmp-redis-prod` | Redis容器名称 |
-| `pyt-frontend` | `pepgmp-frontend` | 前端项目名称 |
+| `pepgmp_development` | `pepgmp_development` | 开发环境数据库名 |
+| `pepgmp_production` | `pepgmp_production` | 生产环境数据库名 |
+| `pepgmp_dev` | `pepgmp_dev` | 开发环境数据库用户 |
+| `pepgmp_prod` | `pepgmp_prod` | 生产环境数据库用户 |
+| `pepgmp-backend` | `pepgmp-backend` | Docker镜像名称 |
+| `pepgmp-api-prod` | `pepgmp-api-prod` | API容器名称 |
+| `pepgmp-postgres-prod` | `pepgmp-postgres-prod` | PostgreSQL容器名称 |
+| `pepgmp-redis-prod` | `pepgmp-redis-prod` | Redis容器名称 |
+| `pepgmp-frontend` | `pepgmp-frontend` | 前端项目名称 |
 
 ---
 
@@ -65,7 +65,7 @@ name = "pepgmp"  # 或保持 "human-behavior-detection"，仅改内部标识
 **当前内容**:
 ```json
 {
-  "name": "pyt-frontend",
+  "name": "pepgmp-frontend",
   ...
 }
 ```
@@ -87,8 +87,8 @@ name = "pepgmp"  # 或保持 "human-behavior-detection"，仅改内部标识
 #### 1.2.1 数据库名称
 
 **需要修改的地方**:
-- `pyt_development` → `pepgmp_development`
-- `pyt_production` → `pepgmp_production`
+- `pepgmp_development` → `pepgmp_development`
+- `pepgmp_production` → `pepgmp_production`
 - `pyt_test` → `pepgmp_test` (如存在)
 
 **涉及文件**:
@@ -103,20 +103,20 @@ name = "pepgmp"  # 或保持 "human-behavior-detection"，仅改内部标识
 ```yaml
 # docker-compose.yml
 environment:
-  POSTGRES_DB: pepgmp_development  # 原: pyt_development
+  POSTGRES_DB: pepgmp_development  # 原: pepgmp_development
 ```
 
 ```bash
 # .env
 DATABASE_URL=postgresql://pepgmp_dev:password@localhost:5432/pepgmp_development
-# 原: postgresql://pyt_dev:password@localhost:5432/pyt_development
+# 原: postgresql://pepgmp_dev:password@localhost:5432/pepgmp_development
 ```
 
 #### 1.2.2 数据库用户名
 
 **需要修改的地方**:
-- `pyt_dev` → `pepgmp_dev`
-- `pyt_prod` → `pepgmp_prod`
+- `pepgmp_dev` → `pepgmp_dev`
+- `pepgmp_prod` → `pepgmp_prod`
 
 **涉及文件**:
 - ✅ 所有 `docker-compose*.yml` 文件
@@ -127,7 +127,7 @@ DATABASE_URL=postgresql://pepgmp_dev:password@localhost:5432/pepgmp_development
 ```yaml
 # docker-compose.yml
 environment:
-  POSTGRES_USER: pepgmp_dev  # 原: pyt_dev
+  POSTGRES_USER: pepgmp_dev  # 原: pepgmp_dev
 ```
 
 ---
@@ -137,7 +137,7 @@ environment:
 #### 1.3.1 Docker 镜像名称
 
 **需要修改的地方**:
-- `pyt-backend:latest` → `pepgmp-backend:latest`
+- `pepgmp-backend:latest` → `pepgmp-backend:latest`
 
 **涉及文件**:
 - ✅ `Dockerfile.prod`
@@ -152,24 +152,24 @@ environment:
 ```yaml
 # docker-compose.prod.yml
 api:
-  image: pepgmp-backend:latest  # 原: pyt-backend:latest
+  image: pepgmp-backend:latest  # 原: pepgmp-backend:latest
 ```
 
 ```bash
 # scripts/push_to_registry.sh
-IMAGE_NAME="pepgmp-backend"  # 原: pyt-backend
+IMAGE_NAME="pepgmp-backend"  # 原: pepgmp-backend
 ```
 
 #### 1.3.2 Docker 容器名称
 
 **需要修改的地方**:
-- `pyt-api-prod` → `pepgmp-api-prod`
-- `pyt-postgres-prod` → `pepgmp-postgres-prod`
-- `pyt-redis-prod` → `pepgmp-redis-prod`
+- `pepgmp-api-prod` → `pepgmp-api-prod`
+- `pepgmp-postgres-prod` → `pepgmp-postgres-prod`
+- `pepgmp-redis-prod` → `pepgmp-redis-prod`
 - `pyt-api-dev` → `pepgmp-api-dev`
 - `pyt-postgres-dev` → `pepgmp-postgres-dev`
 - `pyt-redis-dev` → `pepgmp-redis-dev`
-- `pyt-frontend-dev` → `pepgmp-frontend-dev`
+- `pepgmp-frontend-dev` → `pepgmp-frontend-dev`
 
 **涉及文件**:
 - ✅ 所有 `docker-compose*.yml` 文件
@@ -181,17 +181,17 @@ IMAGE_NAME="pepgmp-backend"  # 原: pyt-backend
 # docker-compose.prod.yml
 services:
   api:
-    container_name: pepgmp-api-prod  # 原: pyt-api-prod
+    container_name: pepgmp-api-prod  # 原: pepgmp-api-prod
   database:
-    container_name: pepgmp-postgres-prod  # 原: pyt-postgres-prod
+    container_name: pepgmp-postgres-prod  # 原: pepgmp-postgres-prod
   redis:
-    container_name: pepgmp-redis-prod  # 原: pyt-redis-prod
+    container_name: pepgmp-redis-prod  # 原: pepgmp-redis-prod
 ```
 
 #### 1.3.3 Docker Registry 路径
 
 **需要修改的地方**:
-- `192.168.30.83:5433/pyt-backend` → `192.168.30.83:5433/pepgmp-backend`
+- `192.168.30.83:5433/pepgmp-backend` → `192.168.30.83:5433/pepgmp-backend`
 
 **涉及文件**:
 - ✅ `scripts/push_to_registry.sh`
@@ -202,7 +202,7 @@ services:
 ```bash
 # scripts/push_to_registry.sh
 REGISTRY_URL="192.168.30.83:5433"
-IMAGE_NAME="pepgmp-backend"  # 原: pyt-backend
+IMAGE_NAME="pepgmp-backend"  # 原: pepgmp-backend
 ```
 
 ---
@@ -252,9 +252,9 @@ REDIS_URL=redis://:password@localhost:6379/0
 **示例修改**:
 ```bash
 # scripts/backup_db.sh
-DB_NAME="pepgmp_production"  # 原: pyt_production
-DB_USER="pepgmp_prod"  # 原: pyt_prod
-CONTAINER_NAME="pepgmp-postgres-prod"  # 原: pyt-postgres-prod
+DB_NAME="pepgmp_production"  # 原: pepgmp_production
+DB_USER="pepgmp_prod"  # 原: pepgmp_prod
+CONTAINER_NAME="pepgmp-postgres-prod"  # 原: pepgmp-postgres-prod
 ```
 
 #### 1.5.2 检查脚本
@@ -280,7 +280,7 @@ CONTAINER_NAME="pepgmp-postgres-prod"  # 原: pyt-postgres-prod
 
 **检查方法**:
 ```bash
-grep -r "pyt_development\|pyt_production\|pyt_dev\|pyt_prod" src/
+grep -r "pepgmp_development\|pepgmp_production\|pepgmp_dev\|pepgmp_prod" src/
 ```
 
 #### 2.1.2 Docker 服务相关代码
@@ -454,7 +454,7 @@ grep -r "Pyt\|pyt" frontend/src/
 
 ```sql
 -- 1. 备份现有数据库
-pg_dump -U pyt_prod pyt_production > backup.sql
+pg_dump -U pepgmp_prod pepgmp_production > backup.sql
 
 -- 2. 创建新数据库
 CREATE DATABASE pepgmp_production;
@@ -482,8 +482,8 @@ docker tag pepgmp-backend:latest 192.168.30.83:5433/pepgmp-backend:latest
 docker push 192.168.30.83:5433/pepgmp-backend:latest
 
 # 4. 删除旧容器和镜像（可选）
-docker rm -f pyt-api-prod pyt-postgres-prod pyt-redis-prod
-docker rmi pyt-backend:latest
+docker rm -f pepgmp-api-prod pepgmp-postgres-prod pepgmp-redis-prod
+docker rmi pepgmp-backend:latest
 ```
 
 ### 3. 环境变量更新 🔴
@@ -495,10 +495,10 @@ docker rmi pyt-backend:latest
 cp .env.production .env.production.backup
 
 # 2. 更新配置
-sed -i 's/pyt_development/pepgmp_development/g' .env.production
-sed -i 's/pyt_production/pepgmp_production/g' .env.production
-sed -i 's/pyt_dev/pepgmp_dev/g' .env.production
-sed -i 's/pyt_prod/pepgmp_prod/g' .env.production
+sed -i 's/pepgmp_development/pepgmp_development/g' .env.production
+sed -i 's/pepgmp_production/pepgmp_production/g' .env.production
+sed -i 's/pepgmp_dev/pepgmp_dev/g' .env.production
+sed -i 's/pepgmp_prod/pepgmp_prod/g' .env.production
 
 # 3. 验证配置
 grep -E "pepgmp|pyt" .env.production
@@ -552,15 +552,15 @@ cat > scripts/rename_project.sh << 'EOF'
 
 # 定义替换映射
 declare -A replacements=(
-    ["pyt_development"]="pepgmp_development"
-    ["pyt_production"]="pepgmp_production"
-    ["pyt_dev"]="pepgmp_dev"
-    ["pyt_prod"]="pepgmp_prod"
-    ["pyt-backend"]="pepgmp-backend"
-    ["pyt-api-prod"]="pepgmp-api-prod"
-    ["pyt-postgres-prod"]="pepgmp-postgres-prod"
-    ["pyt-redis-prod"]="pepgmp-redis-prod"
-    ["pyt-frontend"]="pepgmp-frontend"
+    ["pepgmp_development"]="pepgmp_development"
+    ["pepgmp_production"]="pepgmp_production"
+    ["pepgmp_dev"]="pepgmp_dev"
+    ["pepgmp_prod"]="pepgmp_prod"
+    ["pepgmp-backend"]="pepgmp-backend"
+    ["pepgmp-api-prod"]="pepgmp-api-prod"
+    ["pepgmp-postgres-prod"]="pepgmp-postgres-prod"
+    ["pepgmp-redis-prod"]="pepgmp-redis-prod"
+    ["pepgmp-frontend"]="pepgmp-frontend"
 )
 
 # 执行替换（排除.git、node_modules、venv等）
@@ -570,7 +570,7 @@ find . -type f \( -name "*.py" -o -name "*.yml" -o -name "*.yaml" -o -name "*.js
     ! -path "./venv/*" \
     ! -path "./.venv/*" \
     ! -path "./mlruns/*" \
-    -exec sed -i '' -e 's/pyt_development/pepgmp_development/g' {} \;
+    -exec sed -i '' -e 's/pepgmp_development/pepgmp_development/g' {} \;
 
 # ... 其他替换
 EOF

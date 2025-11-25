@@ -77,7 +77,7 @@ python scripts/validate_config.py
 ============================================================
    环境: development
    日志级别: DEBUG
-   数据库: ***@localhost:5432/pyt_development
+   数据库: ***@localhost:5432/pepgmp_development
    Redis: ***@localhost:6379/0
    领域服务: 启用
    灰度百分比: 100%
@@ -124,8 +124,8 @@ python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
 ```bash
 ENVIRONMENT=development
 LOG_LEVEL=DEBUG
-DATABASE_URL=postgresql://pyt_dev:pyt_dev_password@localhost:5432/pyt_development
-REDIS_URL=redis://:pyt_dev_redis@localhost:6379/0
+DATABASE_URL=postgresql://pepgmp_dev:pepgmp_dev_password@localhost:5432/pepgmp_development
+REDIS_URL=redis://:pepgmp_dev_redis@localhost:6379/0
 ```
 
 ### 测试环境
@@ -150,7 +150,7 @@ export ENVIRONMENT=testing
 ```bash
 ENVIRONMENT=production
 LOG_LEVEL=INFO
-DATABASE_URL=postgresql://prod_user:strong_password@prod-db:5432/pyt_production
+DATABASE_URL=postgresql://prod_user:strong_password@prod-db:5432/pepgmp_production
 REDIS_URL=redis://:strong_redis_password@prod-redis:6379/0
 ADMIN_PASSWORD=very_strong_password
 SECRET_KEY=production-secret-key-64-chars-long

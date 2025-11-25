@@ -115,12 +115,12 @@ class Config:
     @property
     def database_name(self) -> str:
         """数据库名称."""
-        return os.getenv("DATABASE_NAME", "pyt_development")
+        return os.getenv("DATABASE_NAME", "pepgmp_development")
 
     @property
     def database_user(self) -> str:
         """数据库用户."""
-        return os.getenv("DATABASE_USER", "pyt_dev")
+        return os.getenv("DATABASE_USER", "pepgmp_dev")
 
     @property
     def database_password(self) -> str:

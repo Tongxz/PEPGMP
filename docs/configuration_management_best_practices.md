@@ -6,8 +6,8 @@
 
 **启动命令过长**:
 ```bash
-export DATABASE_URL="postgresql://pyt_dev:pyt_dev_password@localhost:5432/pyt_development" && \
-export REDIS_URL="redis://:pyt_dev_redis@localhost:6379/0" && \
+export DATABASE_URL="postgresql://pepgmp_dev:pepgmp_dev_password@localhost:5432/pepgmp_development" && \
+export REDIS_URL="redis://:pepgmp_dev_redis@localhost:6379/0" && \
 export LOG_LEVEL=DEBUG && \
 export AUTO_CONVERT_TENSORRT=false && \
 export USE_DOMAIN_SERVICE=true && \
@@ -41,8 +41,8 @@ AUTO_CONVERT_TENSORRT=false
 # 数据库配置
 DATABASE_HOST=localhost
 DATABASE_PORT=5432
-DATABASE_NAME=pyt_development
-DATABASE_USER=pyt_dev
+DATABASE_NAME=pepgmp_development
+DATABASE_USER=pepgmp_dev
 DATABASE_PASSWORD=change_me_in_production
 
 # Redis配置
@@ -84,10 +84,10 @@ LOG_LEVEL=DEBUG
 AUTO_CONVERT_TENSORRT=false
 
 # 数据库配置（URL格式）
-DATABASE_URL=postgresql://pyt_dev:pyt_dev_password@localhost:5432/pyt_development
+DATABASE_URL=postgresql://pepgmp_dev:pepgmp_dev_password@localhost:5432/pepgmp_development
 
 # Redis配置（URL格式）
-REDIS_URL=redis://:pyt_dev_redis@localhost:6379/0
+REDIS_URL=redis://:pepgmp_dev_redis@localhost:6379/0
 
 # 领域服务配置
 USE_DOMAIN_SERVICE=true
@@ -113,7 +113,7 @@ ENVIRONMENT=production
 LOG_LEVEL=INFO
 AUTO_CONVERT_TENSORRT=true
 
-DATABASE_URL=postgresql://prod_user:strong_password@prod-db:5432/pyt_production
+DATABASE_URL=postgresql://prod_user:strong_password@prod-db:5432/pepgmp_production
 REDIS_URL=redis://:strong_redis_password@prod-redis:6379/0
 
 USE_DOMAIN_SERVICE=true

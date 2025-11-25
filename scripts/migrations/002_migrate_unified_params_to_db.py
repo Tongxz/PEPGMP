@@ -242,7 +242,7 @@ async def main():
         type=str,
         default=os.getenv(
             "DATABASE_URL",
-            "postgresql://pyt_dev:pyt_dev_password@localhost:5432/pyt_development",
+            "postgresql://pepgmp_dev:pepgmp_dev_password@localhost:5432/pepgmp_development",
         ),
         help="数据库连接URL",
     )

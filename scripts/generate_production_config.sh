@@ -86,9 +86,9 @@ API_PORT=${API_PORT}
 LOG_LEVEL=INFO
 
 # ==================== 数据库配置 ====================
-DATABASE_URL=postgresql://pyt_prod:${DATABASE_PASSWORD}@database:5432/pyt_production
-POSTGRES_USER=pyt_prod
-POSTGRES_DB=pyt_production
+DATABASE_URL=postgresql://pepgmp_prod:${DATABASE_PASSWORD}@database:5432/pepgmp_production
+POSTGRES_USER=pepgmp_prod
+POSTGRES_DB=pepgmp_production
 DATABASE_PASSWORD=${DATABASE_PASSWORD}
 
 # ==================== Redis配置 ====================
@@ -187,8 +187,8 @@ Production Credentials
   密码: ${ADMIN_PASSWORD}
 
 数据库:
-  用户名: pyt_prod
-  数据库: pyt_production
+  用户名: pepgmp_prod
+  数据库: pepgmp_production
   密码: ${DATABASE_PASSWORD}
 
 Redis:

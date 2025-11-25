@@ -14,9 +14,9 @@ NC='\033[0m'
 
 # 配置
 BACKUP_FILE="$1"
-DB_CONTAINER="pyt-postgres-prod"
-DB_USER="pyt_prod"
-DB_NAME="pyt_production"
+DB_CONTAINER="pepgmp-postgres-prod"
+DB_USER="pepgmp_prod"
+DB_NAME="pepgmp_production"
 
 echo "========================================================================="
 echo "                     数据库恢复"

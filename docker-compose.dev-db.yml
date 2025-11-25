@@ -5,7 +5,7 @@ version: "3.8"
 # 用于本地开发时提供数据库服务
 
 networks:
-  pyt-dev-network:
+  pepgmp-dev-network:
     driver: bridge
 
 volumes:
@@ -18,11 +18,11 @@ services:
   # PostgreSQL 数据库 (开发环境)
   database:
     image: postgres:16-alpine
-    container_name: pyt-postgres-dev
+    container_name: pepgmp-postgres-dev
     environment:
-      POSTGRES_DB: pyt_development
-      POSTGRES_USER: pyt_dev
-      POSTGRES_PASSWORD: pyt_dev_password
+      POSTGRES_DB: pepgmp_development
+      POSTGRES_USER: pepgmp_dev
+      POSTGRES_PASSWORD: pepgmp_dev_password
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
@@ -30,9 +30,9 @@ services:
     ports:
       - "5432:5432"
     networks:
-      - pyt-dev-network
+      - pepgmp-dev-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pyt_dev -d pyt_development"]
+      test: ["CMD-SHELL", "pg_isready -U pepgmp_dev -d pepgmp_development"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -42,11 +42,11 @@ services:
   # Redis 缓存 (开发环境)
   redis:
     image: redis:7-alpine
-    container_name: pyt-redis-dev
+    container_name: pepgmp-redis-dev
     command: >
       redis-server
       --appendonly yes
-      --requirepass pyt_dev_redis
+      --requirepass pepgmp_dev_redis
       --maxmemory 256mb
       --maxmemory-policy allkeys-lru
     volumes:
@@ -54,7 +54,7 @@ services:
     ports:
       - "6379:6379"
     networks:
-      - pyt-dev-network
+      - pepgmp-dev-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -70,7 +70,7 @@ services:
   #   ports:
   #     - "8081:8080"
   #   networks:
-  #     - pyt-dev-network
+  #     - pepgmp-dev-network
   #   environment:
   #     ADMINER_DEFAULT_SERVER: database
   #   depends_on:

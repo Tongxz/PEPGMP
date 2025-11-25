@@ -21,7 +21,7 @@ async def test_db_insert():
 
     database_url = os.getenv(
         "DATABASE_URL",
-        "postgresql://pyt_dev:pyt_dev_password@localhost:5432/pyt_development",
+        "postgresql://pepgmp_dev:pepgmp_dev_password@localhost:5432/pepgmp_development",
     )
     conn = await asyncpg.connect(database_url)
 

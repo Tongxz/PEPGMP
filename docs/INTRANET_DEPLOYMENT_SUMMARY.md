@@ -183,14 +183,14 @@ bash scripts/quick_deploy.sh <SERVER_IP> ubuntu
 
 ```bash
 # 1. 构建镜像
-docker build -f Dockerfile.prod -t pyt-backend:latest .
+docker build -f Dockerfile.prod -t pepgmp-backend:latest .
 
 # 2. 推送到内网Registry
-docker tag pyt-backend:latest 192.168.30.83:5433/pyt-backend:latest
-docker push 192.168.30.83:5433/pyt-backend:latest
+docker tag pepgmp-backend:latest 192.168.30.83:5433/pepgmp-backend:latest
+docker push 192.168.30.83:5433/pepgmp-backend:latest
 
 # 3. 在生产服务器上拉取（Ubuntu 22.04）
-docker pull 192.168.30.83:5433/pyt-backend:latest
+docker pull 192.168.30.83:5433/pepgmp-backend:latest
 
 # 4. 启动服务（Docker Compose V2）
 docker compose -f docker-compose.prod.yml up -d

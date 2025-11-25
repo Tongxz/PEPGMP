@@ -75,7 +75,7 @@ SELECT id, name, status FROM cameras;
 ### 1. Docker容器代码未更新
 
 **问题**:
-- 容器使用的是registry中的旧镜像 (`192.168.30.83:5433/pyt-backend:latest`)
+- 容器使用的是registry中的旧镜像 (`192.168.30.83:5433/pepgmp-backend:latest`)
 - 镜像不包含新的`PostgreSQLCameraRepository`代码
 - API端点返回空数组（仍在使用旧实现）
 
@@ -89,11 +89,11 @@ SELECT id, name, status FROM cameras;
 
 ```bash
 # 1. 构建新镜像
-docker build -f Dockerfile.prod -t pyt-backend:latest .
+docker build -f Dockerfile.prod -t pepgmp-backend:latest .
 
 # 2. 推送到registry
-docker tag pyt-backend:latest 192.168.30.83:5433/pyt-backend:latest
-docker push 192.168.30.83:5433/pyt-backend:latest
+docker tag pepgmp-backend:latest 192.168.30.83:5433/pepgmp-backend:latest
+docker push 192.168.30.83:5433/pepgmp-backend:latest
 
 # 3. 重启服务
 docker-compose -f docker-compose.test.yml restart api
@@ -121,9 +121,9 @@ docker-compose -f docker-compose.test.yml restart api
 
 1. **重新构建Docker镜像**
    ```bash
-   docker build -f Dockerfile.prod -t pyt-backend:latest .
-   docker tag pyt-backend:latest 192.168.30.83:5433/pyt-backend:latest
-   docker push 192.168.30.83:5433/pyt-backend:latest
+   docker build -f Dockerfile.prod -t pepgmp-backend:latest .
+   docker tag pepgmp-backend:latest 192.168.30.83:5433/pepgmp-backend:latest
+   docker push 192.168.30.83:5433/pepgmp-backend:latest
    ```
 
 2. **重启服务**
@@ -148,7 +148,7 @@ docker-compose -f docker-compose.test.yml restart api
 
 ```bash
 # 1. 设置环境变量
-export DATABASE_URL="postgresql://pyt_prod:wOFbaHnK4REl9urP3phm41UNNPLiKjm1CBFEzRmiP_c@localhost:5432/pyt_production"
+export DATABASE_URL="postgresql://pepgmp_prod:wOFbaHnK4REl9urP3phm41UNNPLiKjm1CBFEzRmiP_c@localhost:5432/pepgmp_production"
 
 # 2. 启动本地服务
 python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8000

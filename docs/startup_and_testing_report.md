@@ -117,7 +117,7 @@
 
 **Dockerfile**: `Dockerfile.prod`
 
-**目标镜像**: `pyt-backend:latest`
+**目标镜像**: `pepgmp-backend:latest`
 
 **结果**: 失败（网络限制）
 
@@ -144,7 +144,7 @@ Error: dial tcp 192.133.77.133:443: i/o timeout
 
 1. ✅ **验证本地镜像**: 确认本地有 `python:3.10-slim` 镜像
 2. ✅ **添加镜像标签**: `docker tag python:3.10-slim python:3.10-slim-bookworm`
-3. ✅ **使用本地镜像**: `docker build --pull=false -f Dockerfile.prod -t pyt-backend:latest .`
+3. ✅ **使用本地镜像**: `docker build --pull=false -f Dockerfile.prod -t pepgmp-backend:latest .`
 4. ❌ **结果**: 仍然失败，因为 `apt-get install` 需要访问 Debian 仓库
 
 #### 根本原因
@@ -218,7 +218,7 @@ Error: dial tcp 192.133.77.133:443: i/o timeout
 
 重启Docker后重试：
 ```bash
-docker build -f Dockerfile.prod -t pyt-backend:latest .
+docker build -f Dockerfile.prod -t pepgmp-backend:latest .
 ```
 
 **方案2: 配置apt镜像源**
@@ -232,7 +232,7 @@ RUN sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/debi
 ```bash
 docker build --build-arg HTTP_PROXY=http://proxy:port \
              --build-arg HTTPS_PROXY=http://proxy:port \
-             -f Dockerfile.prod -t pyt-backend:latest .
+             -f Dockerfile.prod -t pepgmp-backend:latest .
 ```
 
 **方案4: 在其他网络环境构建**
@@ -240,16 +240,16 @@ docker build --build-arg HTTP_PROXY=http://proxy:port \
 在网络条件好的环境（如云服务器）构建：
 ```bash
 # 构建
-docker build -f Dockerfile.prod -t pyt-backend:latest .
+docker build -f Dockerfile.prod -t pepgmp-backend:latest .
 
 # 导出
-docker save pyt-backend:latest -o pyt-backend.tar
+docker save pepgmp-backend:latest -o pepgmp-backend.tar
 
 # 传输到本地
 # ...
 
 # 导入
-docker load -i pyt-backend.tar
+docker load -i pepgmp-backend.tar
 ```
 
 ### 数据清理（可选）

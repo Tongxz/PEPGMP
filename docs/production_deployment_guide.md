@@ -104,7 +104,7 @@ ENVIRONMENT=production
 API_PORT=8000
 LOG_LEVEL=INFO
 
-DATABASE_URL=postgresql://pyt_prod:CHANGE_ME@database:5432/pyt_production
+DATABASE_URL=postgresql://pepgmp_prod:CHANGE_ME@database:5432/pepgmp_production
 DATABASE_PASSWORD=CHANGE_ME_STRONG_PASSWORD
 REDIS_PASSWORD=CHANGE_ME_STRONG_PASSWORD
 SECRET_KEY=CHANGE_ME_SECRET_KEY
@@ -159,10 +159,10 @@ openssl rand -base64 32
 
 ```bash
 # 构建生产镜像
-docker build -f Dockerfile.prod -t pyt-backend:latest .
+docker build -f Dockerfile.prod -t pepgmp-backend:latest .
 
 # 验证镜像
-docker images pyt-backend:latest
+docker images pepgmp-backend:latest
 ```
 
 ### 步骤4: 推送镜像到私有Registry
@@ -179,7 +179,7 @@ bash scripts/push_to_registry.sh latest v1.0.0
 ```bash
 # 查看Registry中的镜像
 curl http://192.168.30.83:5433/v2/_catalog
-curl http://192.168.30.83:5433/v2/pyt-backend/tags/list
+curl http://192.168.30.83:5433/v2/pepgmp-backend/tags/list
 ```
 
 ### 步骤5: 部署到生产服务器
@@ -290,7 +290,7 @@ bash scripts/quick_deploy.sh <服务器IP>
 
 ```bash
 # 1. 构建新镜像
-docker build -f Dockerfile.prod -t pyt-backend:latest .
+docker build -f Dockerfile.prod -t pepgmp-backend:latest .
 
 # 2. 推送到Registry
 bash scripts/push_to_registry.sh latest v1.1.0
@@ -306,7 +306,7 @@ docker-compose up -d
 
 ```bash
 # 查看可用版本
-curl http://192.168.30.83:5433/v2/pyt-backend/tags/list
+curl http://192.168.30.83:5433/v2/pepgmp-backend/tags/list
 
 # 回滚到特定版本
 bash scripts/deploy_from_registry.sh <服务器IP> ubuntu v1.0.0
@@ -415,7 +415,7 @@ docker ps | grep postgres
 docker-compose logs database
 
 # 3. 测试连接
-docker exec pyt-postgres-prod pg_isready -U pyt_prod
+docker exec pepgmp-postgres-prod pg_isready -U pepgmp_prod
 
 # 4. 检查密码配置
 grep DATABASE_PASSWORD .env
@@ -485,10 +485,10 @@ docker system prune -a
 
 ```bash
 # 备份PostgreSQL
-docker exec pyt-postgres-prod pg_dump -U pyt_prod pyt_production > backup_$(date +%Y%m%d).sql
+docker exec pepgmp-postgres-prod pg_dump -U pepgmp_prod pepgmp_production > backup_$(date +%Y%m%d).sql
 
 # 备份Redis
-docker exec pyt-redis-prod redis-cli --rdb /data/backup.rdb
+docker exec pepgmp-redis-prod redis-cli --rdb /data/backup.rdb
 
 # 备份配置文件
 tar czf config_backup_$(date +%Y%m%d).tar.gz /opt/pyt/config /opt/pyt/.env
@@ -549,13 +549,13 @@ sudo ufw status
 
 ```bash
 # 检查容器安全
-docker scan pyt-backend:latest
+docker scan pepgmp-backend:latest
 
 # 检查漏洞
-docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image pyt-backend:latest
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image pepgmp-backend:latest
 
 # 检查配置
-docker inspect pyt-api-prod
+docker inspect pepgmp-api-prod
 ```
 
 ## 📈 性能优化
@@ -590,8 +590,8 @@ docker-compose up -d --scale api=3
 
 ```bash
 # 调整PostgreSQL配置
-docker exec -it pyt-postgres-prod bash
-psql -U pyt_prod -d pyt_production
+docker exec -it pepgmp-postgres-prod bash
+psql -U pepgmp_prod -d pepgmp_production
 
 # 常用优化查询
 SHOW shared_buffers;
@@ -619,7 +619,7 @@ jobs:
 
       - name: Build and Push
         run: |
-          docker build -f Dockerfile.prod -t pyt-backend:latest .
+          docker build -f Dockerfile.prod -t pepgmp-backend:latest .
           bash scripts/push_to_registry.sh
 
       - name: Deploy

@@ -81,7 +81,7 @@ docker logs pyt-postgres-dev
 **步骤**：
 1. **执行核心表创建脚本**：
 ```bash
-docker exec -i pyt-postgres-dev psql -U pyt_dev -d pyt_development < scripts/migrations/001_create_core_tables.sql
+docker exec -i pyt-postgres-dev psql -U pepgmp_dev -d pepgmp_development < scripts/migrations/001_create_core_tables.sql
 ```
 
 2. **执行应用初始化**（创建 ORM 表）：
@@ -136,7 +136,7 @@ python scripts/init_database.py
 
 **执行方式**：
 ```bash
-docker exec -i pyt-postgres-dev psql -U pyt_dev -d pyt_development < scripts/migrations/001_create_core_tables.sql
+docker exec -i pyt-postgres-dev psql -U pepgmp_dev -d pepgmp_development < scripts/migrations/001_create_core_tables.sql
 ```
 
 ### 3. `scripts/init_database.py`
@@ -184,7 +184,7 @@ docker-compose ps
 2. **执行 SQL 迁移脚本**（如果需要）：
 ```bash
 # 创建核心业务表
-docker exec -i pyt-postgres-dev psql -U pyt_dev -d pyt_development < scripts/migrations/001_create_core_tables.sql
+docker exec -i pyt-postgres-dev psql -U pepgmp_dev -d pepgmp_development < scripts/migrations/001_create_core_tables.sql
 ```
 
 3. **启动应用**（自动创建 ORM 表）：
@@ -199,11 +199,11 @@ docker logs pyt-api-dev | grep -i "数据库初始化"
 4. **验证表创建**（可选）：
 ```bash
 # 查看所有表
-docker exec pyt-postgres-dev psql -U pyt_dev -d pyt_development -c "\dt"
+docker exec pyt-postgres-dev psql -U pepgmp_dev -d pepgmp_development -c "\dt"
 
 # 查看表结构
-docker exec pyt-postgres-dev psql -U pyt_dev -d pyt_development -c "\d workflows"
-docker exec pyt-postgres-dev psql -U pyt_dev -d pyt_development -c "\d detection_records"
+docker exec pyt-postgres-dev psql -U pepgmp_dev -d pepgmp_development -c "\d workflows"
+docker exec pyt-postgres-dev psql -U pepgmp_dev -d pepgmp_development -c "\d detection_records"
 ```
 
 5. **插入初始数据**（可选）：
@@ -264,10 +264,10 @@ docker exec pyt-api-dev python scripts/init_database.py
 **解决方案**：
 ```bash
 # 检查表是否存在
-docker exec pyt-postgres-dev psql -U pyt_dev -d pyt_development -c "\dt"
+docker exec pyt-postgres-dev psql -U pepgmp_dev -d pepgmp_development -c "\dt"
 
 # 手动执行 SQL 脚本创建表
-docker exec -i pyt-postgres-dev psql -U pyt_dev -d pyt_development < scripts/migrations/001_create_core_tables.sql
+docker exec -i pyt-postgres-dev psql -U pepgmp_dev -d pepgmp_development < scripts/migrations/001_create_core_tables.sql
 
 # 或重启应用（自动创建 ORM 表）
 docker-compose restart api
@@ -279,7 +279,7 @@ docker-compose restart api
 
 **解决方案**：
 1. 检查 ORM 模型定义：`src/database/models.py`
-2. 检查数据库实际结构：`docker exec pyt-postgres-dev psql -U pyt_dev -d pyt_development -c "\d table_name"`
+2. 检查数据库实际结构：`docker exec pyt-postgres-dev psql -U pepgmp_dev -d pepgmp_development -c "\d table_name"`
 3. 手动执行 ALTER TABLE 或更新迁移脚本
 
 ### 问题 3：初始化脚本未执行

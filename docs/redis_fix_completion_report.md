@@ -18,7 +18,7 @@ ERROR:src.api.redis_listener:Redis connection failed: Authentication required.. 
 
 ### 根本原因
 
-1. **Redis服务器配置**: Redis在Docker容器中运行，配置了密码`pyt_dev_redis`
+1. **Redis服务器配置**: Redis在Docker容器中运行，配置了密码`pepgmp_dev_redis`
 2. **redis_listener配置**: 使用单独的环境变量（REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_PASSWORD）
 3. **环境变量缺失**: 本地启动时未设置`REDIS_PASSWORD`环境变量
 4. **配置不一致**: 其他服务（如video_stream_manager）使用`REDIS_URL`，但redis_listener不支持
@@ -88,7 +88,7 @@ INFO:src.api.redis_listener:Successfully subscribed to 'hbd:stats' channel. List
 **video_stream_manager也正常**:
 ```
 INFO: src.services.video_stream_manager:_redis_subscribe_loop:261 - 视频流Redis订阅使用连接: redis://***@localhost:6379/0
-INFO: src.services.video_stream_manager:_redis_subscribe_loop:268 - 视频流Redis订阅已启动: redis://:pyt_dev_redis@localhost:6379/0 (pattern=video:*)
+INFO: src.services.video_stream_manager:_redis_subscribe_loop:268 - 视频流Redis订阅已启动: redis://:pepgmp_dev_redis@localhost:6379/0 (pattern=video:*)
 ```
 
 ### 2. 错误日志检查 ✅
@@ -170,15 +170,15 @@ $ curl -s http://localhost:8000/api/v1/monitoring/health | python3 -m json.tool
 **docker-compose.yml** (已配置):
 ```yaml
 environment:
-  - REDIS_URL=redis://:pyt_dev_redis@redis:6379/0
+  - REDIS_URL=redis://:pepgmp_dev_redis@redis:6379/0
 ```
 
 ### 本地环境
 
 **启动命令**:
 ```bash
-export DATABASE_URL="postgresql://pyt_dev:pyt_dev_password@localhost:5432/pyt_development"
-export REDIS_URL="redis://:pyt_dev_redis@localhost:6379/0"
+export DATABASE_URL="postgresql://pepgmp_dev:pepgmp_dev_password@localhost:5432/pepgmp_development"
+export REDIS_URL="redis://:pepgmp_dev_redis@localhost:6379/0"
 export LOG_LEVEL=DEBUG
 export AUTO_CONVERT_TENSORRT=false
 export USE_DOMAIN_SERVICE=true

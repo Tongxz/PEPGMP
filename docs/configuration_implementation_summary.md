@@ -22,8 +22,8 @@
 **`.env.example`** - 配置模板（可提交到Git）
 ```bash
 ENVIRONMENT=development
-DATABASE_URL=postgresql://pyt_dev:pyt_dev_password@localhost:5432/pyt_development
-REDIS_URL=redis://:pyt_dev_redis@localhost:6379/0
+DATABASE_URL=postgresql://pepgmp_dev:pepgmp_dev_password@localhost:5432/pepgmp_development
+REDIS_URL=redis://:pepgmp_dev_redis@localhost:6379/0
 USE_DOMAIN_SERVICE=true
 ROLLOUT_PERCENT=100
 ...
@@ -108,7 +108,7 @@ python scripts/validate_config.py
 ============================================================
    环境: development
    日志级别: DEBUG
-   数据库: ***@localhost:5432/pyt_development
+   数据库: ***@localhost:5432/pepgmp_development
    Redis: ***@localhost:6379/0
    领域服务: 启用
    灰度百分比: 100%
@@ -149,8 +149,8 @@ pip install python-dotenv
 
 **启动命令**:
 ```bash
-export DATABASE_URL="postgresql://pyt_dev:pyt_dev_password@localhost:5432/pyt_development" && \
-export REDIS_URL="redis://:pyt_dev_redis@localhost:6379/0" && \
+export DATABASE_URL="postgresql://pepgmp_dev:pepgmp_dev_password@localhost:5432/pepgmp_development" && \
+export REDIS_URL="redis://:pepgmp_dev_redis@localhost:6379/0" && \
 export LOG_LEVEL=DEBUG && \
 export AUTO_CONVERT_TENSORRT=false && \
 export USE_DOMAIN_SERVICE=true && \
@@ -251,7 +251,7 @@ $ python scripts/validate_config.py
 ============================================================
    环境: development
    日志级别: DEBUG
-   数据库: ***@localhost:5432/pyt_development
+   数据库: ***@localhost:5432/pepgmp_development
    Redis: ***@localhost:6379/0
    领域服务: 启用
    灰度百分比: 100%

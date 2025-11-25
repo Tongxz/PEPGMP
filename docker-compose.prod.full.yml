@@ -53,10 +53,10 @@ services:
   # ==================== PostgreSQL 数据库（生产） ====================
   database:
     image: postgres:16-alpine
-    container_name: pyt-postgres-prod
+    container_name: pepgmp-postgres-prod
     environment:
-      POSTGRES_DB: pyt_production
-      POSTGRES_USER: pyt_prod
+      POSTGRES_DB: pepgmp_production
+      POSTGRES_USER: pepgmp_prod
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
@@ -64,7 +64,7 @@ services:
     networks:
       - backend
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pyt_prod -d pyt_production"]
+      test: ["CMD-SHELL", "pg_isready -U pepgmp_prod -d pepgmp_production"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -87,7 +87,7 @@ services:
   # ==================== Redis 缓存（生产） ====================
   redis:
     image: redis:7-alpine
-    container_name: pyt-redis-prod
+    container_name: pepgmp-redis-prod
     command: >
       redis-server
       --appendonly yes
@@ -124,8 +124,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.prod
-    image: pyt-backend:latest
-    container_name: pyt-api-prod
+    image: pepgmp-backend:latest
+    container_name: pepgmp-api-prod
     env_file:
       - .env.production
     environment:
@@ -170,7 +170,7 @@ services:
   # ==================== Nginx 反向代理（可选） ====================
   nginx:
     image: nginx:alpine
-    container_name: pyt-nginx-prod
+    container_name: pepgmp-nginx-prod
     ports:
       - "80:80"
       - "443:443"
@@ -250,7 +250,7 @@ services:
     image: ${DOCKER_REGISTRY:-192.168.30.83:5433}/mlflow:latest
     container_name: pyt-mlflow-prod
     environment:
-      - MLFLOW_BACKEND_STORE_URI=postgresql://${POSTGRES_USER:-pyt_prod}:${DATABASE_PASSWORD}@database:5432/${POSTGRES_DB:-pyt_production}
+      - MLFLOW_BACKEND_STORE_URI=postgresql://${POSTGRES_USER:-pepgmp_prod}:${DATABASE_PASSWORD}@database:5432/${POSTGRES_DB:-pepgmp_production}
       - MLFLOW_DEFAULT_ARTIFACT_ROOT=file:///mlflow/artifacts
       - MLFLOW_SERVER_DEFAULT_ARTIFACT_ROOT=file:///mlflow/artifacts
       - MLFLOW_SERVER_FILE_STORE=/mlflow/file_store

@@ -17,7 +17,7 @@ NC='\033[0m' # No Color
 
 # 配置
 REGISTRY_URL="192.168.30.83:5433"
-IMAGE_NAME="pyt-backend"
+IMAGE_NAME="pepgmp-backend"
 IMAGE_TAG="${1:-latest}"
 VERSION="${2:-$(date +%Y%m%d_%H%M%S)}"
 

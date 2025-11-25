@@ -108,7 +108,7 @@ class LocalProcessExecutor(AbstractProcessExecutor):
             # 获取数据库连接URL
             database_url = os.getenv(
                 "DATABASE_URL",
-                "postgresql://pyt_dev:pyt_dev_password@localhost:5432/pyt_development",
+                "postgresql://pepgmp_dev:pepgmp_dev_password@localhost:5432/pepgmp_development",
             )
 
             # 在同步上下文中运行异步代码
@@ -292,7 +292,7 @@ class LocalProcessExecutor(AbstractProcessExecutor):
             redis_port = os.getenv("REDIS_PORT", "6379")
             redis_db = os.getenv("REDIS_DB", "0")
             redis_password = os.getenv(
-                "REDIS_PASSWORD", "pyt_dev_redis"
+                "REDIS_PASSWORD", "pepgmp_dev_redis"
             )  # Docker Redis默认密码
             if redis_password:
                 env[

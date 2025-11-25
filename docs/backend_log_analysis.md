@@ -35,7 +35,7 @@ ERROR:src.api.redis_listener:Redis connection failed: Authentication required.. 
 
 **原因**:
 - Redis URL格式可能不正确
-- 环境变量`REDIS_URL="redis://:pyt_dev_redis@localhost:6379/0"`中的密码格式可能有问题
+- 环境变量`REDIS_URL="redis://:pepgmp_dev_redis@localhost:6379/0"`中的密码格式可能有问题
 
 **建议**:
 - 检查Redis密码配置

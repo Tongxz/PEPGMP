@@ -152,7 +152,7 @@ docker info | grep -A 5 "Insecure Registries"
 
 # 5. 测试内网Registry连接
 curl http://192.168.30.83:5433/v2/_catalog
-docker pull 192.168.30.83:5433/pyt-backend:latest
+docker pull 192.168.30.83:5433/pepgmp-backend:latest
 ```
 
 #### 2.4 防火墙配置（Ubuntu 22.04）
@@ -273,29 +273,29 @@ docker network inspect pyt_backend
 docker login 192.168.30.83:5433
 
 # 2. 拉取镜像
-docker pull 192.168.30.83:5433/pyt-backend:latest
+docker pull 192.168.30.83:5433/pepgmp-backend:latest
 
 # 3. 打标签（便于使用）
-docker tag 192.168.30.83:5433/pyt-backend:latest pyt-backend:latest
+docker tag 192.168.30.83:5433/pepgmp-backend:latest pepgmp-backend:latest
 
 # 4. 验证镜像
-docker images | grep pyt-backend
+docker images | grep pepgmp-backend
 ```
 
 #### 2.2 推送镜像到内网Registry
 
 ```bash
 # 1. 构建镜像
-docker build -f Dockerfile.prod -t pyt-backend:latest .
+docker build -f Dockerfile.prod -t pepgmp-backend:latest .
 
 # 2. 打标签（内网Registry格式）
-docker tag pyt-backend:latest 192.168.30.83:5433/pyt-backend:latest
+docker tag pepgmp-backend:latest 192.168.30.83:5433/pepgmp-backend:latest
 
 # 3. 推送镜像
-docker push 192.168.30.83:5433/pyt-backend:latest
+docker push 192.168.30.83:5433/pepgmp-backend:latest
 
 # 4. 验证推送
-curl http://192.168.30.83:5433/v2/pyt-backend/tags/list
+curl http://192.168.30.83:5433/v2/pepgmp-backend/tags/list
 ```
 
 ### 3. 容器资源限制

@@ -30,12 +30,12 @@ redis:
   command: >
     redis-server
     --appendonly yes
-    --requirepass pyt_dev_redis    # 配置了密码
+    --requirepass pepgmp_dev_redis    # 配置了密码
     --maxmemory 256mb
     --maxmemory-policy allkeys-lru
 ```
 
-**密码**: `pyt_dev_redis`
+**密码**: `pepgmp_dev_redis`
 
 ### 3. redis_listener连接逻辑
 
@@ -73,7 +73,7 @@ $ env | grep -i redis
 **Docker环境** (docker-compose.yml第84行):
 ```yaml
 environment:
-  - REDIS_URL=redis://:pyt_dev_redis@redis:6379/0
+  - REDIS_URL=redis://:pepgmp_dev_redis@redis:6379/0
 ```
 
 Docker环境使用`REDIS_URL`而不是单独的`REDIS_PASSWORD`变量。
@@ -82,7 +82,7 @@ Docker环境使用`REDIS_URL`而不是单独的`REDIS_PASSWORD`变量。
 
 **有密码连接** ✅:
 ```bash
-$ docker exec pyt-redis-dev redis-cli -a pyt_dev_redis ping
+$ docker exec pyt-redis-dev redis-cli -a pepgmp_dev_redis ping
 PONG
 ```
 
@@ -97,7 +97,7 @@ NOAUTH Authentication required.
 **问题**: `redis_listener`在本地环境中没有获取到Redis密码
 
 **原因**:
-1. Redis服务器配置了密码（`pyt_dev_redis`）
+1. Redis服务器配置了密码（`pepgmp_dev_redis`）
 2. `redis_listener`使用`REDIS_PASSWORD`环境变量（默认None）
 3. 本地启动后端时未设置`REDIS_PASSWORD`环境变量
 4. `redis_listener`尝试无密码连接，收到"Authentication required"错误
@@ -108,13 +108,13 @@ NOAUTH Authentication required.
 
 **修改后端启动命令**:
 ```bash
-export REDIS_PASSWORD=pyt_dev_redis
+export REDIS_PASSWORD=pepgmp_dev_redis
 export REDIS_HOST=localhost
 export REDIS_PORT=6379
 export REDIS_DB=0
 
 # 或者使用完整的REDIS_URL
-export REDIS_URL="redis://:pyt_dev_redis@localhost:6379/0"
+export REDIS_URL="redis://:pepgmp_dev_redis@localhost:6379/0"
 
 python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
 ```
@@ -221,7 +221,7 @@ async def redis_stats_listener():
 1. 停止后端服务
 2. 设置环境变量
 ```bash
-export REDIS_PASSWORD=pyt_dev_redis
+export REDIS_PASSWORD=pepgmp_dev_redis
 ```
 3. 重新启动后端服务
 4. 检查日志确认Redis连接成功

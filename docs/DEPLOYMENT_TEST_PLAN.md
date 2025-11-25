@@ -132,7 +132,7 @@ python scripts/check_db_structure.py
 **测试内容**:
 ```bash
 # 测试Redis连接
-docker exec pyt-redis-prod redis-cli -a $REDIS_PASSWORD PING
+docker exec pepgmp-redis-prod redis-cli -a $REDIS_PASSWORD PING
 ```
 
 **测试清单**:
@@ -314,16 +314,16 @@ python scripts/validate_config.py
 **执行命令**:
 ```bash
 # 构建镜像
-docker build -f Dockerfile.prod -t pyt-backend:latest .
+docker build -f Dockerfile.prod -t pepgmp-backend:latest .
 
 # 验证镜像
-docker images pyt-backend:latest
+docker images pepgmp-backend:latest
 
 # 推送镜像
 bash scripts/push_to_registry.sh latest v1.0.0
 
 # 验证推送
-curl http://192.168.30.83:5433/v2/pyt-backend/tags/list
+curl http://192.168.30.83:5433/v2/pepgmp-backend/tags/list
 ```
 
 **测试清单**:

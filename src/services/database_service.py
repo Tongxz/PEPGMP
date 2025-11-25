@@ -23,7 +23,7 @@ class DatabaseService:
         """
         self.database_url = database_url or os.getenv(
             "DATABASE_URL",
-            "postgresql://pyt_dev:pyt_dev_password@localhost:5432/pyt_development",
+            "postgresql://pepgmp_dev:pepgmp_dev_password@localhost:5432/pepgmp_development",
         )
         self.pool: Optional[Pool] = None
         self._initialized = False

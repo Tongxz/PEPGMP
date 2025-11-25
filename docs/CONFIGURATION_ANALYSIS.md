@@ -18,11 +18,11 @@
 
 | 配置项 | 来源 | 默认值 | 说明 | 是否可存数据库 | 启动时必须 |
 |--------|------|--------|------|---------------|-----------|
-| `DATABASE_URL` | 环境变量 | `postgresql://pyt_dev:pyt_dev_password@localhost:5432/pyt_development` | 数据库连接字符串 | ❌ | ✅ |
-| `REDIS_URL` | 环境变量 | `redis://:pyt_dev_redis@localhost:6379/0` | Redis连接字符串 | ❌ | ✅ |
+| `DATABASE_URL` | 环境变量 | `postgresql://pepgmp_dev:pepgmp_dev_password@localhost:5432/pepgmp_development` | 数据库连接字符串 | ❌ | ✅ |
+| `REDIS_URL` | 环境变量 | `redis://:pepgmp_dev_redis@localhost:6379/0` | Redis连接字符串 | ❌ | ✅ |
 | `REDIS_HOST` | 环境变量 | `localhost` | Redis主机 | ❌ | ✅ |
 | `REDIS_PORT` | 环境变量 | `6379` | Redis端口 | ❌ | ✅ |
-| `REDIS_PASSWORD` | 环境变量 | `pyt_dev_redis` | Redis密码 | ❌ | ✅ |
+| `REDIS_PASSWORD` | 环境变量 | `pepgmp_dev_redis` | Redis密码 | ❌ | ✅ |
 | `REDIS_DB` | 环境变量 | `0` | Redis数据库编号 | ❌ | ✅ |
 | `ENVIRONMENT` | 环境变量 | `development` | 运行环境（development/staging/production） | ❌ | ✅ |
 | `LOG_LEVEL` | 环境变量 | `INFO` | 日志级别 | ❌ | ✅ |

@@ -83,7 +83,7 @@ curl http://localhost:8000/api/v1/monitoring/metrics
 
 # 数据库连接测试
 docker-compose -f docker-compose.prod.full.yml exec database \
-  pg_isready -U pyt_prod
+  pg_isready -U pepgmp_prod
 ```
 
 ## 💡 为什么用 Dockerfile + docker-compose？
@@ -91,7 +91,7 @@ docker-compose -f docker-compose.prod.full.yml exec database \
 ### Dockerfile（构建镜像）
 ```bash
 # 单独构建
-docker build -f Dockerfile.prod -t pyt-backend:latest .
+docker build -f Dockerfile.prod -t pepgmp-backend:latest .
 ```
 - 定义**如何构建**应用镜像
 - 安装依赖、复制代码
@@ -109,7 +109,7 @@ docker-compose -f docker-compose.prod.full.yml up -d
 ### 组合使用
 ```bash
 # 1. Dockerfile构建镜像（或docker-compose自动构建）
-docker build -f Dockerfile.prod -t pyt-backend:latest .
+docker build -f Dockerfile.prod -t pepgmp-backend:latest .
 
 # 2. docker-compose启动所有服务
 docker-compose -f docker-compose.prod.full.yml up -d

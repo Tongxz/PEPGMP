@@ -60,7 +60,7 @@
 ```bash
 ENVIRONMENT=production
 LOG_LEVEL=INFO
-DATABASE_URL=postgresql://pyt_prod:STRONG_PASSWORD@database:5432/pyt_production
+DATABASE_URL=postgresql://pepgmp_prod:STRONG_PASSWORD@database:5432/pepgmp_production
 REDIS_URL=redis://:STRONG_PASSWORD@redis:6379/0
 ADMIN_PASSWORD=VERY_STRONG_PASSWORD
 SECRET_KEY=64_CHAR_RANDOM_KEY

@@ -378,7 +378,7 @@ python main.py --mode detection --source 0 --camera-id test
 # 预期: 无 "can't subtract offset-naive and offset-aware datetimes" 错误
 
 # 2. 查询数据库
-psql -d pyt_development -c "SELECT id, camera_id, timestamp FROM detection_records ORDER BY timestamp DESC LIMIT 5;"
+psql -d pepgmp_development -c "SELECT id, camera_id, timestamp FROM detection_records ORDER BY timestamp DESC LIMIT 5;"
 
 # 预期: 看到保存的记录
 ```

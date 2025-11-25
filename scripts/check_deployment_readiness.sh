@@ -144,12 +144,12 @@ if command -v docker &> /dev/null; then
         echo "  └─ Docker服务运行中"
 
         # 检查是否有镜像
-        if docker images pyt-backend:latest --format "{{.Repository}}" | grep -q "pyt-backend"; then
-            echo "  └─ pyt-backend:latest 镜像已存在"
-            IMAGE_SIZE=$(docker images pyt-backend:latest --format "{{.Size}}")
+        if docker images pepgmp-backend:latest --format "{{.Repository}}" | grep -q "pepgmp-backend"; then
+            echo "  └─ pepgmp-backend:latest 镜像已存在"
+            IMAGE_SIZE=$(docker images pepgmp-backend:latest --format "{{.Size}}")
             echo "     镜像大小: $IMAGE_SIZE"
         else
-            echo -e "  └─ ${YELLOW}pyt-backend:latest 镜像不存在（部署时会自动构建）${NC}"
+            echo -e "  └─ ${YELLOW}pepgmp-backend:latest 镜像不存在（部署时会自动构建）${NC}"
         fi
     else
         echo -e "${RED}✗ Docker服务未运行${NC}"
@@ -174,12 +174,12 @@ if curl -sf "http://${REGISTRY_URL}/v2/_catalog" &> /dev/null; then
     echo "✓ Registry可访问 (${REGISTRY_URL})"
 
     # 检查是否有推送的镜像
-    if curl -sf "http://${REGISTRY_URL}/v2/pyt-backend/tags/list" | grep -q "tags"; then
-        echo "  └─ pyt-backend 镜像已存在于Registry"
-        TAGS=$(curl -sf "http://${REGISTRY_URL}/v2/pyt-backend/tags/list" | grep -o '"tags":\[[^]]*\]' || echo "无法获取")
+    if curl -sf "http://${REGISTRY_URL}/v2/pepgmp-backend/tags/list" | grep -q "tags"; then
+        echo "  └─ pepgmp-backend 镜像已存在于Registry"
+        TAGS=$(curl -sf "http://${REGISTRY_URL}/v2/pepgmp-backend/tags/list" | grep -o '"tags":\[[^]]*\]' || echo "无法获取")
         echo "     $TAGS"
     else
-        echo "  └─ pyt-backend 镜像不存在于Registry（首次部署时会推送）"
+        echo "  └─ pepgmp-backend 镜像不存在于Registry（首次部署时会推送）"
     fi
 else
     echo -e "${YELLOW}⚠ 无法连接到Registry (${REGISTRY_URL})${NC}"

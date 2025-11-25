@@ -20,7 +20,7 @@ PRODUCTION_HOST="${1}"
 PRODUCTION_USER="${2:-ubuntu}"
 IMAGE_TAG="${3:-latest}"
 REGISTRY_URL="192.168.30.83:5433"
-IMAGE_NAME="pyt-backend"
+IMAGE_NAME="pepgmp-backend"
 DEPLOY_DIR="/opt/pyt"
 
 echo "========================================================================="
@@ -192,7 +192,7 @@ set -e
 cd ${DEPLOY_DIR}
 
 echo "更新docker-compose.yml使用Registry镜像..."
-sed -i 's|image: pyt-backend:latest|image: ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}|g' docker-compose.yml
+sed -i 's|image: pepgmp-backend:latest|image: ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}|g' docker-compose.yml
 sed -i 's|build:|# build:|g' docker-compose.yml
 sed -i 's|context:|# context:|g' docker-compose.yml
 sed -i 's|dockerfile:|# dockerfile:|g' docker-compose.yml
@@ -204,7 +204,7 @@ if docker-compose ps | grep -q "database"; then
     # 创建备份目录
     ssh ${PRODUCTION_USER}@${PRODUCTION_HOST} "mkdir -p ${DEPLOY_DIR}/backups"
     # 执行备份
-    ssh ${PRODUCTION_USER}@${PRODUCTION_HOST} "cd ${DEPLOY_DIR} && docker-compose exec -T database pg_dump -U pyt_prod pyt_production | gzip > backups/pre_deploy_\$(date +%Y%m%d_%H%M%S).sql.gz" || echo "⚠️  数据库备份失败，继续部署..."
+    ssh ${PRODUCTION_USER}@${PRODUCTION_HOST} "cd ${DEPLOY_DIR} && docker-compose exec -T database pg_dump -U pepgmp_prod pepgmp_production | gzip > backups/pre_deploy_\$(date +%Y%m%d_%H%M%S).sql.gz" || echo "⚠️  数据库备份失败，继续部署..."
 fi
 
 docker-compose down || true

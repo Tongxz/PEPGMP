@@ -37,7 +37,7 @@ bash scripts/quick_deploy.sh 192.168.1.100 ubuntu
 bash scripts/quick_deploy.sh 192.168.1.100
 
 # 方式2: 分步更新
-docker build -f Dockerfile.prod -t pyt-backend:latest .
+docker build -f Dockerfile.prod -t pepgmp-backend:latest .
 bash scripts/push_to_registry.sh
 ssh ubuntu@192.168.1.100 'cd /opt/pyt && docker-compose pull && docker-compose up -d'
 ```

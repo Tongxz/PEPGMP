@@ -4,7 +4,7 @@ version: "3.8"
 # 包含：API、Frontend、PostgreSQL、Redis
 
 networks:
-  pyt-dev-network:
+  pepgmp-dev-network:
     driver: bridge
 
 volumes:
@@ -17,11 +17,11 @@ services:
   # PostgreSQL 数据库 (开发环境)
   database:
     image: postgres:16-alpine
-    container_name: pyt-postgres-dev
+    container_name: pepgmp-postgres-dev
     environment:
-      POSTGRES_DB: pyt_development
-      POSTGRES_USER: pyt_dev
-      POSTGRES_PASSWORD: pyt_dev_password
+      POSTGRES_DB: pepgmp_development
+      POSTGRES_USER: pepgmp_dev
+      POSTGRES_PASSWORD: pepgmp_dev_password
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
@@ -29,9 +29,9 @@ services:
     ports:
       - "5432:5432"
     networks:
-      - pyt-dev-network
+      - pepgmp-dev-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pyt_dev -d pyt_development"]
+      test: ["CMD-SHELL", "pg_isready -U pepgmp_dev -d pepgmp_development"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -41,11 +41,11 @@ services:
   # Redis 缓存 (开发环境)
   redis:
     image: redis:7-alpine
-    container_name: pyt-redis-dev
+    container_name: pepgmp-redis-dev
     command: >
       redis-server
       --appendonly yes
-      --requirepass pyt_dev_redis
+      --requirepass pepgmp_dev_redis
       --maxmemory 256mb
       --maxmemory-policy allkeys-lru
     volumes:
@@ -53,7 +53,7 @@ services:
     ports:
       - "6379:6379"
     networks:
-      - pyt-dev-network
+      - pepgmp-dev-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -67,7 +67,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    container_name: pyt-api-dev
+    container_name: pepgmp-api-dev
     ports:
       - "8000:8000"
     volumes:
@@ -80,12 +80,12 @@ services:
     command: python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
     environment:
       - ENVIRONMENT=development
-      - DATABASE_URL=postgresql://pyt_dev:pyt_dev_password@database:5432/pyt_development
-      - REDIS_URL=redis://:pyt_dev_redis@redis:6379/0
+      - DATABASE_URL=postgresql://pepgmp_dev:pepgmp_dev_password@database:5432/pepgmp_development
+      - REDIS_URL=redis://:pepgmp_dev_redis@redis:6379/0
       - LOG_LEVEL=DEBUG
       - AUTO_CONVERT_TENSORRT=false
     networks:
-      - pyt-dev-network
+      - pepgmp-dev-network
     depends_on:
       database:
         condition: service_healthy
@@ -101,7 +101,7 @@ services:
   # 前端 (开发环境)
   frontend:
     image: node:20
-    container_name: pyt-frontend-dev
+    container_name: pepgmp-frontend-dev
     working_dir: /app
     volumes:
       - ./frontend:/app
@@ -114,7 +114,7 @@ services:
       - BASE_URL=/
       - NODE_ENV=development
     networks:
-      - pyt-dev-network
+      - pepgmp-dev-network
     depends_on:
       - api
     restart: unless-stopped

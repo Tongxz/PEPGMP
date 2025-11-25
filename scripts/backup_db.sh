@@ -16,9 +16,9 @@ NC='\033[0m'
 BACKUP_DIR="${1:-./backups/db}"
 RETENTION_DAYS="${2:-7}"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-DB_CONTAINER="pyt-postgres-prod"
-DB_USER="pyt_prod"
-DB_NAME="pyt_production"
+DB_CONTAINER="pepgmp-postgres-prod"
+DB_USER="pepgmp_prod"
+DB_NAME="pepgmp_production"
 
 echo "========================================================================="
 echo "                     数据库备份"

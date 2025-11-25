@@ -58,7 +58,7 @@ grep -E "PASSWORD|SECRET" .env.production | grep -v "^#"
 
 - [ ] **Docker Desktop 已安装并运行** (开发环境)
   - 验证: `docker info`
-  - 检查镜像: `docker images pyt-backend:latest`
+  - 检查镜像: `docker images pepgmp-backend:latest`
 
 - [ ] **内网Docker Registry 配置** (内网私有Registry: 192.168.30.83:5433)
   - **注意**: 这是内网Registry，需要确保内网连通性
@@ -128,12 +128,12 @@ grep -E "PASSWORD|SECRET" .env.production | grep -v "^#"
 
 - [ ] **构建生产镜像**
   ```bash
-  docker build -f Dockerfile.prod -t pyt-backend:latest .
+  docker build -f Dockerfile.prod -t pepgmp-backend:latest .
   ```
 
 - [ ] **验证镜像大小**
   - 目标: < 1GB
-  - 检查: `docker images pyt-backend:latest`
+  - 检查: `docker images pepgmp-backend:latest`
 
 - [ ] **推送到Registry**
   ```bash
@@ -230,7 +230,7 @@ grep -E "PASSWORD|SECRET" .env.production | grep -v "^#"
     ```bash
     # 在Docker Compose中自动执行
     # 或手动执行:
-    docker exec pyt-postgres-prod psql -U pyt_prod -d pyt_production -f /path/to/migration.sql
+    docker exec pepgmp-postgres-prod psql -U pepgmp_prod -d pepgmp_production -f /path/to/migration.sql
     ```
 
 - [ ] **数据库备份策略**
@@ -596,7 +596,7 @@ bash scripts/quick_deploy.sh <SERVER_IP> ubuntu
 
 ```bash
 # 构建镜像
-docker build -f Dockerfile.prod -t pyt-backend:latest .
+docker build -f Dockerfile.prod -t pepgmp-backend:latest .
 
 # 推送镜像
 bash scripts/push_to_registry.sh latest v1.0.0
@@ -641,8 +641,8 @@ chmod 600 .env.production
 cd /opt/pyt
 
 # 从Registry拉取镜像
-docker pull 192.168.30.83:5433/pyt-backend:latest
-docker tag 192.168.30.83:5433/pyt-backend:latest pyt-backend:latest
+docker pull 192.168.30.83:5433/pepgmp-backend:latest
+docker tag 192.168.30.83:5433/pepgmp-backend:latest pepgmp-backend:latest
 
 # 启动服务
 docker-compose -f docker-compose.prod.yml up -d
@@ -696,7 +696,7 @@ time curl http://localhost:8000/api/v1/monitoring/health
 docker stats
 
 # 3. 数据库连接测试
-docker exec pyt-postgres-prod pg_isready -U pyt_prod
+docker exec pepgmp-postgres-prod pg_isready -U pepgmp_prod
 ```
 
 ### 4.5 回滚流程
@@ -708,11 +708,11 @@ docker exec pyt-postgres-prod pg_isready -U pyt_prod
 cd /opt/pyt
 
 # 1. 查看可用版本
-curl http://192.168.30.83:5433/v2/pyt-backend/tags/list
+curl http://192.168.30.83:5433/v2/pepgmp-backend/tags/list
 
 # 2. 拉取之前版本
-docker pull 192.168.30.83:5433/pyt-backend:v1.0.0
-docker tag 192.168.30.83:5433/pyt-backend:v1.0.0 pyt-backend:latest
+docker pull 192.168.30.83:5433/pepgmp-backend:v1.0.0
+docker tag 192.168.30.83:5433/pepgmp-backend:v1.0.0 pepgmp-backend:latest
 
 # 3. 重启服务
 docker-compose -f docker-compose.prod.yml up -d --force-recreate api
@@ -810,7 +810,7 @@ docker ps | grep postgres
 docker-compose -f docker-compose.prod.yml logs database
 
 # 测试连接
-docker exec pyt-postgres-prod pg_isready -U pyt_prod
+docker exec pepgmp-postgres-prod pg_isready -U pepgmp_prod
 ```
 
 ---

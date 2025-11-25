@@ -46,8 +46,8 @@
 ```bash
 cd /Users/zhou/Code/Pyt
 source venv/bin/activate
-export DATABASE_URL="postgresql://pyt_dev:pyt_dev_password@localhost:5432/pyt_development"
-export REDIS_URL="redis://:pyt_dev_redis@localhost:6379/0"
+export DATABASE_URL="postgresql://pepgmp_dev:pepgmp_dev_password@localhost:5432/pepgmp_development"
+export REDIS_URL="redis://:pepgmp_dev_redis@localhost:6379/0"
 export LOG_LEVEL=DEBUG
 export USE_DOMAIN_SERVICE=true
 export ROLLOUT_PERCENT=100

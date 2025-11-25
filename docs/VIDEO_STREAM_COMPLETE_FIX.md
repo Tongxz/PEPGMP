@@ -5,7 +5,7 @@
 ### 发现的问题
 
 1. **❌ Redis连接问题**
-   - Redis在Docker容器中运行，密码为 `pyt_dev_redis`
+   - Redis在Docker容器中运行，密码为 `pepgmp_dev_redis`
    - 检测进程启动时未设置Redis密码环境变量
    - 导致视频帧无法通过Redis发布
 
@@ -41,7 +41,7 @@
 **修改**:
 - 检测进程启动时自动设置Redis环境变量
 - 如果未设置 `REDIS_URL`，自动从环境变量构建
-- 默认密码：`pyt_dev_redis`（Docker Redis默认密码）
+- 默认密码：`pepgmp_dev_redis`（Docker Redis默认密码）
 - 确保 `VIDEO_STREAM_USE_REDIS=1`
 
 **效果**:
@@ -81,7 +81,7 @@
      └─ 如果stream_interval匹配（每3帧） → 推送原始帧
   ↓
   ↓ 通过Redis发布到 video:{camera_id}
-  ↓ Redis连接: redis://:pyt_dev_redis@localhost:6379/0
+  ↓ Redis连接: redis://:pepgmp_dev_redis@localhost:6379/0
   ↓
 Redis Pub/Sub (Docker容器)
   ↓
@@ -99,7 +99,7 @@ API服务器 VideoStreamManager (父进程)
 
 ### 1. 验证Redis运行
 ```bash
-docker exec pyt-redis-dev redis-cli -a pyt_dev_redis ping
+docker exec pyt-redis-dev redis-cli -a pepgmp_dev_redis ping
 # 应该返回 PONG
 ```
 
@@ -148,7 +148,7 @@ tail -f logs/detect_vid1.log | grep -i "视频\|redis\|stream\|推送"
 - `REDIS_URL`: Redis连接URL（优先）
 - `REDIS_HOST`: Redis主机（默认 "localhost"）
 - `REDIS_PORT`: Redis端口（默认 "6379"）
-- `REDIS_PASSWORD`: Redis密码（默认 "pyt_dev_redis"）
+- `REDIS_PASSWORD`: Redis密码（默认 "pepgmp_dev_redis"）
 - `REDIS_DB`: Redis数据库（默认 "0"）
 
 ### 检测相关参数
@@ -174,7 +174,7 @@ tail -f logs/detect_vid1.log | grep -i "视频\|redis\|stream\|推送"
 
 1. **检查Redis连接**
    ```bash
-   docker exec pyt-redis-dev redis-cli -a pyt_dev_redis ping
+   docker exec pyt-redis-dev redis-cli -a pepgmp_dev_redis ping
    ```
 
 2. **检查检测进程日志**
@@ -191,7 +191,7 @@ tail -f logs/detect_vid1.log | grep -i "视频\|redis\|stream\|推送"
 
 5. **监控Redis频道**
    ```bash
-   docker exec pyt-redis-dev redis-cli -a pyt_dev_redis
+   docker exec pyt-redis-dev redis-cli -a pepgmp_dev_redis
    > PSUBSCRIBE video:*
    ```
    应该能看到视频帧数据在频道中发布

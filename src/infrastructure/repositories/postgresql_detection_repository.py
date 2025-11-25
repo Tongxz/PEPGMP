@@ -45,7 +45,7 @@ class PostgreSQLDetectionRepository(IDetectionRepository):
 
         return os.getenv(
             "DATABASE_URL",
-            "postgresql://pyt_dev:pyt_dev_password@localhost:5432/pyt_development",
+            "postgresql://pepgmp_dev:pepgmp_dev_password@localhost:5432/pepgmp_development",
         )
 
     async def _get_pool(self):

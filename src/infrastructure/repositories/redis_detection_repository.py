@@ -38,7 +38,7 @@ class RedisDetectionRepository(IDetectionRepository):
         """获取默认连接字符串"""
         import os
 
-        return os.getenv("REDIS_URL", "redis://:pyt_dev_redis@localhost:6379/0")
+        return os.getenv("REDIS_URL", "redis://:pepgmp_dev_redis@localhost:6379/0")
 
     async def _get_redis(self):
         """获取Redis连接"""

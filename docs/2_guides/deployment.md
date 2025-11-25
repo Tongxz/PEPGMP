@@ -68,7 +68,7 @@ cp config/production.env.example .env.prod
 # ===================================
 # 数据库配置 (必须修改)
 # ===================================
-POSTGRES_DB=pyt_production
+POSTGRES_DB=pepgmp_production
 POSTGRES_USER=pyt_user
 POSTGRES_PASSWORD=your_strong_and_secret_password # ‼️ 必须修改为一个强密码
 

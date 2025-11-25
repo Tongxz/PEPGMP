@@ -56,10 +56,10 @@ tail -f logs/detect_vid1.log | grep -E "视频|推送|Redis|stream"
 使用Docker命令检查Redis订阅状态：
 ```bash
 # 检查频道订阅数
-docker exec pyt-redis-dev redis-cli -a pyt_dev_redis PUBSUB NUMSUB video:vid1
+docker exec pyt-redis-dev redis-cli -a pepgmp_dev_redis PUBSUB NUMSUB video:vid1
 
 # 手动测试发布
-docker exec pyt-redis-dev redis-cli -a pyt_dev_redis PUBLISH video:vid1 "test"
+docker exec pyt-redis-dev redis-cli -a pepgmp_dev_redis PUBLISH video:vid1 "test"
 ```
 
 ### 5. 检查前端接收

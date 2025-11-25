@@ -13,8 +13,8 @@ from sqlalchemy import create_engine
 logger = logging.getLogger(__name__)
 
 # 数据库配置
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://pyt_dev:pyt_dev_password@localhost:5432/pyt_development")
-ASYNC_DATABASE_URL = os.getenv("ASYNC_DATABASE_URL", "postgresql+asyncpg://pyt_dev:pyt_dev_password@localhost:5432/pyt_development")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://pepgmp_dev:pepgmp_dev_password@localhost:5432/pepgmp_development")
+ASYNC_DATABASE_URL = os.getenv("ASYNC_DATABASE_URL", "postgresql+asyncpg://pepgmp_dev:pepgmp_dev_password@localhost:5432/pepgmp_development")
 
 # 同步数据库引擎（用于Alembic迁移）
 sync_engine = create_engine(DATABASE_URL, echo=False)

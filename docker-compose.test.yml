@@ -18,8 +18,8 @@ services:
     image: postgres:16-alpine
     container_name: pyt-postgres-test
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-pyt_production}
-      POSTGRES_USER: ${POSTGRES_USER:-pyt_prod}
+      POSTGRES_DB: ${POSTGRES_DB:-pepgmp_production}
+      POSTGRES_USER: ${POSTGRES_USER:-pepgmp_prod}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
@@ -27,7 +27,7 @@ services:
     networks:
       - backend
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pyt_prod} -d ${POSTGRES_DB:-pyt_production}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pepgmp_prod} -d ${POSTGRES_DB:-pepgmp_production}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -58,7 +58,7 @@ services:
 
   # API服务（使用Registry镜像）
   api:
-    image: 192.168.30.83:5433/pyt-backend:latest
+    image: 192.168.30.83:5433/pepgmp-backend:latest
     container_name: pyt-api-test
     env_file:
       - .env.production

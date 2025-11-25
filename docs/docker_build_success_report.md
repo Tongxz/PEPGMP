@@ -13,7 +13,7 @@
 
 | 属性 | 值 |
 |------|-----|
-| **镜像名称** | pyt-backend:latest |
+| **镜像名称** | pepgmp-backend:latest |
 | **镜像ID** | c1a0cac17196 |
 | **完整ID** | sha256:c1a0cac1719684affd231d5b95d08aba9263d0c9a61b7a2ca705786d9d960052 |
 | **大小** | 4.07GB (1,089,475,228 bytes) |
@@ -173,13 +173,13 @@ COPY requirements.prod.txt /tmp/requirements.txt
 
 ```bash
 # 使用环境变量文件运行
-docker run --rm -p 8000:8000 --env-file .env.production pyt-backend:latest
+docker run --rm -p 8000:8000 --env-file .env.production pepgmp-backend:latest
 
 # 或手动指定环境变量
 docker run --rm -p 8000:8000 \
   -e DATABASE_URL="postgresql://..." \
   -e REDIS_URL="redis://..." \
-  pyt-backend:latest
+  pepgmp-backend:latest
 ```
 
 **访问**: http://localhost:8000
@@ -222,11 +222,11 @@ bash scripts/deploy_prod.sh
 
 ```bash
 # 1. 验证镜像存在
-docker images pyt-backend:latest
+docker images pepgmp-backend:latest
 
 # 2. 启动容器
 docker run -d --name pyt-test -p 8000:8000 \
-  --env-file .env.production pyt-backend:latest
+  --env-file .env.production pepgmp-backend:latest
 
 # 3. 等待启动
 sleep 10
@@ -306,7 +306,7 @@ docker-compose -f docker-compose.prod.yml ps
 
 1. **验证镜像运行**
    ```bash
-   docker run --rm -p 8000:8000 --env-file .env.production pyt-backend:latest
+   docker run --rm -p 8000:8000 --env-file .env.production pepgmp-backend:latest
    ```
 
 2. **测试健康检查**
@@ -318,7 +318,7 @@ docker-compose -f docker-compose.prod.yml ps
    ```bash
    # 在容器中运行测试
    docker run --rm --env-file .env.production \
-     pyt-backend:latest python tests/integration/test_api_integration.py
+     pepgmp-backend:latest python tests/integration/test_api_integration.py
    ```
 
 ### 短期任务（1周内）
@@ -392,10 +392,10 @@ docker-compose -f docker-compose.prod.yml ps
 docker logs <container_id>
 
 # 检查环境变量
-docker run --rm --env-file .env.production pyt-backend:latest env
+docker run --rm --env-file .env.production pepgmp-backend:latest env
 
 # 以交互模式启动排查
-docker run -it --rm --env-file .env.production pyt-backend:latest bash
+docker run -it --rm --env-file .env.production pepgmp-backend:latest bash
 ```
 
 **Q: 健康检查失败**

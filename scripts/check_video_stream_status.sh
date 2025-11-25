@@ -9,11 +9,11 @@ docker ps | grep redis
 echo ""
 
 echo "2. 检查Redis连接:"
-docker exec pyt-redis-dev redis-cli -a pyt_dev_redis ping 2>&1 | grep -v "Warning"
+docker exec pyt-redis-dev redis-cli -a pepgmp_dev_redis ping 2>&1 | grep -v "Warning"
 echo ""
 
 echo "3. 检查Redis频道订阅数:"
-docker exec pyt-redis-dev redis-cli -a pyt_dev_redis PUBSUB NUMSUB video:vid1 2>&1 | grep -v "Warning" | tail -1
+docker exec pyt-redis-dev redis-cli -a pepgmp_dev_redis PUBSUB NUMSUB video:vid1 2>&1 | grep -v "Warning" | tail -1
 echo ""
 
 echo "4. 检查检测进程:"

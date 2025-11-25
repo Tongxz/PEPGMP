@@ -86,10 +86,10 @@ code .env.production
 
 ```env
 # 数据库配置（使用 Docker 容器名称）
-DATABASE_URL=postgresql://pyt_prod:YOUR_STRONG_PASSWORD@pyt-postgres-prod:5432/pyt_production
+DATABASE_URL=postgresql://pepgmp_prod:YOUR_STRONG_PASSWORD@pepgmp-postgres-prod:5432/pepgmp_production
 
 # Redis 配置
-REDIS_URL=redis://:YOUR_STRONG_PASSWORD@pyt-redis-prod:6379/0
+REDIS_URL=redis://:YOUR_STRONG_PASSWORD@pepgmp-redis-prod:6379/0
 
 # API 配置
 API_PORT=8000
@@ -372,10 +372,10 @@ docker system df
 
 ```powershell
 # 备份数据库
-docker exec pyt-postgres-prod pg_dump -U pyt_prod pyt_production > backup_$(Get-Date -Format "yyyyMMdd").sql
+docker exec pepgmp-postgres-prod pg_dump -U pepgmp_prod pepgmp_production > backup_$(Get-Date -Format "yyyyMMdd").sql
 
 # 备份 Redis
-docker exec pyt-redis-prod redis-cli --rdb /data/backup.rdb
+docker exec pepgmp-redis-prod redis-cli --rdb /data/backup.rdb
 ```
 
 ## ⚠️ 常见问题
@@ -493,7 +493,7 @@ docker-compose -f docker-compose.prod.yml down
 docker-compose -f docker-compose.prod.yml restart api
 
 # 进入容器
-docker exec -it pyt-api-prod bash
+docker exec -it pepgmp-api-prod bash
 ```
 
 ---

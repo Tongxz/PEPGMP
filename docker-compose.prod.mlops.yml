@@ -19,7 +19,7 @@ services:
     image: 192.168.30.83:5433/mlflow:latest
     container_name: pyt-mlflow-prod
     environment:
-      - MLFLOW_BACKEND_STORE_URI=postgresql://${POSTGRES_USER:-pyt_user}:${POSTGRES_PASSWORD:-change_me_in_production}@database:5432/${POSTGRES_DB:-pyt_production}
+      - MLFLOW_BACKEND_STORE_URI=postgresql://${POSTGRES_USER:-pyt_user}:${POSTGRES_PASSWORD:-change_me_in_production}@database:5432/${POSTGRES_DB:-pepgmp_production}
       - MLFLOW_DEFAULT_ARTIFACT_ROOT=file:///mlflow/artifacts
       - MLFLOW_SERVER_DEFAULT_ARTIFACT_ROOT=file:///mlflow/artifacts
       - MLFLOW_SERVER_FILE_STORE=/mlflow/file_store
