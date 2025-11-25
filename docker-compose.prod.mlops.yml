@@ -1,4 +1,3 @@
-version: "3.8"
 
 # 生产环境MLOps配置
 # 包含：MLflow服务器、DVC配置

@@ -1,7 +1,6 @@
 # 生产环境 Docker Compose 配置
 # Production Environment Docker Compose Configuration
-
-version: "3.8"
+# 注意: Docker Compose V2 不再需要 version 字段
 
 networks:
   frontend:
