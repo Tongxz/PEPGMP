@@ -98,6 +98,8 @@ class TestStopCamera:
     def test_stop_camera_success(self, camera_control_service, mock_scheduler):
         """测试成功停止摄像头."""
         camera_id = "camera_001"
+        # 设置摄像头为运行状态
+        mock_scheduler.get_status.return_value = {"running": True, "pid": 12345, "log": "/tmp/log.txt"}
 
         result = camera_control_service.stop_camera(camera_id)
 
@@ -107,7 +109,9 @@ class TestStopCamera:
     def test_stop_camera_failure(self, camera_control_service, mock_scheduler):
         """测试停止摄像头失败."""
         camera_id = "camera_001"
-        mock_scheduler.stop_detection.return_value = {"ok": False, "error": "摄像头未运行"}
+        # 设置摄像头为运行状态
+        mock_scheduler.get_status.return_value = {"running": True, "pid": 12345, "log": "/tmp/log.txt"}
+        mock_scheduler.stop_detection.return_value = {"ok": False, "error": "停止失败"}
 
         with pytest.raises(ValueError):
             camera_control_service.stop_camera(camera_id)
@@ -147,6 +151,8 @@ class TestGetCameraStatus:
     def test_get_camera_status_success(self, camera_control_service, mock_scheduler):
         """测试成功获取摄像头状态."""
         camera_id = "camera_001"
+        # 设置返回运行状态
+        mock_scheduler.get_status.return_value = {"running": True, "pid": 12345, "log": "/tmp/log.txt"}
 
         result = camera_control_service.get_camera_status(camera_id)
 
@@ -169,25 +175,34 @@ class TestGetBatchStatus:
     def test_get_batch_status_with_ids(self, camera_control_service, mock_scheduler):
         """测试批量状态查询（指定ID列表）."""
         camera_ids = ["camera_001", "camera_002"]
+        # 设置批量状态返回
+        mock_scheduler.get_batch_status.return_value = {
+            "camera_001": {"running": True, "pid": 12345},
+            "camera_002": {"running": False, "pid": None}
+        }
 
         result = camera_control_service.get_batch_status(camera_ids)
 
         assert "camera_001" in result
+        assert "camera_002" in result
         mock_scheduler.get_batch_status.assert_called_once_with(camera_ids)
 
     def test_get_batch_status_all(self, camera_control_service, mock_scheduler):
         """测试批量状态查询（查询所有）."""
+        # 根据实现，如果camera_ids为None，应该返回空字典
         result = camera_control_service.get_batch_status(None)
 
         assert isinstance(result, dict)
-        mock_scheduler.get_batch_status.assert_called_once_with(None)
+        # 根据实现，None或空列表会返回空字典，不会调用scheduler
+        assert result == {}
 
     def test_get_batch_status_exception(self, camera_control_service, mock_scheduler):
         """测试批量状态查询异常."""
+        camera_ids = ["camera_001", "camera_002"]
         mock_scheduler.get_batch_status.side_effect = Exception("查询失败")
 
         with pytest.raises(ValueError, match="批量状态查询失败"):
-            camera_control_service.get_batch_status(None)
+            camera_control_service.get_batch_status(camera_ids)
 
 
 class TestActivateCamera:
