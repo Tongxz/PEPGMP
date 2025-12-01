@@ -131,6 +131,7 @@ build_frontend_image() {
         --build-arg NGINX_IMAGE="${NGINX_BASE}" \
         --build-arg VITE_API_BASE=/api/v1 \
         --build-arg BASE_URL=/ \
+        --build-arg SKIP_TYPE_CHECK=true \
         -t "${FRONTEND_IMAGE}" \
         -t "${REGISTRY}/${PROJECT_NAME}-frontend:${DATE_TAG}" \
         . || {

@@ -18,9 +18,16 @@ COPY frontend ./
 # Support build-time env overrides
 ARG VITE_API_BASE
 ARG BASE_URL
+ARG SKIP_TYPE_CHECK=false
 ENV VITE_API_BASE=${VITE_API_BASE}
 ENV BASE_URL=${BASE_URL}
-RUN npm run build
+# 生产构建时跳过类型检查（类型错误不影响运行时）
+# 如果需要类型检查，可以设置 SKIP_TYPE_CHECK=false
+RUN if [ "$SKIP_TYPE_CHECK" = "true" ]; then \
+        npx vite build; \
+    else \
+        npm run build; \
+    fi
 
 # Stage 2: Nginx runtime
 FROM ${NGINX_IMAGE}

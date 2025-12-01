@@ -62,12 +62,18 @@ LICENSE
 CHANGELOG.md
 CONTRIBUTING.md
 
-# Data and logs
+# Data and logs (生产环境通过volume挂载，不包含在镜像中)
 logs/
 output/
 data/
 temp/
 *.log
+debug/
+backups/
+mlruns/
+*.db
+*.sqlite
+*.sqlite3
 
 # Development scripts and tools
 scripts/
@@ -77,6 +83,7 @@ notebooks/
 *.ipynb
 
 # Frontend specific (for API and Supervisor builds)
+# 后端镜像不需要前端代码，但前端镜像需要，所以只排除不需要的部分
 frontend/node_modules/
 frontend/dist/
 frontend/.cache/
@@ -85,6 +92,9 @@ frontend/npm-debug.log
 frontend/yarn-error.log
 frontend/.env*
 frontend/*.local
+frontend/.vite/
+frontend/.nuxt/
+frontend/.next/
 
 # Backend specific (for Frontend builds)
 # Commented out to allow API and Supervisor builds to access these files
@@ -149,12 +159,14 @@ Thumbs.db
 *~
 
 # Large binary files that should be downloaded/mounted in production
-# Note: Model files (*.pt, *.json) are required for production and should NOT be excluded
-# *.weights
-# *.pt  # 注释掉，生产环境需要
-# *.onnx
-# *.bin
-# *.h5
-# *.hdf5
-# *.pkl
-# *.model
+# Note: Model files should be mounted as volumes, not included in the image
+# 模型文件通过 volume 挂载，不包含在镜像中
+models/
+*.weights
+*.pt
+*.onnx
+*.bin
+*.h5
+*.hdf5
+*.pkl
+*.model
