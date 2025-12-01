@@ -117,3 +117,4 @@ detect_environment() {
     export HAS_VENV
     export PYTHON_CMD
 }
+

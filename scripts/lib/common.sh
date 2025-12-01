@@ -88,3 +88,4 @@ confirm_action() {
         return 1
     fi
 }
+

@@ -101,3 +101,4 @@ start_api_prod() {
         --error-logfile logs/error.log \
         --log-level info
 }
+
