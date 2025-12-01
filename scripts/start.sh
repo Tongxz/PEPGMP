@@ -227,7 +227,7 @@ log_info "部署模式: $MODE"
 # 容器化部署
 deploy_containerized() {
     log_info "使用容器化部署模式"
-    
+
     # 确定Docker Compose文件
     if [ -z "$COMPOSE_FILE" ]; then
         if [ "$ENV" = "dev" ]; then
@@ -245,19 +245,19 @@ deploy_containerized() {
             fi
         fi
     fi
-    
+
     # 检查Docker
     if [ "$HAS_DOCKER" != true ] || [ "$DOCKER_RUNNING" != true ]; then
         log_error "Docker不可用或未运行"
         exit 1
     fi
-    
+
     # 检查Docker Compose
     if [ "$HAS_DOCKER_COMPOSE" != true ]; then
         log_error "Docker Compose不可用"
         exit 1
     fi
-    
+
     # 检查端口占用
     if ! check_port "$PORT"; then
         if ! free_port "$PORT"; then
@@ -265,20 +265,20 @@ deploy_containerized() {
         fi
     fi
     echo ""
-    
+
     # 启动服务
     if start_api_container "$COMPOSE_FILE" ""; then
         # 等待容器启动
         sleep 5
-        
+
         # 获取API容器名
         API_CONTAINER=$(get_container_name "$COMPOSE_FILE" api)
-        
+
         # 数据库初始化
         if [ "$NO_INIT_DB" != "true" ]; then
             init_database "$PYTHON_CMD" "$API_CONTAINER" 5
         fi
-        
+
         # 显示访问信息
         echo ""
         log_success "服务已启动"
@@ -295,29 +295,29 @@ deploy_containerized() {
 # 混合部署（开发环境：DB容器 + 本地API）
 deploy_hybrid() {
     log_info "使用混合部署模式（DB容器 + 本地API）"
-    
+
     if [ "$ENV" != "dev" ]; then
         log_error "混合模式仅支持开发环境"
         exit 1
     fi
-    
+
     # 检查Docker
     if [ "$HAS_DOCKER" != true ] || [ "$DOCKER_RUNNING" != true ]; then
         log_error "Docker不可用或未运行"
         exit 1
     fi
-    
+
     # 检查Python
     if [ "$HAS_PYTHON" != true ]; then
         log_error "Python不可用"
         exit 1
     fi
-    
+
     # 激活虚拟环境
     if [ "$HAS_VENV" = true ]; then
         activate_venv
     fi
-    
+
     # 检查python-dotenv
     if ! $PYTHON_CMD -c "import dotenv" 2>/dev/null; then
         log_warning "python-dotenv未安装"
@@ -325,29 +325,29 @@ deploy_hybrid() {
             pip install python-dotenv
         fi
     fi
-    
+
     # 启动Docker服务（数据库和Redis）
     log_info "启动Docker服务（数据库和Redis）..."
     if [ -z "$COMPOSE_FILE" ]; then
         COMPOSE_FILE="docker-compose.yml"
     fi
-    
+
     start_docker_services "$COMPOSE_FILE" "database redis"
-    
+
     # 等待服务就绪
     wait_for_docker_service "pepgmp-postgres-dev" 30
     wait_for_docker_service "pepgmp-redis-dev" 10
-    
+
     # 检查连接
     check_database_connection
     check_redis_connection
     echo ""
-    
+
     # 数据库初始化
     if [ "$NO_INIT_DB" != "true" ]; then
         init_database "$PYTHON_CMD" "" 0
     fi
-    
+
     # 检查端口占用
     if ! check_port "$PORT"; then
         if ! free_port "$PORT"; then
@@ -355,11 +355,11 @@ deploy_hybrid() {
         fi
     fi
     echo ""
-    
+
     # 设置调试选项
     export SAVE_DEBUG_ROI="${SAVE_DEBUG_ROI:-true}"
     export DEBUG_ROI_DIR="${DEBUG_ROI_DIR:-debug/roi}"
-    
+
     # 启动API服务
     start_api_dev "$PORT"
 }
@@ -367,30 +367,30 @@ deploy_hybrid() {
 # 宿主机部署
 deploy_host() {
     log_info "使用宿主机部署模式"
-    
+
     # 检查Python
     if [ "$HAS_PYTHON" != true ]; then
         log_error "Python不可用"
         exit 1
     fi
-    
+
     # 激活虚拟环境
     if [ "$HAS_VENV" = true ]; then
         activate_venv
     fi
-    
+
     # 检查依赖服务连接
     if [ "$ENV" = "prod" ]; then
         check_database_connection || log_warning "数据库连接检查失败"
         check_redis_connection || log_warning "Redis连接检查失败"
         echo ""
     fi
-    
+
     # 数据库初始化
     if [ "$NO_INIT_DB" != "true" ]; then
         init_database "$PYTHON_CMD" "" 0
     fi
-    
+
     # 检查端口占用
     if ! check_port "$PORT"; then
         if ! free_port "$PORT"; then
@@ -398,7 +398,7 @@ deploy_host() {
         fi
     fi
     echo ""
-    
+
     # 确认启动（生产环境）
     if [ "$ENV" = "prod" ]; then
         echo "========================================================================="
@@ -415,7 +415,7 @@ deploy_host() {
         fi
         echo ""
     fi
-    
+
     # 启动API服务
     if [ "$ENV" = "dev" ]; then
         start_api_dev "$PORT"
@@ -441,5 +441,3 @@ case "$MODE" in
         exit 1
         ;;
 esac
-
-
