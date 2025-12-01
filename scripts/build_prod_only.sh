@@ -95,6 +95,9 @@ log_info "开始构建后端API镜像..."
 log_info "Dockerfile: Dockerfile.prod"
 log_info "镜像名称: pepgmp-backend:${VERSION_TAG}"
 
+# 启用 BuildKit 以支持增量构建优化和缓存挂载
+export DOCKER_BUILDKIT=1
+
 if docker build -f Dockerfile.prod \
     -t pepgmp-backend:${VERSION_TAG} \
     -t pepgmp-backend:latest \

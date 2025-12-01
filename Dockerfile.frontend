@@ -8,13 +8,18 @@ FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
 
 # Install deps (use lockfile if present)
+# 依赖文件变化少，先复制并安装，充分利用缓存
 COPY frontend/package*.json ./
 COPY frontend/tsconfig*.json ./
 COPY frontend/vite.config.ts ./
 RUN npm ci
 
-# Build
-COPY frontend ./
+# ========== 增量构建优化：分离源代码复制 ==========
+# Build - 只复制源代码和构建所需的文件
+# 源代码变化时，只需要重新构建这一层和后续层
+# 这样可以最大程度利用缓存，提高增量构建速度
+COPY frontend/src ./src
+COPY frontend/index.html ./
 # Support build-time env overrides
 ARG VITE_API_BASE
 ARG BASE_URL
