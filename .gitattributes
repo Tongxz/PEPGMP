@@ -1,0 +1,64 @@
+# Git attributes file
+# 确保文件在所有平台上使用正确的行尾符
+
+# 默认自动检测
+* text=auto
+
+# Shell 脚本强制使用 LF（Unix 行尾）
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Python 脚本使用 LF
+*.py text eol=lf
+
+# SQL 脚本使用 LF
+*.sql text eol=lf
+
+# 配置文件使用 LF
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.cfg text eol=lf
+*.ini text eol=lf
+*.conf text eol=lf
+
+# Dockerfile 使用 LF
+Dockerfile* text eol=lf
+*.dockerfile text eol=lf
+
+# Makefile 使用 LF
+Makefile text eol=lf
+makefile text eol=lf
+
+# PowerShell 脚本保持 CRLF（Windows）
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+*.psd1 text eol=crlf
+
+# Batch 脚本保持 CRLF（Windows）
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制文件不转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.7z binary
+*.rar binary
+*.pt binary
+*.pth binary
+*.onnx binary
+*.weights binary
+*.bin binary
+*.h5 binary
+*.hdf5 binary
+*.pkl binary
+*.model binary
+*.joblib binary
