@@ -133,6 +133,7 @@ training/
 
 # Docker exports and large data directories
 docker_exports/
+docker-images/
 datasets/
 
 # Development environment files (keep in dev, exclude from Docker)
