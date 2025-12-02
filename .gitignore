@@ -233,3 +233,7 @@ models/mlops/reports/*.json
 
 # 临时文件
 *.tmp
+
+# Docker镜像文件（大文件，不提交到版本控制）
+docker-images/
+pepgmp-*.tar

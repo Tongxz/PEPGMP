@@ -1,6 +1,9 @@
-# 生产环境 Docker Compose 配置
-# Production Environment Docker Compose Configuration
-# 注意: Docker Compose V2 不再需要 version 字段
+# 生产环境 Docker Compose 配置（1Panel 专用版）
+# Production Environment Docker Compose Configuration (1Panel Edition)
+# 注意: 此版本移除了 build 部分，直接使用已导入的镜像
+# Note: This version removes build section and uses pre-imported images
+# 注意: 环境变量从 .env.production 文件加载，每个服务都需要配置 env_file
+# Note: Environment variables loaded from .env.production, each service needs env_file
 
 networks:
   frontend:
@@ -23,39 +26,22 @@ volumes:
   grafana_data:
     driver: local
 
-# Docker Secrets（可选，推荐用于敏感信息）
-secrets:
-  db_password:
-    file: ./secrets/db_password.txt
-  redis_password:
-    file: ./secrets/redis_password.txt
-  admin_password:
-    file: ./secrets/admin_password.txt
-  secret_key:
-    file: ./secrets/secret_key.txt
-
 services:
   # ==================== PostgreSQL 数据库（生产） ====================
   database:
     image: postgres:16-alpine
     container_name: pepgmp-postgres-prod
-    # 从.env.production加载环境变量
     env_file:
       - .env.production
     environment:
       POSTGRES_DB: pepgmp_production
       POSTGRES_USER: pepgmp_prod
-      # 从secrets读取密码（如果使用secrets）
-      # POSTGRES_PASSWORD_FILE: /run/secrets/db_password
-      # 或从.env.production读取（如果不使用secrets）
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_prod_data:/var/lib/postgresql/data
     networks:
       - backend
-    # secrets:
-    #   - db_password
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pepgmp_prod -d pepgmp_production"]
       interval: 10s
@@ -63,7 +49,6 @@ services:
       retries: 5
       start_period: 10s
     restart: unless-stopped
-    # 资源限制
     deploy:
       resources:
         limits:
@@ -72,7 +57,6 @@ services:
         reservations:
           cpus: '1.0'
           memory: 1G
-    # 日志配置
     logging:
       driver: "json-file"
       options:
@@ -83,7 +67,6 @@ services:
   redis:
     image: redis:7-alpine
     container_name: pepgmp-redis-prod
-    # 从.env.production加载环境变量
     env_file:
       - .env.production
     command: >
@@ -99,8 +82,6 @@ services:
       - redis_prod_data:/data
     networks:
       - backend
-    # secrets:
-    #   - redis_password
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
       interval: 10s
@@ -108,7 +89,6 @@ services:
       retries: 5
       start_period: 5s
     restart: unless-stopped
-    # 资源限制
     deploy:
       resources:
         limits:
@@ -117,7 +97,6 @@ services:
         reservations:
           cpus: '0.5'
           memory: 512M
-    # 日志配置
     logging:
       driver: "json-file"
       options:
@@ -126,17 +105,13 @@ services:
 
   # ==================== API 服务（生产） ====================
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile.prod
-    # 使用环境变量 IMAGE_TAG，如果未设置则使用 latest（向后兼容）
-    # 在 .env.production 中设置 IMAGE_TAG=20250118 来指定版本
+    # 1Panel 专用：直接使用已导入的镜像，不进行构建
+    # 1Panel Edition: Use pre-imported image directly, no build
     image: pepgmp-backend:${IMAGE_TAG:-latest}
     container_name: pepgmp-api-prod
     # 从.env.production加载环境变量
     env_file:
       - .env.production
-    # 或使用environment明确指定
     environment:
       - ENVIRONMENT=production
       # 其他配置从.env.production自动加载
@@ -155,11 +130,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    # secrets:
-    #   - db_password
-    #   - redis_password
-    #   - admin_password
-    #   - secret_key
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/monitoring/health"]
       interval: 30s
@@ -167,9 +137,10 @@ services:
       retries: 3
       start_period: 40s
     restart: unless-stopped
-    # 资源限制
+    ports:
+      - "${API_PORT:-8000}:8000"
     deploy:
-      replicas: 1  # 可增加副本数
+      replicas: 1
       resources:
         limits:
           cpus: '4.0'
@@ -177,7 +148,6 @@ services:
         reservations:
           cpus: '2.0'
           memory: 2G
-    # 日志配置
     logging:
       driver: "json-file"
       options:
@@ -230,53 +200,9 @@ services:
       - api
       - frontend
     restart: unless-stopped
-    # 日志配置
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
 
-  # ==================== Prometheus 监控（可选） ====================
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: pyt-prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=30d'
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    networks:
-      - frontend
-      - backend
-    restart: unless-stopped
-    # 资源限制
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 1G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
-
-  # ==================== Grafana 可视化（可选） ====================
-  grafana:
-    image: grafana/grafana:latest
-    container_name: pyt-grafana
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
-      - GF_USERS_ALLOW_SIGN_UP=false
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
-    ports:
-      - "3000:3000"
-    networks:
-      - frontend
-    depends_on:
-      - prometheus
-    restart: unless-stopped

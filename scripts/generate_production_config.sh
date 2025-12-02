@@ -1,14 +1,18 @@
 #!/bin/bash
 
 ################################################################################
-# 生成生产环境配置文件
-# 用途: 自动生成带有强随机密码的 .env.production 文件
-# 使用: bash scripts/generate_production_config.sh
+# Generate Production Environment Configuration File
+# Purpose: Automatically generate .env.production file with strong random passwords
+# Usage: bash scripts/generate_production_config.sh
 ################################################################################
 
 set -e
 
-# 颜色定义
+# Set locale to avoid encoding issues
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
+
+# Color definitions
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -16,44 +20,48 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 echo "========================================================================="
-echo -e "${BLUE}生成生产环境配置文件${NC}"
+echo -e "${BLUE}Generate Production Environment Configuration${NC}"
 echo "========================================================================="
 echo ""
 
-# 检查 .env.production 是否已存在
+# Check if .env.production already exists
 if [ -f ".env.production" ]; then
-    echo -e "${YELLOW}警告: .env.production 已存在${NC}"
-    read -p "是否覆盖现有文件？(yes/no): " confirm
-    if [ "$confirm" != "yes" ]; then
-        echo "操作已取消"
+    echo -e "${YELLOW}Warning: .env.production already exists${NC}"
+    read -p "Overwrite existing file? (y/n) [n]: " confirm
+    confirm=${confirm:-n}
+    if [ "$confirm" != "yes" ] && [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+        echo "Operation cancelled"
         exit 0
     fi
-    # 备份现有文件
+    # Backup existing file
     cp .env.production .env.production.backup.$(date +%Y%m%d_%H%M%S)
-    echo "✓ 已备份现有配置文件"
+    echo "[OK] Backup created for existing configuration file"
 fi
 echo ""
 
-# 生成随机密码的函数
+# Function to generate random password
 generate_password() {
     python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 }
 
-# 获取用户输入
-echo "请输入配置信息（直接回车使用默认值）:"
+# Get user input
+echo "Please enter configuration (press Enter for default values):"
 echo ""
 
-read -p "API端口 [8000]: " API_PORT
+read -p "API Port [8000]: " API_PORT
 API_PORT=${API_PORT:-8000}
 
-read -p "管理员用户名 [admin]: " ADMIN_USERNAME
+read -p "Admin Username [admin]: " ADMIN_USERNAME
 ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
 
-read -p "允许的CORS来源 [*]: " CORS_ORIGINS
+read -p "CORS Origins [*]: " CORS_ORIGINS
 CORS_ORIGINS=${CORS_ORIGINS:-*}
 
+read -p "Image Tag [latest]: " IMAGE_TAG_INPUT
+IMAGE_TAG=${IMAGE_TAG_INPUT:-latest}
+
 echo ""
-echo "正在生成强随机密码..."
+echo "Generating strong random passwords..."
 
 DATABASE_PASSWORD=$(generate_password)
 REDIS_PASSWORD=$(generate_password)
@@ -61,156 +69,156 @@ SECRET_KEY=$(generate_password)
 JWT_SECRET_KEY=$(generate_password)
 ADMIN_PASSWORD=$(generate_password)
 
-echo "✓ 密码生成完成"
+echo "✓ Password generation completed"
 echo ""
 
-# 生成配置文件
+# Generate configuration file
 cat > .env.production << EOF
 # ========================================================================
-# 生产环境配置
 # Production Environment Configuration
 # ========================================================================
 #
-# 生成时间: $(date '+%Y-%m-%d %H:%M:%S')
+# Generated: $(date '+%Y-%m-%d %H:%M:%S')
 #
-# ⚠️  警告: 此文件包含敏感信息，请妥善保管！
-# - 不要提交到Git仓库
-# - 限制文件访问权限: chmod 600 .env.production
-# - 定期更新密码
+# ⚠️  Warning: This file contains sensitive information, please keep it secure!
+# - Do not commit to Git repository
+# - Restrict file access: chmod 600 .env.production
+# - Update passwords regularly
 #
 # ========================================================================
 
-# ==================== 应用基础配置 ====================
+# ==================== Application Basic Configuration ====================
 ENVIRONMENT=production
 API_PORT=${API_PORT}
 LOG_LEVEL=INFO
+IMAGE_TAG=${IMAGE_TAG}
 
-# ==================== 数据库配置 ====================
+# ==================== Database Configuration ====================
 DATABASE_URL=postgresql://pepgmp_prod:${DATABASE_PASSWORD}@database:5432/pepgmp_production
 POSTGRES_USER=pepgmp_prod
 POSTGRES_DB=pepgmp_production
 DATABASE_PASSWORD=${DATABASE_PASSWORD}
 
-# ==================== Redis配置 ====================
+# ==================== Redis Configuration ====================
 REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
 REDIS_PASSWORD=${REDIS_PASSWORD}
 
-# ==================== 安全配置 ====================
+# ==================== Security Configuration ====================
 SECRET_KEY=${SECRET_KEY}
 JWT_SECRET_KEY=${JWT_SECRET_KEY}
 
-# 管理员账号
+# Admin Account
 ADMIN_USERNAME=${ADMIN_USERNAME}
 ADMIN_PASSWORD=${ADMIN_PASSWORD}
 
-# ==================== CORS配置 ====================
+# ==================== CORS Configuration ====================
 CORS_ORIGINS=${CORS_ORIGINS}
 
-# ==================== 摄像头配置 ====================
+# ==================== Camera Configuration ====================
 CAMERAS_YAML_PATH=/app/config/cameras.yaml
 
-# ==================== 领域服务配置 ====================
+# ==================== Domain Service Configuration ====================
 USE_DOMAIN_SERVICE=true
 REPOSITORY_TYPE=postgresql
 ROLLOUT_PERCENT=100
 
-# ==================== 文件监控配置 ====================
+# ==================== File Monitoring Configuration ====================
 WATCHFILES_FORCE_POLLING=1
 
-# ==================== TensorRT配置 ====================
+# ==================== TensorRT Configuration ====================
 AUTO_CONVERT_TENSORRT=false
 
-# ==================== Gunicorn配置 ====================
+# ==================== Gunicorn Configuration ====================
 GUNICORN_WORKERS=4
 GUNICORN_THREADS=2
 GUNICORN_TIMEOUT=120
 
-# ==================== MLflow配置（可选） ====================
+# ==================== MLflow Configuration (Optional) ====================
 # MLFLOW_PORT=5000
 # MLFLOW_TRACKING_URI=http://mlflow:5000
 
-# ==================== 监控配置（可选） ====================
+# ==================== Monitoring Configuration (Optional) ====================
 # PROMETHEUS_ENABLED=true
 # GRAFANA_ADMIN_USER=admin
 # GRAFANA_ADMIN_PASSWORD=$(generate_password)
 
-# ==================== 邮件配置（可选） ====================
+# ==================== Email Configuration (Optional) ====================
 # SMTP_HOST=smtp.gmail.com
 # SMTP_PORT=587
 # SMTP_USER=your-email@example.com
 # SMTP_PASSWORD=your-app-password
 # SMTP_FROM=noreply@example.com
 
-# ==================== Sentry配置（可选） ====================
+# ==================== Sentry Configuration (Optional) ====================
 # SENTRY_DSN=https://your-sentry-dsn@sentry.io/project-id
 
 # ========================================================================
-# 配置生成完成
+# Configuration Generation Complete
 # ========================================================================
 EOF
 
-# 设置文件权限
+# Set file permissions
 chmod 600 .env.production
 
 echo "========================================================================="
-echo -e "${GREEN}配置文件生成成功！${NC}"
+echo -e "${GREEN}Configuration file generated successfully!${NC}"
 echo "========================================================================="
 echo ""
-echo "文件位置: .env.production"
-echo "文件权限: 600 (仅所有者可读写)"
+echo "File location: .env.production"
+echo "File permissions: 600 (owner read/write only)"
 echo ""
-echo -e "${YELLOW}重要信息（请妥善保存）:${NC}"
+echo -e "${YELLOW}Important information (please save carefully):${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "管理员账号:"
-echo "  用户名: ${ADMIN_USERNAME}"
-echo "  密码: ${ADMIN_PASSWORD}"
+echo "Admin Account:"
+echo "  Username: ${ADMIN_USERNAME}"
+echo "  Password: ${ADMIN_PASSWORD}"
 echo ""
-echo "数据库密码: ${DATABASE_PASSWORD}"
-echo "Redis密码: ${REDIS_PASSWORD}"
+echo "Database Password: ${DATABASE_PASSWORD}"
+echo "Redis Password: ${REDIS_PASSWORD}"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo -e "${YELLOW}⚠️  请将以上信息保存到密码管理器！${NC}"
+echo -e "${YELLOW}⚠️  Please save the above information to a password manager!${NC}"
 echo ""
 
-# 生成密码记录文件
+# Generate credentials record file
 cat > .env.production.credentials << EOF
 ========================================================================
-生产环境凭证
+Production Environment Credentials
 Production Credentials
 ========================================================================
 
-生成时间: $(date '+%Y-%m-%d %H:%M:%S')
+Generated: $(date '+%Y-%m-%d %H:%M:%S')
 
-管理员账号:
-  用户名: ${ADMIN_USERNAME}
-  密码: ${ADMIN_PASSWORD}
+Admin Account:
+  Username: ${ADMIN_USERNAME}
+  Password: ${ADMIN_PASSWORD}
 
-数据库:
-  用户名: pepgmp_prod
-  数据库: pepgmp_production
-  密码: ${DATABASE_PASSWORD}
+Database:
+  Username: pepgmp_prod
+  Database: pepgmp_production
+  Password: ${DATABASE_PASSWORD}
 
 Redis:
-  密码: ${REDIS_PASSWORD}
+  Password: ${REDIS_PASSWORD}
 
-安全密钥:
+Security Keys:
   SECRET_KEY: ${SECRET_KEY}
   JWT_SECRET_KEY: ${JWT_SECRET_KEY}
 
 ========================================================================
-⚠️  重要: 请妥善保管此文件，并在确认信息后删除！
+⚠️  Important: Please keep this file secure and delete it after confirming the information!
 ========================================================================
 EOF
 
 chmod 600 .env.production.credentials
 
-echo "凭证信息已保存到: .env.production.credentials"
+echo "Credentials saved to: .env.production.credentials"
 echo ""
-echo "下一步:"
-echo "  1. 查看完整配置: cat .env.production"
-echo "  2. 查看凭证信息: cat .env.production.credentials"
-echo "  3. 保存凭证后删除: rm .env.production.credentials"
-echo "  4. 开始部署: bash scripts/quick_deploy.sh <服务器IP>"
+echo "Next steps:"
+echo "  1. View full config: cat .env.production"
+echo "  2. View credentials: cat .env.production.credentials"
+echo "  3. Delete credentials after saving: rm .env.production.credentials"
+echo "  4. Start deployment: bash scripts/quick_deploy.sh <SERVER_IP>"
 echo ""
 echo "========================================================================="
