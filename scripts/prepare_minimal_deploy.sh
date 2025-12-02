@@ -107,10 +107,10 @@ safe_copy_file() {
     if file_needs_update "$src_file" "$dst_file"; then
         mkdir -p "$(dirname "$dst_file")"
         cp "$src_file" "$dst_file"
-        echo "[OK] Updated: ${description}"
+        print_success "Updated: ${description}"
         return 0
     else
-        echo "[SKIP] Skipped: ${description} (file exists and identical)"
+        print_info "Skipped: ${description} (file exists and identical)"
         return 0
     fi
 }
@@ -137,7 +137,7 @@ safe_copy_dir() {
     if [ ! -d "$dst_dir" ] || [ "$FORCE_OVERWRITE" = "yes" ] || [ "$FORCE_OVERWRITE" = "y" ]; then
         mkdir -p "$(dirname "$dst_dir")"
         cp -r "$src_dir" "$(dirname "$dst_dir")/"
-        echo "[OK] Updated: ${description}"
+        print_success "Updated: ${description}"
         return 0
     fi
     
@@ -148,10 +148,10 @@ safe_copy_dir() {
     if [ "$src_count" -ne "$dst_count" ]; then
         mkdir -p "$(dirname "$dst_dir")"
         cp -r "$src_dir" "$(dirname "$dst_dir")/"
-        echo "[OK] Updated: ${description} (file count differs: ${src_count} vs ${dst_count})"
+        print_success "Updated: ${description} (file count differs: ${src_count} vs ${dst_count})"
         return 0
     else
-        echo "[SKIP] Skipped: ${description} (file count same: ${src_count})"
+        print_info "Skipped: ${description} (file count same: ${src_count})"
         return 0
     fi
 }
@@ -403,21 +403,26 @@ else
 fi
 
 # Copy nginx directory to deployment directory
-echo "Copying nginx configuration to deployment directory..."
+print_info "Copying nginx configuration to deployment directory..."
 
 # Clean up any incorrect directory structure in deploy dir
 if [ -d "$DEPLOY_DIR/nginx/nginx.conf" ]; then
-    echo "WARNING: Found directory at nginx/nginx.conf, removing..."
+    print_warning "Found incorrect directory structure at nginx/nginx.conf"
+    print_info "  → Removing incorrect directory..."
     sudo rm -rf "$DEPLOY_DIR/nginx/nginx.conf" 2>/dev/null || rm -rf "$DEPLOY_DIR/nginx/nginx.conf"
+    print_success "Incorrect directory structure removed"
 fi
 
 # Fix permissions in deploy dir before copying
 if [ -d "$DEPLOY_DIR/nginx" ]; then
     CURRENT_USER=$(whoami)
+    print_info "Fixing permissions for existing nginx directory..."
     sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$DEPLOY_DIR/nginx/" 2>/dev/null || chown -R "$CURRENT_USER:$CURRENT_USER" "$DEPLOY_DIR/nginx/" 2>/dev/null || true
+    print_success "Permissions fixed"
 fi
 
 # Copy nginx directory
+print_info "  → Copying nginx configuration files..."
 safe_copy_dir \
     "$PROJECT_ROOT/nginx" \
     "$DEPLOY_DIR/nginx" \
@@ -425,13 +430,19 @@ safe_copy_dir \
 
 # Ensure correct permissions after copying
 if [ -f "$DEPLOY_DIR/nginx/nginx.conf" ]; then
+    print_info "  → Setting correct file permissions..."
     chmod 644 "$DEPLOY_DIR/nginx/nginx.conf"
     CURRENT_USER=$(whoami)
     chown "$CURRENT_USER:$CURRENT_USER" "$DEPLOY_DIR/nginx/nginx.conf" 2>/dev/null || true
-    echo "[OK] Fixed nginx.conf permissions in deployment directory"
+    print_success "nginx.conf permissions set correctly in deployment directory"
+    print_info "  → File: $DEPLOY_DIR/nginx/nginx.conf"
+else
+    print_error "nginx.conf was not copied successfully"
 fi
 
 # Copy configuration generation script
+print_step "Copying deployment scripts"
+print_info "Copying generate_production_config.sh..."
 safe_copy_file \
     "$PROJECT_ROOT/scripts/generate_production_config.sh" \
     "$DEPLOY_DIR/scripts/generate_production_config.sh" \
@@ -440,94 +451,132 @@ safe_copy_file \
 # Set script execution permissions
 if [ -f "$DEPLOY_DIR/scripts/generate_production_config.sh" ]; then
     chmod +x "$DEPLOY_DIR/scripts/generate_production_config.sh"
+    print_success "Script execution permissions set"
 fi
 
 # Handle environment variable file
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Configuration file handling"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+print_step "Handling environment configuration file"
 
 if [ ! -f "$DEPLOY_DIR/.env.production" ]; then
+    print_warning ".env.production does not exist, needs generation"
     echo ""
-    echo "WARNING: .env.production does not exist, needs generation"
-    echo ""
-    echo "Please run the following command to generate complete configuration file:"
-    echo ""
-    echo "  cd $DEPLOY_DIR"
-    echo "  bash scripts/generate_production_config.sh"
-    echo ""
-    echo "The script will:"
+    print_info "The configuration generation script will:"
     echo "  ✓ Generate complete .env.production file"
     echo "  ✓ Automatically generate strong random passwords"
     echo "  ✓ Create .env.production.credentials file"
     echo "  ✓ Set correct file permissions"
     echo ""
-    read -p "Run configuration generation script now? (y/n) [y]: " run_generate
+    read -p "$(echo -e ${YELLOW}Run configuration generation script now? [y/n] [y]: ${NC})" run_generate
     run_generate=${run_generate:-y}
     
     if [ "$run_generate" = "y" ] || [ "$run_generate" = "Y" ]; then
+        print_info "Running configuration generation script..."
         cd "$DEPLOY_DIR"
         if [ -f "scripts/generate_production_config.sh" ]; then
             bash scripts/generate_production_config.sh
             echo ""
-            echo "[OK] Configuration file generated"
+            if [ -f "$DEPLOY_DIR/.env.production" ]; then
+                print_success "Configuration file generated successfully"
+            else
+                print_error "Configuration file generation may have failed"
+            fi
         else
-            echo "[ERROR] Configuration generation script does not exist"
+            print_error "Configuration generation script does not exist"
         fi
     else
         echo ""
-        echo "WARNING: Please manually run configuration generation script later"
+        print_warning "Skipping configuration generation"
+        print_info "To generate later, run: cd $DEPLOY_DIR && bash scripts/generate_production_config.sh"
     fi
 else
-    echo "INFO: .env.production already exists, skipping generation"
-    echo "      To regenerate, delete it and re-run this script"
+    print_info ".env.production already exists"
+    print_info "  → File: $DEPLOY_DIR/.env.production"
+    print_info "  → To regenerate, delete it and re-run this script with force overwrite"
 fi
 
 # Check if docker-compose.prod.yml contains build section
+print_step "Validating Docker Compose configuration"
+
 if grep -q "build:" "$DEPLOY_DIR/docker-compose.prod.yml" 2>/dev/null; then
-    echo ""
-    echo "WARNING: docker-compose.prod.yml contains build section"
-    echo "         If using imported images, ensure using docker-compose.prod.1panel.yml"
-    echo "         or manually remove build section"
+    print_warning "docker-compose.prod.yml contains build section"
+    print_info "  → If using imported images, ensure using docker-compose.prod.1panel.yml"
+    print_info "  → Or manually remove build section from docker-compose.prod.yml"
+else
+    print_success "Docker Compose configuration validated (no build section)"
 fi
 
+# Summary
 echo ""
-echo "========================================================================="
-echo "              Minimal Deployment Package Ready"
-echo "========================================================================="
+echo -e "${CYAN}=========================================================================${NC}"
+echo -e "${GREEN}              Minimal Deployment Package Ready${NC}"
+echo -e "${CYAN}=========================================================================${NC}"
 echo ""
-echo "Deployment directory: $DEPLOY_DIR"
+
+print_step "Deployment Summary"
+
+echo -e "${BLUE}Deployment directory:${NC} $DEPLOY_DIR"
 echo ""
-echo "Files included:"
+
+echo -e "${GREEN}Files included:${NC}"
 echo "  ✓ docker-compose.prod.yml"
+
 if [ -f "$DEPLOY_DIR/.env.production" ]; then
-    echo "  ✓ .env.production (exists)"
+    echo -e "  ${GREEN}✓${NC} .env.production (exists)"
+    ENV_SIZE=$(stat -f%z "$DEPLOY_DIR/.env.production" 2>/dev/null || stat -c%s "$DEPLOY_DIR/.env.production" 2>/dev/null)
+    echo "    → Size: $ENV_SIZE bytes"
 else
-    echo "  ⚠️  .env.production (needs generation)"
+    echo -e "  ${YELLOW}⚠${NC}  .env.production (needs generation)"
 fi
-echo "  ✓ config/ (configuration directory)"
-echo "  ✓ models/ (model files directory)"
-echo "  ✓ data/ (data directory)"
+
+if [ -d "$DEPLOY_DIR/config" ]; then
+    CONFIG_COUNT=$(find "$DEPLOY_DIR/config" -type f 2>/dev/null | wc -l)
+    echo "  ✓ config/ (configuration directory) - $CONFIG_COUNT files"
+fi
+
+if [ -d "$DEPLOY_DIR/models" ]; then
+    MODEL_COUNT=$(find "$DEPLOY_DIR/models" -type f 2>/dev/null | wc -l)
+    echo "  ✓ models/ (model files directory) - $MODEL_COUNT files"
+fi
+
+if [ -d "$DEPLOY_DIR/nginx" ]; then
+    echo "  ✓ nginx/ (nginx configuration directory)"
+    if [ -f "$DEPLOY_DIR/nginx/nginx.conf" ]; then
+        NGINX_SIZE=$(stat -f%z "$DEPLOY_DIR/nginx/nginx.conf" 2>/dev/null || stat -c%s "$DEPLOY_DIR/nginx/nginx.conf" 2>/dev/null)
+        echo "    → nginx.conf: $NGINX_SIZE bytes"
+    fi
+fi
+
 echo "  ✓ scripts/ (scripts directory)"
 echo ""
-echo "Next steps:"
+
+echo -e "${BLUE}Next steps:${NC}"
 if [ ! -f "$DEPLOY_DIR/.env.production" ]; then
-    echo "  1. Run configuration generation script: cd $DEPLOY_DIR && bash scripts/generate_production_config.sh"
+    echo -e "  ${YELLOW}1.${NC} Run configuration generation script:"
+    echo "     cd $DEPLOY_DIR"
+    echo "     bash scripts/generate_production_config.sh"
+    echo ""
+    echo -e "  ${BLUE}2.${NC} Start services:"
 else
-    echo "  1. ✓ Configuration file ready"
+    echo -e "  ${GREEN}1.${NC} ✓ Configuration file ready"
+    echo ""
+    echo -e "  ${BLUE}2.${NC} Start services:"
 fi
-echo "  2. Create/update Compose project in 1Panel"
-echo "     Working directory: $DEPLOY_DIR"
-echo "     Compose file: docker-compose.prod.yml"
+
+echo "     cd $DEPLOY_DIR"
+echo "     docker-compose -f docker-compose.prod.yml --env-file .env.production up -d"
 echo ""
-echo "Verification command:"
-echo "  cd $DEPLOY_DIR"
-echo "  docker-compose -f docker-compose.prod.yml --env-file .env.production config"
+echo -e "  ${BLUE}3.${NC} Verify configuration:"
+echo "     docker-compose -f docker-compose.prod.yml --env-file .env.production config"
 echo ""
-echo "Tips:"
-echo "  - If using imported images, ensure IMAGE_TAG in .env.production is set correctly"
-echo "  - Credentials saved in .env.production.credentials (if generated)"
-echo "  - Re-run this script automatically detects file differences and only updates changed files"
-echo "  - Force overwrite all files: bash $0 $DEPLOY_DIR yes"
+echo -e "  ${BLUE}4.${NC} Check service status:"
+echo "     docker-compose -f docker-compose.prod.yml ps"
+echo ""
+
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BLUE}Tips:${NC}"
+echo "  • If using imported images, ensure IMAGE_TAG in .env.production matches"
+echo "  • Credentials saved in .env.production.credentials (if generated)"
+echo "  • Re-run this script automatically detects file differences"
+echo "  • Force overwrite all files: bash $0 $DEPLOY_DIR yes"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
