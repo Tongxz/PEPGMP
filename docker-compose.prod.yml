@@ -52,6 +52,8 @@ services:
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_prod_data:/var/lib/postgresql/data
+      # 数据库初始化脚本（首次启动时执行）
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
     networks:
       - backend
     # secrets:
@@ -102,7 +104,8 @@ services:
     # secrets:
     #   - redis_password
     healthcheck:
-      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      # 使用环境变量中的密码进行健康检查
+      test: ["CMD-SHELL", "redis-cli -a $${REDIS_PASSWORD} ping | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 5

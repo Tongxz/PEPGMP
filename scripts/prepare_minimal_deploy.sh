@@ -57,40 +57,75 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# File comparison function
+# File comparison function (跨平台兼容)
 file_needs_update() {
     local src_file="$1"
     local dst_file="$2"
-    
+
     # If destination file doesn't exist, need to copy
     if [ ! -f "$dst_file" ]; then
         return 0  # Need update
     fi
-    
+
     # If force overwrite, need to copy
     if [ "$FORCE_OVERWRITE" = "yes" ] || [ "$FORCE_OVERWRITE" = "y" ]; then
         return 0  # Need update
     fi
-    
-    # Compare file content (using md5sum or diff)
+
+    # Compare file content using available tools
+    # Priority: md5/md5sum > shasum > diff > size comparison
+
+    # macOS uses md5, Linux uses md5sum
     if command -v md5sum >/dev/null 2>&1; then
-        src_hash=$(md5sum "$src_file" | cut -d' ' -f1)
-        dst_hash=$(md5sum "$dst_file" | cut -d' ' -f1)
-        if [ "$src_hash" != "$dst_hash" ]; then
+        src_hash=$(md5sum "$src_file" 2>/dev/null | cut -d' ' -f1)
+        dst_hash=$(md5sum "$dst_file" 2>/dev/null | cut -d' ' -f1)
+        if [ -n "$src_hash" ] && [ -n "$dst_hash" ] && [ "$src_hash" != "$dst_hash" ]; then
             return 0  # Need update
+        elif [ -n "$src_hash" ] && [ -n "$dst_hash" ]; then
+            return 1  # No update needed
         fi
-    elif command -v diff >/dev/null 2>&1; then
+    elif command -v md5 >/dev/null 2>&1; then
+        # macOS md5 command
+        src_hash=$(md5 -q "$src_file" 2>/dev/null)
+        dst_hash=$(md5 -q "$dst_file" 2>/dev/null)
+        if [ -n "$src_hash" ] && [ -n "$dst_hash" ] && [ "$src_hash" != "$dst_hash" ]; then
+            return 0  # Need update
+        elif [ -n "$src_hash" ] && [ -n "$dst_hash" ]; then
+            return 1  # No update needed
+        fi
+    elif command -v shasum >/dev/null 2>&1; then
+        src_hash=$(shasum "$src_file" 2>/dev/null | cut -d' ' -f1)
+        dst_hash=$(shasum "$dst_file" 2>/dev/null | cut -d' ' -f1)
+        if [ -n "$src_hash" ] && [ -n "$dst_hash" ] && [ "$src_hash" != "$dst_hash" ]; then
+            return 0  # Need update
+        elif [ -n "$src_hash" ] && [ -n "$dst_hash" ]; then
+            return 1  # No update needed
+        fi
+    fi
+
+    # Fallback to diff
+    if command -v diff >/dev/null 2>&1; then
         if ! diff -q "$src_file" "$dst_file" >/dev/null 2>&1; then
             return 0  # Need update
         fi
-    else
-        # If no comparison tool, compare file size and modification time
-        if [ "$(stat -f%z "$src_file" 2>/dev/null || stat -c%s "$src_file" 2>/dev/null)" != "$(stat -f%z "$dst_file" 2>/dev/null || stat -c%s "$dst_file" 2>/dev/null)" ]; then
-            return 0  # Need update
-        fi
+        return 1  # No update needed
     fi
-    
-    return 1  # No update needed
+
+    # Last resort: compare file size (跨平台兼容)
+    local src_size dst_size
+    if [ "$(uname)" = "Darwin" ]; then
+        src_size=$(stat -f%z "$src_file" 2>/dev/null)
+        dst_size=$(stat -f%z "$dst_file" 2>/dev/null)
+    else
+        src_size=$(stat -c%s "$src_file" 2>/dev/null)
+        dst_size=$(stat -c%s "$dst_file" 2>/dev/null)
+    fi
+
+    if [ "$src_size" != "$dst_size" ]; then
+        return 0  # Need update
+    fi
+
+    return 1  # No update needed (assume same if size matches)
 }
 
 # Copy file function (with check)
@@ -98,12 +133,12 @@ safe_copy_file() {
     local src_file="$1"
     local dst_file="$2"
     local description="${3:-file}"
-    
+
     if [ ! -f "$src_file" ]; then
         echo "WARNING: Source file does not exist: $src_file"
         return 1
     fi
-    
+
     if file_needs_update "$src_file" "$dst_file"; then
         mkdir -p "$(dirname "$dst_file")"
         cp "$src_file" "$dst_file"
@@ -116,23 +151,24 @@ safe_copy_file() {
 }
 
 # Copy directory function (with check)
+# 改进版本：使用 rsync（如果可用）或详细比较
 safe_copy_dir() {
     local src_dir="$1"
     local dst_dir="$2"
     local description="${3:-directory}"
-    
+
     if [ ! -d "$src_dir" ]; then
         echo "WARNING: Source directory does not exist: $src_dir"
         return 1
     fi
-    
+
     # Check if directory is empty
     if [ -z "$(ls -A "$src_dir" 2>/dev/null)" ]; then
         echo "INFO: Source directory is empty: $src_dir"
         mkdir -p "$dst_dir"
         return 0
     fi
-    
+
     # If destination doesn't exist or force overwrite, copy directly
     if [ ! -d "$dst_dir" ] || [ "$FORCE_OVERWRITE" = "yes" ] || [ "$FORCE_OVERWRITE" = "y" ]; then
         mkdir -p "$(dirname "$dst_dir")"
@@ -140,18 +176,43 @@ safe_copy_dir() {
         print_success "Updated: ${description}"
         return 0
     fi
-    
-    # Compare directory content (simple check: compare file count)
-    src_count=$(find "$src_dir" -type f | wc -l)
-    dst_count=$(find "$dst_dir" -type f 2>/dev/null | wc -l)
-    
-    if [ "$src_count" -ne "$dst_count" ]; then
+
+    # 优先使用 rsync 进行增量同步（如果可用）
+    if command -v rsync >/dev/null 2>&1; then
+        # rsync 会自动检测并只复制变化的文件
+        local changes
+        changes=$(rsync -avnc --delete "$src_dir/" "$dst_dir/" 2>/dev/null | grep -c "^[^>]" || echo "0")
+        if [ "$changes" -gt 2 ]; then  # rsync 输出至少有 2 行标题
+            rsync -av --delete "$src_dir/" "$dst_dir/" >/dev/null 2>&1
+            print_success "Updated: ${description} (incremental sync with rsync)"
+            return 0
+        else
+            print_info "Skipped: ${description} (no changes detected by rsync)"
+            return 0
+        fi
+    fi
+
+    # 备选方案：比较文件数量和总大小
+    src_count=$(find "$src_dir" -type f | wc -l | tr -d ' ')
+    dst_count=$(find "$dst_dir" -type f 2>/dev/null | wc -l | tr -d ' ')
+
+    # 获取目录大小（跨平台兼容）
+    if [ "$(uname)" = "Darwin" ]; then
+        src_size=$(du -sk "$src_dir" 2>/dev/null | cut -f1)
+        dst_size=$(du -sk "$dst_dir" 2>/dev/null | cut -f1)
+    else
+        src_size=$(du -s "$src_dir" 2>/dev/null | cut -f1)
+        dst_size=$(du -s "$dst_dir" 2>/dev/null | cut -f1)
+    fi
+
+    if [ "$src_count" -ne "$dst_count" ] || [ "$src_size" -ne "$dst_size" ]; then
         mkdir -p "$(dirname "$dst_dir")"
+        rm -rf "$dst_dir"
         cp -r "$src_dir" "$(dirname "$dst_dir")/"
-        print_success "Updated: ${description} (file count differs: ${src_count} vs ${dst_count})"
+        print_success "Updated: ${description} (files: ${src_count} vs ${dst_count}, size: ${src_size}KB vs ${dst_size}KB)"
         return 0
     else
-        print_info "Skipped: ${description} (file count same: ${src_count})"
+        print_info "Skipped: ${description} (files: ${src_count}, size: ${src_size}KB - no changes)"
         return 0
     fi
 }
@@ -219,7 +280,7 @@ if command -v docker >/dev/null 2>&1; then
     FRONTEND_IMAGE_EXISTS=$(docker images 2>/dev/null | grep -c pepgmp-frontend || echo "0")
     FRONTEND_IMAGE_EXISTS=$(echo "$FRONTEND_IMAGE_EXISTS" | tr -d '\n' | head -1)
     FRONTEND_IMAGE_EXISTS=${FRONTEND_IMAGE_EXISTS:-0}
-    
+
     if [ "${FRONTEND_IMAGE_EXISTS:-0}" -gt 0 ]; then
         print_success "Frontend image detected (pepgmp-frontend)"
         print_info "Nginx will be configured with frontend support"
@@ -239,7 +300,7 @@ if [ ! -f "$PROJECT_ROOT/nginx/nginx.conf" ] || [ "$FORCE_OVERWRITE" = "yes" ] |
     else
         print_info "Creating nginx.conf in project root"
     fi
-    
+
     if [ "${FRONTEND_IMAGE_EXISTS:-0}" -gt 0 ]; then
         print_info "  → Creating nginx config with frontend support..."
         cat > "$PROJECT_ROOT/nginx/nginx.conf" << 'NGINX_EOF'
@@ -393,7 +454,7 @@ http {
 }
 NGINX_EOF
     fi
-    
+
     chmod 644 "$PROJECT_ROOT/nginx/nginx.conf"
     print_success "nginx.conf created/updated in project root: $PROJECT_ROOT/nginx/nginx.conf"
 else
@@ -442,17 +503,43 @@ fi
 
 # Copy configuration generation script
 print_step "Copying deployment scripts"
+
+# 复制生产配置生成脚本
 print_info "Copying generate_production_config.sh..."
 safe_copy_file \
     "$PROJECT_ROOT/scripts/generate_production_config.sh" \
     "$DEPLOY_DIR/scripts/generate_production_config.sh" \
     "scripts/generate_production_config.sh"
 
+# 复制数据库初始化脚本（Docker Compose 需要挂载此文件）
+print_info "Copying init_db.sql..."
+safe_copy_file \
+    "$PROJECT_ROOT/scripts/init_db.sql" \
+    "$DEPLOY_DIR/scripts/init_db.sql" \
+    "scripts/init_db.sql"
+
+# 复制镜像导入脚本（WSL/Linux 部署需要）
+print_info "Copying import_images_from_windows.sh..."
+safe_copy_file \
+    "$PROJECT_ROOT/scripts/import_images_from_windows.sh" \
+    "$DEPLOY_DIR/scripts/import_images_from_windows.sh" \
+    "scripts/import_images_from_windows.sh"
+
+# 复制版本更新脚本
+print_info "Copying update_image_version.sh..."
+safe_copy_file \
+    "$PROJECT_ROOT/scripts/update_image_version.sh" \
+    "$DEPLOY_DIR/scripts/update_image_version.sh" \
+    "scripts/update_image_version.sh"
+
 # Set script execution permissions
-if [ -f "$DEPLOY_DIR/scripts/generate_production_config.sh" ]; then
-    chmod +x "$DEPLOY_DIR/scripts/generate_production_config.sh"
-    print_success "Script execution permissions set"
-fi
+print_info "Setting script execution permissions..."
+for script in "$DEPLOY_DIR/scripts/"*.sh; do
+    if [ -f "$script" ]; then
+        chmod +x "$script"
+    fi
+done
+print_success "Script execution permissions set"
 
 # Handle environment variable file
 print_step "Handling environment configuration file"
@@ -468,7 +555,7 @@ if [ ! -f "$DEPLOY_DIR/.env.production" ]; then
     echo ""
     read -p "$(echo -e ${YELLOW}Run configuration generation script now? [y/n] [y]: ${NC})" run_generate
     run_generate=${run_generate:-y}
-    
+
     if [ "$run_generate" = "y" ] || [ "$run_generate" = "Y" ]; then
         print_info "Running configuration generation script..."
         cd "$DEPLOY_DIR"

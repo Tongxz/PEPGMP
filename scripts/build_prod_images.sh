@@ -1,74 +1,97 @@
 #!/bin/bash
 #
 # 生产镜像构建、推送与导出脚本
-# 用途: 构建后端与前端生产镜像，推送至私有Registry，并导出tar包
+# Production Image Build, Push and Export Script
 #
-# 使用方法:
-#   bash scripts/build_prod_images.sh
+# 用途: 构建后端与前端生产镜像，推送至私有 Registry，并导出 tar 包
+# Purpose: Build backend and frontend production images, push to private registry, export tar files
+#
+# 使用方法 / Usage:
+#   bash scripts/build_prod_images.sh [VERSION_TAG]
+#   bash scripts/build_prod_images.sh 20251202
+#   bash scripts/build_prod_images.sh v1.0.0
 #
 
 set -e  # 遇到错误立即退出
 
 # =============================================================================
-# 配置区域
+# 加载统一配置
 # =============================================================================
-REGISTRY="192.168.30.83:5433"
-PROJECT_NAME="pyt"
-DATE_TAG=$(date +%Y%m%d)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_ROOT"
 
-# 基础镜像（从私有Registry拉取）
-CUDA_BASE="${REGISTRY}/nvidia/cuda:12.4.0-runtime-ubuntu22.04"
-NODE_BASE="${REGISTRY}/node:20-alpine"
-NGINX_BASE="${REGISTRY}/nginx:1.27-alpine"
+# 加载统一配置
+if [ -f "$SCRIPT_DIR/lib/deploy_config.sh" ]; then
+    source "$SCRIPT_DIR/lib/deploy_config.sh"
+else
+    echo "[ERROR] 配置文件不存在: $SCRIPT_DIR/lib/deploy_config.sh"
+    exit 1
+fi
 
-# 目标镜像
-API_IMAGE="${REGISTRY}/${PROJECT_NAME}-api:prod"
-FRONTEND_IMAGE="${REGISTRY}/${PROJECT_NAME}-frontend:prod"
-
-# 导出目录
-EXPORT_DIR="./docker_exports"
+# 版本标签（从参数或默认配置）
+VERSION_TAG="${1:-$VERSION_TAG}"
 
 # =============================================================================
-# 颜色输出
+# 配置区域（使用统一配置中的变量）
 # =============================================================================
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# 镜像名称（来自 deploy_config.sh）
+BACKEND_IMAGE="$BACKEND_IMAGE_NAME"
+FRONTEND_IMAGE="$FRONTEND_IMAGE_NAME"
 
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
+# Registry 镜像路径
+REGISTRY_BACKEND="${REGISTRY_URL}/${BACKEND_IMAGE}"
+REGISTRY_FRONTEND="${REGISTRY_URL}/${FRONTEND_IMAGE}"
 
-log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
+# 可选：从私有 Registry 拉取基础镜像（如果配置了）
+# CUDA_BASE="${REGISTRY_URL}/nvidia/cuda:12.4.0-runtime-ubuntu22.04"
+# NODE_BASE="${REGISTRY_URL}/node:20-alpine"
+# NGINX_BASE="${REGISTRY_URL}/nginx:1.27-alpine"
 
-log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
+# =============================================================================
+# 显示配置
+# =============================================================================
+echo "========================================================================="
+echo "                生产镜像构建、推送与导出"
+echo "========================================================================="
+echo ""
+log_info "版本标签: ${VERSION_TAG}"
+log_info "后端镜像: ${BACKEND_IMAGE}:${VERSION_TAG}"
+log_info "前端镜像: ${FRONTEND_IMAGE}:${VERSION_TAG}"
+log_info "Registry: ${REGISTRY_URL}"
+log_info "操作系统: ${CURRENT_OS}"
+echo ""
 
 # =============================================================================
 # 检查环境
 # =============================================================================
 check_environment() {
-    log_info "检查环境..."
+    log_step "检查环境"
 
-    # 检查Docker是否安装
-    if ! command -v docker &> /dev/null; then
-        log_error "Docker未安装或不在PATH中"
+    # 检查 Docker 是否安装
+    if ! command_exists docker; then
+        log_error "Docker 未安装或不在 PATH 中"
         exit 1
     fi
 
-    # 检查Docker是否运行
+    # 检查 Docker 是否运行
     if ! docker info &> /dev/null; then
-        log_error "Docker守护进程未运行"
+        log_error "Docker 守护进程未运行"
         exit 1
+    fi
+
+    # 检查 Dockerfile 是否存在
+    if [ ! -f "$BACKEND_DOCKERFILE" ]; then
+        log_error "后端 Dockerfile 不存在: $BACKEND_DOCKERFILE"
+        exit 1
+    fi
+
+    if [ ! -f "$FRONTEND_DOCKERFILE" ]; then
+        log_warning "前端 Dockerfile 不存在: $FRONTEND_DOCKERFILE"
+        log_info "将跳过前端镜像构建"
+        BUILD_FRONTEND=false
+    else
+        BUILD_FRONTEND=true
     fi
 
     # 创建导出目录
@@ -78,140 +101,180 @@ check_environment() {
 }
 
 # =============================================================================
-# 检查私有Registry连接
+# 检查私有 Registry 连接
 # =============================================================================
 check_registry() {
-    log_info "检查私有Registry连接: ${REGISTRY}"
+    log_step "检查私有 Registry 连接: ${REGISTRY_URL}"
 
-    if curl -f -s "http://${REGISTRY}/v2/_catalog" > /dev/null 2>&1; then
-        log_success "私有Registry连接正常"
+    if curl -f -s "http://${REGISTRY_URL}/v2/_catalog" > /dev/null 2>&1; then
+        log_success "私有 Registry 连接正常"
+        REGISTRY_AVAILABLE=true
     else
-        log_warn "无法连接到私有Registry，可能需要配置insecure-registries"
-        log_warn "请在 /etc/docker/daemon.json 中添加:"
-        log_warn '  {"insecure-registries": ["'${REGISTRY}'"]}'
-        read -p "是否继续? (y/N): " -n 1 -r
+        log_warning "无法连接到私有 Registry"
+        log_info "可能需要配置 insecure-registries"
+        log_info "请在 /etc/docker/daemon.json 中添加:"
+        echo '  {"insecure-registries": ["'${REGISTRY_URL}'"]}'
+        echo ""
+        read -p "是否继续（跳过推送到 Registry）? (y/N): " -n 1 -r
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             exit 1
         fi
+        REGISTRY_AVAILABLE=false
     fi
 }
 
 # =============================================================================
 # 构建后端生产镜像
 # =============================================================================
-build_api_image() {
-    log_info "开始构建后端生产镜像..."
-    log_info "基础镜像: ${CUDA_BASE}"
-    log_info "目标镜像: ${API_IMAGE}"
+build_backend_image() {
+    log_step "构建后端生产镜像"
+    log_info "Dockerfile: ${BACKEND_DOCKERFILE}"
+    log_info "目标镜像: ${BACKEND_IMAGE}:${VERSION_TAG}"
 
-    docker build -f Dockerfile \
-        --build-arg CUDA_IMAGE="${CUDA_BASE}" \
-        -t "${API_IMAGE}" \
-        -t "${REGISTRY}/${PROJECT_NAME}-api:${DATE_TAG}" \
+    # 启用 BuildKit 以支持增量构建优化
+    export DOCKER_BUILDKIT=1
+
+    docker build -f "${BACKEND_DOCKERFILE}" \
+        -t "${BACKEND_IMAGE}:${VERSION_TAG}" \
+        -t "${BACKEND_IMAGE}:latest" \
         . || {
         log_error "后端镜像构建失败"
         exit 1
     }
 
     log_success "后端镜像构建完成"
+    log_info "已创建以下标签:"
+    docker images "${BACKEND_IMAGE}:${VERSION_TAG}" --format "  {{.Repository}}:{{.Tag}} - {{.Size}}"
+    docker images "${BACKEND_IMAGE}:latest" --format "  {{.Repository}}:{{.Tag}} - {{.Size}}"
 }
 
 # =============================================================================
 # 构建前端生产镜像
 # =============================================================================
 build_frontend_image() {
-    log_info "开始构建前端生产镜像..."
-    log_info "Node基础镜像: ${NODE_BASE}"
-    log_info "Nginx基础镜像: ${NGINX_BASE}"
-    log_info "目标镜像: ${FRONTEND_IMAGE}"
+    if [ "$BUILD_FRONTEND" != true ]; then
+        log_info "跳过前端镜像构建"
+        return 0
+    fi
 
-    docker build -f Dockerfile.frontend \
-        --build-arg NODE_IMAGE="${NODE_BASE}" \
-        --build-arg NGINX_IMAGE="${NGINX_BASE}" \
+    log_step "构建前端生产镜像"
+    log_info "Dockerfile: ${FRONTEND_DOCKERFILE}"
+    log_info "目标镜像: ${FRONTEND_IMAGE}:${VERSION_TAG}"
+
+    # 启用 BuildKit
+    export DOCKER_BUILDKIT=1
+
+    docker build -f "${FRONTEND_DOCKERFILE}" \
         --build-arg VITE_API_BASE=/api/v1 \
         --build-arg BASE_URL=/ \
         --build-arg SKIP_TYPE_CHECK=true \
-        -t "${FRONTEND_IMAGE}" \
-        -t "${REGISTRY}/${PROJECT_NAME}-frontend:${DATE_TAG}" \
+        -t "${FRONTEND_IMAGE}:${VERSION_TAG}" \
+        -t "${FRONTEND_IMAGE}:latest" \
         . || {
         log_error "前端镜像构建失败"
         exit 1
     }
 
     log_success "前端镜像构建完成"
+    log_info "已创建以下标签:"
+    docker images "${FRONTEND_IMAGE}:${VERSION_TAG}" --format "  {{.Repository}}:{{.Tag}} - {{.Size}}"
+    docker images "${FRONTEND_IMAGE}:latest" --format "  {{.Repository}}:{{.Tag}} - {{.Size}}"
 }
 
 # =============================================================================
-# 推送镜像到私有Registry
+# 推送镜像到私有 Registry
 # =============================================================================
 push_images() {
-    log_info "推送镜像到私有Registry..."
+    if [ "$REGISTRY_AVAILABLE" != true ]; then
+        log_warning "跳过推送到 Registry（Registry 不可用）"
+        return 0
+    fi
 
-    log_info "推送后端镜像 (prod tag)..."
-    docker push "${API_IMAGE}" || {
+    log_step "推送镜像到私有 Registry"
+
+    # 标记后端镜像
+    log_info "标记后端镜像..."
+    docker tag "${BACKEND_IMAGE}:${VERSION_TAG}" "${REGISTRY_BACKEND}:${VERSION_TAG}"
+    docker tag "${BACKEND_IMAGE}:${VERSION_TAG}" "${REGISTRY_BACKEND}:latest"
+
+    # 推送后端镜像
+    log_info "推送后端镜像..."
+    docker push "${REGISTRY_BACKEND}:${VERSION_TAG}" || {
         log_error "后端镜像推送失败"
         exit 1
     }
-
-    log_info "推送后端镜像 (日期tag)..."
-    docker push "${REGISTRY}/${PROJECT_NAME}-api:${DATE_TAG}" || {
-        log_warn "后端镜像日期tag推送失败，继续..."
+    docker push "${REGISTRY_BACKEND}:latest" || {
+        log_warning "后端镜像 latest 标签推送失败"
     }
 
-    log_info "推送前端镜像 (prod tag)..."
-    docker push "${FRONTEND_IMAGE}" || {
-        log_error "前端镜像推送失败"
-        exit 1
-    }
+    if [ "$BUILD_FRONTEND" = true ]; then
+        # 标记前端镜像
+        log_info "标记前端镜像..."
+        docker tag "${FRONTEND_IMAGE}:${VERSION_TAG}" "${REGISTRY_FRONTEND}:${VERSION_TAG}"
+        docker tag "${FRONTEND_IMAGE}:${VERSION_TAG}" "${REGISTRY_FRONTEND}:latest"
 
-    log_info "推送前端镜像 (日期tag)..."
-    docker push "${REGISTRY}/${PROJECT_NAME}-frontend:${DATE_TAG}" || {
-        log_warn "前端镜像日期tag推送失败，继续..."
-    }
+        # 推送前端镜像
+        log_info "推送前端镜像..."
+        docker push "${REGISTRY_FRONTEND}:${VERSION_TAG}" || {
+            log_error "前端镜像推送失败"
+            exit 1
+        }
+        docker push "${REGISTRY_FRONTEND}:latest" || {
+            log_warning "前端镜像 latest 标签推送失败"
+        }
+    fi
 
     log_success "所有镜像推送完成"
 }
 
 # =============================================================================
-# 导出镜像到本地tar
+# 导出镜像到本地 tar
 # =============================================================================
 export_images() {
-    log_info "导出镜像到本地tar包..."
+    log_step "导出镜像到本地 tar 包"
 
-    API_TAR="${EXPORT_DIR}/${PROJECT_NAME}-api_prod_${DATE_TAG}.tar"
-    FRONTEND_TAR="${EXPORT_DIR}/${PROJECT_NAME}-frontend_prod_${DATE_TAG}.tar"
+    BACKEND_TAR="${EXPORT_DIR}/${BACKEND_IMAGE}-${VERSION_TAG}.tar"
+    FRONTEND_TAR="${EXPORT_DIR}/${FRONTEND_IMAGE}-${VERSION_TAG}.tar"
 
     log_info "导出后端镜像..."
-    docker save -o "${API_TAR}" "${API_IMAGE}" || {
+    docker save -o "${BACKEND_TAR}" "${BACKEND_IMAGE}:${VERSION_TAG}" || {
         log_error "后端镜像导出失败"
         exit 1
     }
-    log_success "后端镜像已导出: ${API_TAR}"
+    log_success "后端镜像已导出: ${BACKEND_TAR}"
 
-    log_info "导出前端镜像..."
-    docker save -o "${FRONTEND_TAR}" "${FRONTEND_IMAGE}" || {
-        log_error "前端镜像导出失败"
-        exit 1
-    }
-    log_success "前端镜像已导出: ${FRONTEND_TAR}"
+    if [ "$BUILD_FRONTEND" = true ]; then
+        log_info "导出前端镜像..."
+        docker save -o "${FRONTEND_TAR}" "${FRONTEND_IMAGE}:${VERSION_TAG}" || {
+            log_error "前端镜像导出失败"
+            exit 1
+        }
+        log_success "前端镜像已导出: ${FRONTEND_TAR}"
+    fi
 
     # 显示文件大小
-    log_info "文件大小:"
-    du -h "${API_TAR}"
-    du -h "${FRONTEND_TAR}"
+    echo ""
+    log_info "导出文件大小:"
+    du -h "${BACKEND_TAR}"
+    if [ "$BUILD_FRONTEND" = true ] && [ -f "${FRONTEND_TAR}" ]; then
+        du -h "${FRONTEND_TAR}"
+    fi
 
     # 询问是否压缩
-    read -p "是否压缩tar包? (y/N): " -n 1 -r
+    echo ""
+    read -p "是否压缩 tar 包? (y/N): " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        log_info "压缩tar包..."
-        gzip -9 "${API_TAR}" "${FRONTEND_TAR}" || {
-            log_warn "压缩失败，但tar包已生成"
-        }
+        log_info "压缩 tar 包..."
+        gzip -9 "${BACKEND_TAR}" || log_warning "后端镜像压缩失败"
+        if [ "$BUILD_FRONTEND" = true ] && [ -f "${FRONTEND_TAR}" ]; then
+            gzip -9 "${FRONTEND_TAR}" || log_warning "前端镜像压缩失败"
+        fi
         log_success "压缩完成"
-        du -h "${API_TAR}.gz"
-        du -h "${FRONTEND_TAR}.gz"
+        echo ""
+        log_info "压缩后文件大小:"
+        ls -lh "${EXPORT_DIR}"/*.gz 2>/dev/null || true
     fi
 }
 
@@ -219,25 +282,44 @@ export_images() {
 # 显示摘要
 # =============================================================================
 show_summary() {
+    echo ""
     log_success "=========================================="
     log_success "  生产镜像构建完成"
     log_success "=========================================="
     echo ""
-    log_info "推送到Registry的镜像:"
-    echo "  - ${API_IMAGE}"
-    echo "  - ${REGISTRY}/${PROJECT_NAME}-api:${DATE_TAG}"
-    echo "  - ${FRONTEND_IMAGE}"
-    echo "  - ${REGISTRY}/${PROJECT_NAME}-frontend:${DATE_TAG}"
+    log_info "本地镜像:"
+    echo "  - ${BACKEND_IMAGE}:${VERSION_TAG}"
+    echo "  - ${BACKEND_IMAGE}:latest"
+    if [ "$BUILD_FRONTEND" = true ]; then
+        echo "  - ${FRONTEND_IMAGE}:${VERSION_TAG}"
+        echo "  - ${FRONTEND_IMAGE}:latest"
+    fi
     echo ""
+
+    if [ "$REGISTRY_AVAILABLE" = true ]; then
+        log_info "Registry 镜像:"
+        echo "  - ${REGISTRY_BACKEND}:${VERSION_TAG}"
+        echo "  - ${REGISTRY_BACKEND}:latest"
+        if [ "$BUILD_FRONTEND" = true ]; then
+            echo "  - ${REGISTRY_FRONTEND}:${VERSION_TAG}"
+            echo "  - ${REGISTRY_FRONTEND}:latest"
+        fi
+        echo ""
+    fi
+
     log_info "本地导出文件:"
-    ls -lh "${EXPORT_DIR}"/*_${DATE_TAG}.tar* 2>/dev/null || true
+    ls -lh "${EXPORT_DIR}"/*${VERSION_TAG}* 2>/dev/null || echo "  (无)"
     echo ""
-    log_info "验证Registry内容:"
-    echo "  curl http://${REGISTRY}/v2/_catalog"
-    echo ""
+
     log_info "在其他机器加载镜像:"
-    echo "  docker load -i ${PROJECT_NAME}-api_prod_${DATE_TAG}.tar"
-    echo "  docker load -i ${PROJECT_NAME}-frontend_prod_${DATE_TAG}.tar"
+    echo "  docker load -i ${BACKEND_IMAGE}-${VERSION_TAG}.tar"
+    if [ "$BUILD_FRONTEND" = true ]; then
+        echo "  docker load -i ${FRONTEND_IMAGE}-${VERSION_TAG}.tar"
+    fi
+    echo ""
+
+    log_info "更新 .env.production 版本号:"
+    echo "  bash scripts/update_image_version.sh ${VERSION_TAG}"
     echo ""
 }
 
@@ -245,13 +327,6 @@ show_summary() {
 # 主流程
 # =============================================================================
 main() {
-    log_info "=========================================="
-    log_info "  生产镜像构建、推送与导出"
-    log_info "=========================================="
-    log_info "Registry: ${REGISTRY}"
-    log_info "日期标签: ${DATE_TAG}"
-    echo ""
-
     check_environment
     check_registry
 
@@ -259,11 +334,11 @@ main() {
     read -p "开始构建? (y/N): " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        log_warn "用户取消"
+        log_warning "用户取消"
         exit 0
     fi
 
-    build_api_image
+    build_backend_image
     build_frontend_image
     push_images
     export_images

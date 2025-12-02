@@ -135,7 +135,8 @@ case $DEPLOY_MODE in
 
         # 构建镜像
         echo "1. 构建Docker镜像..."
-        docker build -f Dockerfile.prod.new -t pyt-api:latest . || {
+        # 使用统一的镜像名称和 Dockerfile（与 docker-compose.prod.yml 保持一致）
+        docker build -f Dockerfile.prod -t pepgmp-backend:latest . || {
             echo -e "${RED}❌ 镜像构建失败${NC}"
             exit 1
         }
