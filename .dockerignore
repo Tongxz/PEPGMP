@@ -76,7 +76,9 @@ mlruns/
 *.sqlite3
 
 # Development scripts and tools
-scripts/
+# 注意：scripts/docker-entrypoint.sh 需要被包含在镜像中，所以不能排除整个 scripts/ 目录
+scripts/*
+!scripts/docker-entrypoint.sh
 tools/
 examples/
 notebooks/
