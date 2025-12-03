@@ -191,12 +191,21 @@ services:
   # 前端初始化容器：启动时自动提取静态文件到主机目录 ./frontend/dist，完成后自动退出
   # Nginx 直接挂载该目录，无需手动操作
   # 支持私有仓库：通过 IMAGE_REGISTRY 环境变量配置（默认为空，使用本地镜像）
+  # 文件权限修复：自动设置正确的文件所有者和权限，避免 root 用户文件权限问题
   frontend-init:
     # 镜像格式：${IMAGE_REGISTRY}pepgmp-frontend:${IMAGE_TAG}
     # 本地镜像：pepgmp-frontend:latest
     # 私有仓库：registry.example.com/pepgmp-frontend:20251203
     image: ${IMAGE_REGISTRY:-}pepgmp-frontend:${IMAGE_TAG:-latest}
     container_name: pepgmp-frontend-init
+    env_file:
+      - .env.production
+    environment:
+      # 宿主机用户 UID/GID（用于设置文件权限）
+      # 默认值 1000 适用于大多数 Linux 系统
+      # 可以在 .env.production 中设置：HOST_UID=1000, HOST_GID=1000
+      - HOST_UID=${HOST_UID:-1000}
+      - HOST_GID=${HOST_GID:-1000}
     volumes:
       - ./frontend/dist:/target  # 挂载主机目录，用于自动提取静态文件
     command: >
@@ -206,15 +215,18 @@ services:
         echo '=========================================================================' &&
         echo 'Image: ${IMAGE_REGISTRY:-}pepgmp-frontend:${IMAGE_TAG:-latest}' &&
         echo 'Target: /target (mounted to ./frontend/dist)' &&
+        echo 'Host UID: $${HOST_UID:-1000}, GID: $${HOST_GID:-1000}' &&
         echo '' &&
         mkdir -p /target &&
         cp -r /usr/share/nginx/html/* /target/ &&
+        chown -R $${HOST_UID:-1000}:$${HOST_GID:-1000} /target &&
         chmod -R 755 /target &&
         echo '' &&
-        echo '[OK] Static files extracted successfully' &&
+        echo '[OK] Static files extracted successfully with correct permissions' &&
         ls -la /target/ | head -10 &&
         echo '' &&
         echo 'Total files:' && find /target -type f | wc -l &&
+        echo 'File ownership:' && ls -ld /target &&
         echo '=========================================================================' &&
         echo 'Frontend init completed - container will exit' &&
         echo '========================================================================='
@@ -235,8 +247,10 @@ services:
     networks:
       - frontend
     depends_on:
-      - api
-      - frontend  # 依赖前端容器，确保静态文件已提取
+      api:
+        condition: service_healthy  # 等待 API 服务健康检查通过
+      frontend-init:
+        condition: service_completed_successfully  # 关键！必须等待 frontend-init 运行完成并成功退出
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]

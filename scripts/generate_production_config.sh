@@ -3,7 +3,8 @@
 ################################################################################
 # Generate Production Environment Configuration File
 # Purpose: Automatically generate .env.production file with strong random passwords
-# Usage: bash scripts/generate_production_config.sh
+# Usage: bash scripts/generate_production_config.sh [-y]
+#   -y: Non-interactive mode, automatically overwrite existing file
 ################################################################################
 
 set -e
@@ -19,19 +20,51 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Parse command line arguments
+NON_INTERACTIVE=false
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -y|--yes)
+            NON_INTERACTIVE=true
+            shift
+            ;;
+        -h|--help)
+            echo "Usage: $0 [-y]"
+            echo "  -y, --yes    Non-interactive mode, automatically overwrite existing file"
+            echo "  -h, --help   Show this help message"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use -h or --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
 echo "========================================================================="
 echo -e "${BLUE}Generate Production Environment Configuration${NC}"
 echo "========================================================================="
 echo ""
 
+# Auto-detect host user UID/GID
+HOST_UID=$(id -u)
+HOST_GID=$(id -g)
+echo -e "${BLUE}[INFO]${NC} Auto-detected host user: UID=${HOST_UID}, GID=${HOST_GID}"
+echo ""
+
 # Check if .env.production already exists
 if [ -f ".env.production" ]; then
     echo -e "${YELLOW}Warning: .env.production already exists${NC}"
-    read -p "Overwrite existing file? (y/n) [n]: " confirm
-    confirm=${confirm:-n}
-    if [ "$confirm" != "yes" ] && [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
-        echo "Operation cancelled"
-        exit 0
+    if [ "$NON_INTERACTIVE" = true ]; then
+        echo "Non-interactive mode: automatically overwriting existing file"
+    else
+        read -p "Overwrite existing file? (y/n) [n]: " confirm
+        confirm=${confirm:-n}
+        if [ "$confirm" != "yes" ] && [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+            echo "Operation cancelled"
+            exit 0
+        fi
     fi
     # Backup existing file
     cp .env.production .env.production.backup.$(date +%Y%m%d_%H%M%S)
@@ -45,22 +78,35 @@ generate_password() {
 }
 
 # Get user input
-echo "Please enter configuration (press Enter for default values):"
+if [ "$NON_INTERACTIVE" = false ]; then
+    echo "Please enter configuration (press Enter for default values):"
+    echo ""
+
+    read -p "API Port [8000]: " API_PORT
+    API_PORT=${API_PORT:-8000}
+
+    read -p "Admin Username [admin]: " ADMIN_USERNAME
+    ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+
+    read -p "CORS Origins [*]: " CORS_ORIGINS
+    CORS_ORIGINS=${CORS_ORIGINS:-*}
+
+    read -p "Image Tag [latest]: " IMAGE_TAG_INPUT
+    IMAGE_TAG=${IMAGE_TAG_INPUT:-latest}
+else
+    # Non-interactive mode: use defaults
+    API_PORT=8000
+    ADMIN_USERNAME=admin
+    CORS_ORIGINS=*
+    IMAGE_TAG=latest
+    echo "Non-interactive mode: using default values"
+    echo "  API Port: ${API_PORT}"
+    echo "  Admin Username: ${ADMIN_USERNAME}"
+    echo "  CORS Origins: ${CORS_ORIGINS}"
+    echo "  Image Tag: ${IMAGE_TAG}"
+fi
 echo ""
 
-read -p "API Port [8000]: " API_PORT
-API_PORT=${API_PORT:-8000}
-
-read -p "Admin Username [admin]: " ADMIN_USERNAME
-ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
-
-read -p "CORS Origins [*]: " CORS_ORIGINS
-CORS_ORIGINS=${CORS_ORIGINS:-*}
-
-read -p "Image Tag [latest]: " IMAGE_TAG_INPUT
-IMAGE_TAG=${IMAGE_TAG_INPUT:-latest}
-
-echo ""
 echo "Generating strong random passwords..."
 
 DATABASE_PASSWORD=$(generate_password)
@@ -93,8 +139,20 @@ API_PORT=${API_PORT}
 LOG_LEVEL=INFO
 IMAGE_TAG=${IMAGE_TAG}
 
+# ==================== Host User Configuration ====================
+# 宿主机用户 UID/GID（用于 frontend-init 容器设置文件权限）
+# 自动探测当前运行脚本用户的 UID/GID，确保文件权限与当前用户完美匹配
+# 如需手动修改，请使用: id -u (获取 UID), id -g (获取 GID)
+HOST_UID=${HOST_UID}
+HOST_GID=${HOST_GID}
+
 # ==================== Database Configuration ====================
+# PostgreSQL 连接字符串
+# 标准驱动: postgresql://user:password@host:port/database
+# 异步驱动 (推荐用于 FastAPI/Uvicorn): postgresql+asyncpg://user:password@host:port/database
+# 注意: 如果使用异步驱动，需要确保安装了 asyncpg 驱动: pip install asyncpg
 DATABASE_URL=postgresql://pepgmp_prod:${DATABASE_PASSWORD}@database:5432/pepgmp_production
+# DATABASE_URL=postgresql+asyncpg://pepgmp_prod:${DATABASE_PASSWORD}@database:5432/pepgmp_production
 POSTGRES_USER=pepgmp_prod
 POSTGRES_DB=pepgmp_production
 DATABASE_PASSWORD=${DATABASE_PASSWORD}

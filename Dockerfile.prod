@@ -19,14 +19,11 @@ RUN sed -i 's|http://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc
     sed -i 's|http://security.debian.org|https://mirrors.tuna.tsinghua.edu.cn/debian-security|g' /etc/apt/sources.list.d/debian.sources
 
 # 安装系统依赖（添加重试机制）
+# 注意：使用 opencv-python-headless 后，无需安装图形库依赖（libgl1, libxrender-dev 等）
+# 这样可以减少 100MB+ 的镜像体积，并避免 X11 相关报错
 RUN apt-get update && \
     apt-get install -y --no-install-recommends --fix-missing \
-    # OpenCV依赖
-    libgl1 \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
+    # 基础库（OpenCV headless 只需要这些）
     libgomp1 \
     # 网络工具
     curl \
@@ -69,19 +66,31 @@ WORKDIR /app
 # 从builder阶段复制Python包
 COPY --from=builder /root/.local /home/appuser/.local
 
-# 确保脚本在PATH中
-ENV PATH=/home/appuser/.local/bin:$PATH
+# 确保脚本在PATH中，并显式设置 PYTHONPATH 确保 Python 能找到 site-packages
+ENV PATH=/home/appuser/.local/bin:$PATH \
+    PYTHONPATH=/app:/home/appuser/.local/lib/python3.10/site-packages
 
 # ========== 增量构建优化：分离配置文件和代码复制 ==========
 # 优化策略：将变化频繁的代码复制放在最后，充分利用 Docker 层缓存
-# 
-# 1. 先复制配置文件（变化少，缓存友好）
+#
+# 1. 先安装系统软件（几乎不更新，缓存友好）
+#    系统软件变化频率低，可以充分利用缓存
+#    安装 PostgreSQL 客户端（用于数据库健康检查和迁移）
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends postgresql-client && \
+    rm -rf /var/lib/apt/lists/*
+
+# 2. 复制配置文件（变化少，缓存友好）
 #    配置文件变化频率低，可以充分利用缓存
 COPY --chown=appuser:appuser config/ /app/config/
 COPY --chown=appuser:appuser main.py /app/
 COPY --chown=appuser:appuser pyproject.toml /app/
 
-# 2. 再复制源代码（变化频繁，放在最后）
+# 3. 复制启动脚本（用于数据库迁移和启动前检查）
+COPY --chown=appuser:appuser scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
+# 4. 最后复制源代码（变化频繁，放在最后）
 #    源代码变化时，只需要重新构建这一层和后续层
 #    这样可以最大程度利用缓存，提高增量构建速度
 COPY --chown=appuser:appuser src/ /app/src/
@@ -98,6 +107,9 @@ EXPOSE 8000
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/monitoring/health || exit 1
+
+# 使用 entrypoint 脚本（等待数据库、执行迁移）
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # 启动命令（使用Gunicorn + Uvicorn Workers）
 # 配置通过.env文件或环境变量加载

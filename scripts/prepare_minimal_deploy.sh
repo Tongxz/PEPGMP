@@ -268,313 +268,81 @@ fi
 # Prepare nginx configuration
 print_step "Preparing Nginx configuration"
 
-# Ensure nginx directory exists in project root
-print_info "Ensuring nginx directory exists in project root..."
+# 重要：配置的唯一真理来源是源码中的 nginx/nginx.conf
+# 脚本只负责复制，不进行硬编码生成，避免配置漂移
+print_info "Using nginx.conf from source code (single source of truth)"
+
+# 检查源码中是否存在 nginx.conf
+if [ ! -f "$PROJECT_ROOT/nginx/nginx.conf" ]; then
+    print_error "nginx/nginx.conf not found in source code!"
+    print_error "  Expected location: $PROJECT_ROOT/nginx/nginx.conf"
+    print_error "  This file must exist in the source code repository."
+    print_error "  Please ensure nginx/nginx.conf is committed to the repository."
+    exit 1
+fi
+
+print_success "Found nginx.conf in source code: $PROJECT_ROOT/nginx/nginx.conf"
+
+# 确保 nginx 目录结构存在
+print_info "Ensuring nginx directory structure exists..."
 mkdir -p "$PROJECT_ROOT/nginx/ssl"
 print_success "nginx directory structure ready"
 
-# Check if frontend image exists (in WSL2 or current system)
-print_info "Checking for frontend Docker image..."
-FRONTEND_IMAGE_EXISTS=0
-if command -v docker >/dev/null 2>&1; then
-    FRONTEND_IMAGE_EXISTS=$(docker images 2>/dev/null | grep -c pepgmp-frontend || echo "0")
-    FRONTEND_IMAGE_EXISTS=$(echo "$FRONTEND_IMAGE_EXISTS" | tr -d '\n' | head -1)
-    FRONTEND_IMAGE_EXISTS=${FRONTEND_IMAGE_EXISTS:-0}
+# 注意：不再硬编码生成 nginx.conf，而是直接复制源码中的配置文件
+# 这样可以确保配置的唯一真理来源，避免脚本和源码配置不一致
+# Nginx 配置文件将在后续步骤中从源码复制到部署目录
 
-    if [ "${FRONTEND_IMAGE_EXISTS:-0}" -gt 0 ]; then
-        print_success "Frontend image detected (pepgmp-frontend)"
-        print_info "Nginx will be configured with frontend support"
-    else
-        print_info "No frontend image found"
-        print_info "Nginx will be configured for API only"
-    fi
-else
-    print_warning "Docker command not available, cannot check for frontend image"
-    print_info "Nginx will be configured for API only"
-fi
+# Prepare frontend static files directory (Scheme B requirement)
+print_step "Preparing frontend static files directory (Scheme B)"
 
-# Create or update nginx.conf in project root
-if [ ! -f "$PROJECT_ROOT/nginx/nginx.conf" ] || [ "$FORCE_OVERWRITE" = "yes" ] || [ "$FORCE_OVERWRITE" = "y" ]; then
-    if [ -f "$PROJECT_ROOT/nginx/nginx.conf" ]; then
-        print_info "Updating existing nginx.conf in project root (force overwrite)"
-    else
-        print_info "Creating nginx.conf in project root"
-    fi
-
-    if [ "${FRONTEND_IMAGE_EXISTS:-0}" -gt 0 ]; then
-        print_info "  → Creating nginx config with frontend support (Scheme B: Single Nginx)..."
-        print_info "  → Frontend static files will be served directly from ./frontend/dist"
-        cat > "$PROJECT_ROOT/nginx/nginx.conf" << 'NGINX_EOF'
-events {
-    worker_connections 1024;
-}
-
-http {
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
-
-    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
-                    '$status $body_bytes_sent "$http_referer" '
-                    '"$http_user_agent" "$http_x_forwarded_for"';
-
-    access_log /var/log/nginx/access.log main;
-    error_log /var/log/nginx/error.log warn;
-
-    sendfile on;
-    keepalive_timeout 65;
-    client_max_body_size 100M;
-
-    gzip on;
-    gzip_vary on;
-    gzip_proxied any;
-    gzip_comp_level 6;
-    gzip_types text/plain text/css text/xml text/javascript
-               application/json application/javascript application/xml+rss
-               application/rss+xml font/truetype font/opentype
-               application/vnd.ms-fontobject image/svg+xml;
-
-    upstream api_backend {
-        server api:8000;
-    }
-
-    # Scheme B: Single Nginx architecture - no frontend upstream needed
-    # Static files are served directly from volume mount ./frontend/dist
-
-    server {
-        listen 80;
-        server_name _;
-
-        # Static file root directory (mounted from host directory)
-        root /usr/share/nginx/html;
-        index index.html;
-
-        # API proxy
-        location /api/ {
-            proxy_pass http://api_backend/api/;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-
-            proxy_connect_timeout 60s;
-            proxy_send_timeout 60s;
-            proxy_read_timeout 60s;
-        }
-
-        location /api/v1/monitoring/health {
-            proxy_pass http://api_backend/api/v1/monitoring/health;
-            access_log off;
-        }
-
-        # Frontend static files (supports Vue Router history mode)
-        location / {
-            try_files $uri $uri/ /index.html;
-
-            # Static resource caching
-            location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
-                expires 1y;
-                add_header Cache-Control "public, immutable";
-            }
-        }
-
-        # Health check endpoint
-        location /health {
-            access_log off;
-            return 200 "healthy\n";
-            add_header Content-Type text/plain;
-        }
-
-        # Error pages
-        error_page 404 /index.html;
-        error_page 500 502 503 504 /50x.html;
-        location = /50x.html {
-            root /usr/share/nginx/html;
-        }
-    }
-}
-NGINX_EOF
-    else
-        print_info "  → Creating nginx config for API only..."
-        cat > "$PROJECT_ROOT/nginx/nginx.conf" << 'NGINX_EOF'
-events {
-    worker_connections 1024;
-}
-
-http {
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
-
-    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
-                    '$status $body_bytes_sent "$http_referer" '
-                    '"$http_user_agent" "$http_x_forwarded_for"';
-
-    access_log /var/log/nginx/access.log main;
-    error_log /var/log/nginx/error.log warn;
-
-    sendfile on;
-    keepalive_timeout 65;
-    client_max_body_size 100M;
-
-    gzip on;
-    gzip_vary on;
-    gzip_proxied any;
-    gzip_comp_level 6;
-    gzip_types text/plain text/css text/xml text/javascript
-               application/json application/javascript application/xml+rss
-               application/rss+xml font/truetype font/opentype
-               application/vnd.ms-fontobject image/svg+xml;
-
-    upstream api_backend {
-        server api:8000;
-    }
-
-    server {
-        listen 80;
-        server_name _;
-
-        location /api/ {
-            proxy_pass http://api_backend/api/;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-
-            proxy_connect_timeout 60s;
-            proxy_send_timeout 60s;
-            proxy_read_timeout 60s;
-        }
-
-        location /api/v1/monitoring/health {
-            proxy_pass http://api_backend/api/v1/monitoring/health;
-            access_log off;
-        }
-
-        location / {
-            proxy_pass http://api_backend/;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-        }
-    }
-}
-NGINX_EOF
-    fi
-
-    chmod 644 "$PROJECT_ROOT/nginx/nginx.conf"
-    print_success "nginx.conf created/updated in project root: $PROJECT_ROOT/nginx/nginx.conf"
-else
-    print_info "nginx.conf already exists in project root"
-    print_info "  → Using existing: $PROJECT_ROOT/nginx/nginx.conf"
-    print_info "  → To regenerate, use force overwrite: bash $0 $DEPLOY_DIR yes"
-fi
-
-# Check and prepare frontend static files (Scheme B requirement)
-print_step "Checking frontend static files (Scheme B)"
-
-FRONTEND_DIST_SOURCE=""
 FRONTEND_DIST_TARGET="$DEPLOY_DIR/frontend/dist"
 
-# Check for frontend/dist in project root
+# 在 Scheme B 架构中，frontend-init 容器会在启动时自动提取静态文件
+# 脚本的核心任务：确保目录存在（防止 Docker 挂载报错）
+# 可选：如果源码中有静态文件，可以复制作为加速手段（但非必需）
+
+print_info "Scheme B: frontend-init container will extract static files on startup"
+print_info "  Script task: Ensure directory exists for Docker volume mount"
+
+# 确保目录存在
+mkdir -p "$FRONTEND_DIST_TARGET"
+print_success "Frontend dist directory created: $FRONTEND_DIST_TARGET"
+
+# 可选：如果源码中有静态文件，复制作为加速手段（但非必需）
 if [ -d "$PROJECT_ROOT/frontend/dist" ] && [ -f "$PROJECT_ROOT/frontend/dist/index.html" ]; then
-    FRONTEND_DIST_SOURCE="$PROJECT_ROOT/frontend/dist"
-    print_success "Found frontend static files in project root: $FRONTEND_DIST_SOURCE"
-elif [ -d "$PROJECT_ROOT/../frontend/dist" ] && [ -f "$PROJECT_ROOT/../frontend/dist/index.html" ]; then
-    FRONTEND_DIST_SOURCE="$PROJECT_ROOT/../frontend/dist"
-    print_success "Found frontend static files in parent directory: $FRONTEND_DIST_SOURCE"
-else
-    print_warning "Frontend static files not found in project root"
-    print_info "  Expected location: $PROJECT_ROOT/frontend/dist"
-    print_info "  Note: Frontend static files are required for Scheme B (Single Nginx)"
-    print_info "  You need to build frontend first:"
-    print_info "    1. Build frontend image: docker build -f Dockerfile.frontend -t pepgmp-frontend:latest ."
-    print_info "    2. Extract static files: docker create --name temp pepgmp-frontend:latest && docker cp temp:/usr/share/nginx/html ./frontend/dist && docker rm temp"
-    print_info "  Or build directly: cd frontend && npm ci && npm run build"
-    
-    # Check if frontend image exists and can be used to extract files
-    if [ "${FRONTEND_IMAGE_EXISTS:-0}" -gt 0 ] && command -v docker >/dev/null 2>&1; then
-        print_info "  Frontend image exists, attempting to extract static files..."
-        TEMP_CONTAINER="temp-frontend-extract-$$"
-        if docker create --name "$TEMP_CONTAINER" pepgmp-frontend:latest >/dev/null 2>&1; then
-            mkdir -p "$PROJECT_ROOT/frontend/dist"
-            if docker cp "$TEMP_CONTAINER:/usr/share/nginx/html/." "$PROJECT_ROOT/frontend/dist/" >/dev/null 2>&1; then
-                docker rm "$TEMP_CONTAINER" >/dev/null 2>&1
-                FRONTEND_DIST_SOURCE="$PROJECT_ROOT/frontend/dist"
-                print_success "Extracted frontend static files from image to: $FRONTEND_DIST_SOURCE"
-            else
-                docker rm "$TEMP_CONTAINER" >/dev/null 2>&1
-                print_warning "Failed to extract static files from frontend image"
-            fi
-        else
-            print_warning "Failed to create temporary container from frontend image"
-        fi
+    print_info "Found frontend static files in source code (optional pre-population)"
+    print_info "  → Copying to deployment directory as optimization (frontend-init will overwrite if newer)"
+
+    SOURCE_FILE_COUNT=$(find "$PROJECT_ROOT/frontend/dist" -type f | wc -l)
+
+    if [ "$FORCE_OVERWRITE" = "yes" ] || [ "$FORCE_OVERWRITE" = "y" ] || [ ! -f "$FRONTEND_DIST_TARGET/index.html" ]; then
+        print_info "  → Copying $SOURCE_FILE_COUNT files..."
+        cp -r "$PROJECT_ROOT/frontend/dist"/* "$FRONTEND_DIST_TARGET/" 2>/dev/null || {
+            print_warning "Failed to copy frontend static files (non-fatal, frontend-init will handle)"
+        }
+        print_success "Frontend static files pre-populated (frontend-init will update on startup)"
+    else
+        print_info "  → Static files already exist, skipping pre-population"
+        print_info "  → frontend-init container will update files on startup if needed"
     fi
+else
+    print_info "No frontend static files in source code (this is OK)"
+    print_info "  → frontend-init container will extract files from image on first startup"
+    print_info "  → Directory is ready for Docker volume mount"
 fi
 
-# Copy frontend static files if found
-if [ -n "$FRONTEND_DIST_SOURCE" ] && [ -d "$FRONTEND_DIST_SOURCE" ]; then
-    print_info "Copying frontend static files to deployment directory..."
-    mkdir -p "$FRONTEND_DIST_TARGET"
-    
-    # Count files before copy
-    SOURCE_FILE_COUNT=$(find "$FRONTEND_DIST_SOURCE" -type f | wc -l)
-    
-    # Check if target already exists and has files
-    if [ -d "$FRONTEND_DIST_TARGET" ] && [ -n "$(ls -A "$FRONTEND_DIST_TARGET" 2>/dev/null)" ]; then
-        TARGET_FILE_COUNT=$(find "$FRONTEND_DIST_TARGET" -type f | wc -l)
-        if [ "$FORCE_OVERWRITE" = "yes" ] || [ "$FORCE_OVERWRITE" = "y" ]; then
-            print_info "  → Force overwrite enabled, copying $SOURCE_FILE_COUNT files..."
-            cp -r "$FRONTEND_DIST_SOURCE"/* "$FRONTEND_DIST_TARGET/" 2>/dev/null || {
-                print_error "Failed to copy frontend static files"
-                exit 1
-            }
-            print_success "Frontend static files copied (force overwrite)"
-        elif [ "$SOURCE_FILE_COUNT" -ne "$TARGET_FILE_COUNT" ]; then
-            print_info "  → File count differs ($SOURCE_FILE_COUNT vs $TARGET_FILE_COUNT), updating..."
-            cp -r "$FRONTEND_DIST_SOURCE"/* "$FRONTEND_DIST_TARGET/" 2>/dev/null || {
-                print_error "Failed to copy frontend static files"
-                exit 1
-            }
-            print_success "Frontend static files updated"
-        else
-            print_info "  → File count same ($TARGET_FILE_COUNT), skipping copy"
-            print_info "  → Use force overwrite to update: bash $0 $DEPLOY_DIR yes"
-        fi
-    else
-        print_info "  → Copying $SOURCE_FILE_COUNT files to new directory..."
-        cp -r "$FRONTEND_DIST_SOURCE"/* "$FRONTEND_DIST_TARGET/" 2>/dev/null || {
-            print_error "Failed to copy frontend static files"
-            exit 1
-        }
-        print_success "Frontend static files copied"
-    fi
-    
-    # Verify copy
+# 验证目录存在
+if [ -d "$FRONTEND_DIST_TARGET" ]; then
+    print_success "Frontend dist directory ready: $FRONTEND_DIST_TARGET"
     if [ -f "$FRONTEND_DIST_TARGET/index.html" ]; then
-        print_success "Frontend static files verified: index.html exists"
-        FINAL_FILE_COUNT=$(find "$FRONTEND_DIST_TARGET" -type f | wc -l)
-        print_info "  → Total files: $FINAL_FILE_COUNT"
-        print_info "  → Location: $FRONTEND_DIST_TARGET"
+        FILE_COUNT=$(find "$FRONTEND_DIST_TARGET" -type f 2>/dev/null | wc -l)
+        print_info "  → Pre-populated with $FILE_COUNT files (frontend-init will update if needed)"
     else
-        print_error "Frontend static files copy verification failed: index.html missing"
+        print_info "  → Directory is empty (frontend-init will populate on startup)"
     fi
 else
-    print_warning "Frontend static files not available, skipping copy"
-    print_info "  → Nginx will be configured but frontend may not work until static files are provided"
-    print_info "  → Create directory: mkdir -p $FRONTEND_DIST_TARGET"
-    print_info "  → Then copy or build frontend static files to: $FRONTEND_DIST_TARGET"
+    print_error "Failed to create frontend dist directory"
+    exit 1
 fi
 
 # Copy nginx directory to deployment directory
@@ -631,6 +399,19 @@ safe_copy_file \
     "$PROJECT_ROOT/scripts/init_db.sql" \
     "$DEPLOY_DIR/scripts/init_db.sql" \
     "scripts/init_db.sql"
+
+# 复制 Docker Entrypoint 脚本（API 容器启动需要）
+print_info "Copying docker-entrypoint.sh..."
+if [ ! -f "$PROJECT_ROOT/scripts/docker-entrypoint.sh" ]; then
+    print_error "docker-entrypoint.sh not found in source code!"
+    print_error "  Expected location: $PROJECT_ROOT/scripts/docker-entrypoint.sh"
+    print_error "  This file is required for API container startup (database migration)."
+    exit 1
+fi
+safe_copy_file \
+    "$PROJECT_ROOT/scripts/docker-entrypoint.sh" \
+    "$DEPLOY_DIR/scripts/docker-entrypoint.sh" \
+    "scripts/docker-entrypoint.sh"
 
 # 复制镜像导入脚本（WSL/Linux 部署需要）
 print_info "Copying import_images_from_windows.sh..."
@@ -807,11 +588,12 @@ else
 fi
 
 if [ -d "$DEPLOY_DIR/frontend/dist" ] && [ -f "$DEPLOY_DIR/frontend/dist/index.html" ]; then
-    echo -e "     ${GREEN}✓${NC} Frontend static files ready"
+    echo -e "     ${GREEN}✓${NC} Frontend static files ready (pre-populated)"
+    echo "     → frontend-init container will update on startup if needed"
 else
-    echo -e "     ${YELLOW}⚠${NC}  Frontend static files missing!"
-    echo "     → Build frontend: docker build -f Dockerfile.frontend -t pepgmp-frontend:latest ."
-    echo "     → Extract files: docker create --name temp pepgmp-frontend:latest && docker cp temp:/usr/share/nginx/html ./frontend/dist && docker rm temp"
+    echo -e "     ${YELLOW}⚠${NC}  Frontend static files directory is empty"
+    echo "     → This is OK - frontend-init container will extract files on first startup"
+    echo "     → Directory exists: $DEPLOY_DIR/frontend/dist"
 fi
 echo ""
 echo -e "  ${BLUE}3.${NC} Start services:"
@@ -838,9 +620,9 @@ echo "  • Static files must be built before deployment"
 echo ""
 echo -e "${BLUE}Tips:${NC}"
 echo "  • If using imported images, ensure IMAGE_TAG in .env.production matches"
-echo "  • Frontend static files must exist in frontend/dist/ before starting services"
-echo "  • To build frontend: docker build -f Dockerfile.frontend -t pepgmp-frontend:latest ."
-echo "  • Then extract: docker create --name temp pepgmp-frontend:latest && docker cp temp:/usr/share/nginx/html ./frontend/dist && docker rm temp"
+echo "  • Frontend static files: frontend-init container will extract on startup (directory must exist)"
+echo "  • Nginx config: Copied from source code (nginx/nginx.conf) - single source of truth"
+echo "  • Docker entrypoint: Copied from source code (scripts/docker-entrypoint.sh) - required for migrations"
 echo "  • Credentials saved in .env.production.credentials (if generated)"
 echo "  • Re-run this script automatically detects file differences"
 echo "  • Force overwrite all files: bash $0 $DEPLOY_DIR yes"

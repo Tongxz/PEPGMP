@@ -5,7 +5,8 @@
 ```
 scripts/
 ├── README.md                    # 本文件
-├── SCRIPTS_CLEANUP_PLAN.md     # 清理计划文档
+├── SCRIPTS_CLEANUP_PLAN.md     # 清理计划文档（历史）
+├── CLEANUP_EXECUTION_PLAN.md   # 清理执行计划（历史）
 │
 ├── lib/                         # 公共函数库（新增）
 │   ├── common.sh               # 通用函数
@@ -236,6 +237,44 @@ bash scripts/restore_db.sh <备份文件路径>
 - [脚本分析与修复报告](../docs/SCRIPTS_ANALYSIS_AND_FIX.md)
 - [数据库连接架构分析](../docs/DATABASE_CONNECTION_ARCHITECTURE_ANALYSIS.md)
 - [开发环境到生产环境部署步骤](../docs/DEV_TO_PROD_DEPLOYMENT_STEPS.md)
+
+---
+
+---
+
+## 📊 脚本统计
+
+**总脚本数**: 92 个
+- **根目录脚本**: 35 个（核心部署和开发脚本）
+- **子目录脚本**: 57 个（按功能分类组织）
+
+详细脚本清单请参考 [COMPLETE_SCRIPTS_INVENTORY.md](./COMPLETE_SCRIPTS_INVENTORY.md)
+
+**清理记录**：
+- 根目录临时脚本：已删除 25 个（2025-12-02）
+- 子目录临时脚本：已删除 21 个（2025-12-02）
+- 详细记录请参考 [CLEANUP_SUMMARY.md](./CLEANUP_SUMMARY.md) 和 [SUBDIRECTORY_CLEANUP_SUMMARY.md](./SUBDIRECTORY_CLEANUP_SUMMARY.md)
+
+## 🧹 脚本清理说明
+
+**清理日期**: 2025-12-02
+
+已删除以下临时脚本（问题已解决，不再需要）：
+- ❌ 临时修复脚本：`fix_nginx_*.sh`, `fix_line_endings.*`, `fix_*.py` 等（14 个）
+- ❌ 临时诊断脚本：`diagnose_scheme_b.sh`, `test_scheme_b.sh`, `verify_frontend_fix.sh` 等（9 个）
+- ❌ 其他临时脚本：`convert_to_english.py`, `find_env_file.sh` 等（2 个）
+
+**保留的核心脚本**：
+- ✅ 启动脚本：`start.sh`, `start_dev.sh`, `start_prod.sh` 等（4 个）
+- ✅ 构建和部署脚本：`build_prod_*.sh`, `deploy_*.sh` 等（7 个）
+- ✅ 配置脚本：`generate_production_config.sh` 等（5 个）
+- ✅ 数据库脚本：`init_db.sql`, `backup_db.sh` 等（7 个）
+- ✅ 开发环境脚本：`setup_dev.sh`, `backup_dev_data.sh` 等（4 个）
+- ✅ 子目录脚本：所有功能脚本均保留（78 个）
+
+详细清理记录请参考：
+- [CLEANUP_EXECUTION_PLAN.md](./CLEANUP_EXECUTION_PLAN.md) - 清理执行计划
+- [CLEANUP_SUMMARY.md](./CLEANUP_SUMMARY.md) - 清理总结报告
 
 ---
 
