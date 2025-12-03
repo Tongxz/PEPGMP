@@ -302,7 +302,8 @@ if [ ! -f "$PROJECT_ROOT/nginx/nginx.conf" ] || [ "$FORCE_OVERWRITE" = "yes" ] |
     fi
 
     if [ "${FRONTEND_IMAGE_EXISTS:-0}" -gt 0 ]; then
-        print_info "  → Creating nginx config with frontend support..."
+        print_info "  → Creating nginx config with frontend support (Scheme B: Single Nginx)..."
+        print_info "  → Frontend static files will be served directly from ./frontend/dist"
         cat > "$PROJECT_ROOT/nginx/nginx.conf" << 'NGINX_EOF'
 events {
     worker_connections 1024;
@@ -336,14 +337,18 @@ http {
         server api:8000;
     }
 
-    upstream frontend_backend {
-        server frontend:80;
-    }
+    # Scheme B: Single Nginx architecture - no frontend upstream needed
+    # Static files are served directly from volume mount ./frontend/dist
 
     server {
         listen 80;
         server_name _;
 
+        # Static file root directory (mounted from host directory)
+        root /usr/share/nginx/html;
+        index index.html;
+
+        # API proxy
         location /api/ {
             proxy_pass http://api_backend/api/;
             proxy_set_header Host $host;
@@ -365,16 +370,29 @@ http {
             access_log off;
         }
 
+        # Frontend static files (supports Vue Router history mode)
         location / {
-            proxy_pass http://frontend_backend/;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
+            try_files $uri $uri/ /index.html;
 
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
+            # Static resource caching
+            location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+                expires 1y;
+                add_header Cache-Control "public, immutable";
+            }
+        }
+
+        # Health check endpoint
+        location /health {
+            access_log off;
+            return 200 "healthy\n";
+            add_header Content-Type text/plain;
+        }
+
+        # Error pages
+        error_page 404 /index.html;
+        error_page 500 502 503 504 /50x.html;
+        location = /50x.html {
+            root /usr/share/nginx/html;
         }
     }
 }
@@ -461,6 +479,102 @@ else
     print_info "nginx.conf already exists in project root"
     print_info "  → Using existing: $PROJECT_ROOT/nginx/nginx.conf"
     print_info "  → To regenerate, use force overwrite: bash $0 $DEPLOY_DIR yes"
+fi
+
+# Check and prepare frontend static files (Scheme B requirement)
+print_step "Checking frontend static files (Scheme B)"
+
+FRONTEND_DIST_SOURCE=""
+FRONTEND_DIST_TARGET="$DEPLOY_DIR/frontend/dist"
+
+# Check for frontend/dist in project root
+if [ -d "$PROJECT_ROOT/frontend/dist" ] && [ -f "$PROJECT_ROOT/frontend/dist/index.html" ]; then
+    FRONTEND_DIST_SOURCE="$PROJECT_ROOT/frontend/dist"
+    print_success "Found frontend static files in project root: $FRONTEND_DIST_SOURCE"
+elif [ -d "$PROJECT_ROOT/../frontend/dist" ] && [ -f "$PROJECT_ROOT/../frontend/dist/index.html" ]; then
+    FRONTEND_DIST_SOURCE="$PROJECT_ROOT/../frontend/dist"
+    print_success "Found frontend static files in parent directory: $FRONTEND_DIST_SOURCE"
+else
+    print_warning "Frontend static files not found in project root"
+    print_info "  Expected location: $PROJECT_ROOT/frontend/dist"
+    print_info "  Note: Frontend static files are required for Scheme B (Single Nginx)"
+    print_info "  You need to build frontend first:"
+    print_info "    1. Build frontend image: docker build -f Dockerfile.frontend -t pepgmp-frontend:latest ."
+    print_info "    2. Extract static files: docker create --name temp pepgmp-frontend:latest && docker cp temp:/usr/share/nginx/html ./frontend/dist && docker rm temp"
+    print_info "  Or build directly: cd frontend && npm ci && npm run build"
+    
+    # Check if frontend image exists and can be used to extract files
+    if [ "${FRONTEND_IMAGE_EXISTS:-0}" -gt 0 ] && command -v docker >/dev/null 2>&1; then
+        print_info "  Frontend image exists, attempting to extract static files..."
+        TEMP_CONTAINER="temp-frontend-extract-$$"
+        if docker create --name "$TEMP_CONTAINER" pepgmp-frontend:latest >/dev/null 2>&1; then
+            mkdir -p "$PROJECT_ROOT/frontend/dist"
+            if docker cp "$TEMP_CONTAINER:/usr/share/nginx/html/." "$PROJECT_ROOT/frontend/dist/" >/dev/null 2>&1; then
+                docker rm "$TEMP_CONTAINER" >/dev/null 2>&1
+                FRONTEND_DIST_SOURCE="$PROJECT_ROOT/frontend/dist"
+                print_success "Extracted frontend static files from image to: $FRONTEND_DIST_SOURCE"
+            else
+                docker rm "$TEMP_CONTAINER" >/dev/null 2>&1
+                print_warning "Failed to extract static files from frontend image"
+            fi
+        else
+            print_warning "Failed to create temporary container from frontend image"
+        fi
+    fi
+fi
+
+# Copy frontend static files if found
+if [ -n "$FRONTEND_DIST_SOURCE" ] && [ -d "$FRONTEND_DIST_SOURCE" ]; then
+    print_info "Copying frontend static files to deployment directory..."
+    mkdir -p "$FRONTEND_DIST_TARGET"
+    
+    # Count files before copy
+    SOURCE_FILE_COUNT=$(find "$FRONTEND_DIST_SOURCE" -type f | wc -l)
+    
+    # Check if target already exists and has files
+    if [ -d "$FRONTEND_DIST_TARGET" ] && [ -n "$(ls -A "$FRONTEND_DIST_TARGET" 2>/dev/null)" ]; then
+        TARGET_FILE_COUNT=$(find "$FRONTEND_DIST_TARGET" -type f | wc -l)
+        if [ "$FORCE_OVERWRITE" = "yes" ] || [ "$FORCE_OVERWRITE" = "y" ]; then
+            print_info "  → Force overwrite enabled, copying $SOURCE_FILE_COUNT files..."
+            cp -r "$FRONTEND_DIST_SOURCE"/* "$FRONTEND_DIST_TARGET/" 2>/dev/null || {
+                print_error "Failed to copy frontend static files"
+                exit 1
+            }
+            print_success "Frontend static files copied (force overwrite)"
+        elif [ "$SOURCE_FILE_COUNT" -ne "$TARGET_FILE_COUNT" ]; then
+            print_info "  → File count differs ($SOURCE_FILE_COUNT vs $TARGET_FILE_COUNT), updating..."
+            cp -r "$FRONTEND_DIST_SOURCE"/* "$FRONTEND_DIST_TARGET/" 2>/dev/null || {
+                print_error "Failed to copy frontend static files"
+                exit 1
+            }
+            print_success "Frontend static files updated"
+        else
+            print_info "  → File count same ($TARGET_FILE_COUNT), skipping copy"
+            print_info "  → Use force overwrite to update: bash $0 $DEPLOY_DIR yes"
+        fi
+    else
+        print_info "  → Copying $SOURCE_FILE_COUNT files to new directory..."
+        cp -r "$FRONTEND_DIST_SOURCE"/* "$FRONTEND_DIST_TARGET/" 2>/dev/null || {
+            print_error "Failed to copy frontend static files"
+            exit 1
+        }
+        print_success "Frontend static files copied"
+    fi
+    
+    # Verify copy
+    if [ -f "$FRONTEND_DIST_TARGET/index.html" ]; then
+        print_success "Frontend static files verified: index.html exists"
+        FINAL_FILE_COUNT=$(find "$FRONTEND_DIST_TARGET" -type f | wc -l)
+        print_info "  → Total files: $FINAL_FILE_COUNT"
+        print_info "  → Location: $FRONTEND_DIST_TARGET"
+    else
+        print_error "Frontend static files copy verification failed: index.html missing"
+    fi
+else
+    print_warning "Frontend static files not available, skipping copy"
+    print_info "  → Nginx will be configured but frontend may not work until static files are provided"
+    print_info "  → Create directory: mkdir -p $FRONTEND_DIST_TARGET"
+    print_info "  → Then copy or build frontend static files to: $FRONTEND_DIST_TARGET"
 fi
 
 # Copy nginx directory to deployment directory
@@ -592,6 +706,33 @@ else
     print_success "Docker Compose configuration validated (no build section)"
 fi
 
+# Validate Scheme B architecture requirements
+print_info "Validating Scheme B (Single Nginx) architecture requirements..."
+
+# Check if nginx.conf has correct Scheme B configuration
+if grep -q "root /usr/share/nginx/html" "$DEPLOY_DIR/nginx/nginx.conf" 2>/dev/null && \
+   ! grep -q "upstream frontend_backend" "$DEPLOY_DIR/nginx/nginx.conf" 2>/dev/null; then
+    print_success "Nginx configuration matches Scheme B (Single Nginx)"
+else
+    print_warning "Nginx configuration may not match Scheme B architecture"
+    print_info "  → Expected: root /usr/share/nginx/html (no frontend upstream)"
+fi
+
+# Check if docker-compose has frontend volume mount
+if grep -q "frontend/dist:/usr/share/nginx/html" "$DEPLOY_DIR/docker-compose.prod.yml" 2>/dev/null; then
+    print_success "Docker Compose has frontend static files volume mount"
+else
+    print_warning "Docker Compose may be missing frontend static files volume mount"
+    print_info "  → Expected: ./frontend/dist:/usr/share/nginx/html:ro in nginx service"
+fi
+
+# Check if frontend service has restart: "no"
+if grep -A 5 "^  frontend:" "$DEPLOY_DIR/docker-compose.prod.yml" 2>/dev/null | grep -q 'restart: "no"'; then
+    print_success "Frontend service configured correctly (restart: no)"
+else
+    print_info "Frontend service configuration check skipped (service may be commented out)"
+fi
+
 # Summary
 echo ""
 echo -e "${CYAN}=========================================================================${NC}"
@@ -633,6 +774,22 @@ if [ -d "$DEPLOY_DIR/nginx" ]; then
     fi
 fi
 
+if [ -d "$DEPLOY_DIR/frontend/dist" ]; then
+    FRONTEND_FILE_COUNT=$(find "$DEPLOY_DIR/frontend/dist" -type f 2>/dev/null | wc -l)
+    if [ "$FRONTEND_FILE_COUNT" -gt 0 ]; then
+        echo -e "  ${GREEN}✓${NC} frontend/dist/ (frontend static files) - $FRONTEND_FILE_COUNT files"
+        if [ -f "$DEPLOY_DIR/frontend/dist/index.html" ]; then
+            echo "    → index.html exists"
+        else
+            echo -e "    ${YELLOW}⚠${NC}  index.html missing"
+        fi
+    else
+        echo -e "  ${YELLOW}⚠${NC}  frontend/dist/ (empty or missing)"
+    fi
+else
+    echo -e "  ${YELLOW}⚠${NC}  frontend/dist/ (not found - required for Scheme B)"
+fi
+
 echo "  ✓ scripts/ (scripts directory)"
 echo ""
 
@@ -642,26 +799,48 @@ if [ ! -f "$DEPLOY_DIR/.env.production" ]; then
     echo "     cd $DEPLOY_DIR"
     echo "     bash scripts/generate_production_config.sh"
     echo ""
-    echo -e "  ${BLUE}2.${NC} Start services:"
+    echo -e "  ${BLUE}2.${NC} Verify frontend static files (Scheme B requirement):"
 else
     echo -e "  ${GREEN}1.${NC} ✓ Configuration file ready"
     echo ""
-    echo -e "  ${BLUE}2.${NC} Start services:"
+    echo -e "  ${BLUE}2.${NC} Verify frontend static files (Scheme B requirement):"
 fi
 
+if [ -d "$DEPLOY_DIR/frontend/dist" ] && [ -f "$DEPLOY_DIR/frontend/dist/index.html" ]; then
+    echo -e "     ${GREEN}✓${NC} Frontend static files ready"
+else
+    echo -e "     ${YELLOW}⚠${NC}  Frontend static files missing!"
+    echo "     → Build frontend: docker build -f Dockerfile.frontend -t pepgmp-frontend:latest ."
+    echo "     → Extract files: docker create --name temp pepgmp-frontend:latest && docker cp temp:/usr/share/nginx/html ./frontend/dist && docker rm temp"
+fi
+echo ""
+echo -e "  ${BLUE}3.${NC} Start services:"
 echo "     cd $DEPLOY_DIR"
 echo "     docker-compose -f docker-compose.prod.yml --env-file .env.production up -d"
 echo ""
-echo -e "  ${BLUE}3.${NC} Verify configuration:"
+echo -e "  ${BLUE}4.${NC} Verify configuration:"
 echo "     docker-compose -f docker-compose.prod.yml --env-file .env.production config"
 echo ""
-echo -e "  ${BLUE}4.${NC} Check service status:"
+echo -e "  ${BLUE}5.${NC} Check service status:"
 echo "     docker-compose -f docker-compose.prod.yml ps"
+echo ""
+echo -e "  ${BLUE}6.${NC} Test deployment (Scheme B):"
+echo "     curl http://localhost/health          # Nginx health check"
+echo "     curl http://localhost/                # Frontend static files"
+echo "     curl http://localhost/api/v1/monitoring/health  # API proxy"
 echo ""
 
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BLUE}Architecture: Scheme B (Single Nginx)${NC}"
+echo "  • Nginx serves static files directly from ./frontend/dist"
+echo "  • Frontend container is optional (only for building static files)"
+echo "  • Static files must be built before deployment"
+echo ""
 echo -e "${BLUE}Tips:${NC}"
 echo "  • If using imported images, ensure IMAGE_TAG in .env.production matches"
+echo "  • Frontend static files must exist in frontend/dist/ before starting services"
+echo "  • To build frontend: docker build -f Dockerfile.frontend -t pepgmp-frontend:latest ."
+echo "  • Then extract: docker create --name temp pepgmp-frontend:latest && docker cp temp:/usr/share/nginx/html ./frontend/dist && docker rm temp"
 echo "  • Credentials saved in .env.production.credentials (if generated)"
 echo "  • Re-run this script automatically detects file differences"
 echo "  • Force overwrite all files: bash $0 $DEPLOY_DIR yes"

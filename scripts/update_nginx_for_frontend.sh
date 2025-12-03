@@ -61,9 +61,10 @@ echo "Frontend container exists: $FRONTEND_EXISTS"
 echo "Frontend image exists: $FRONTEND_IMAGE_EXISTS"
 echo ""
 
-# Create nginx configuration
+# Create nginx configuration (Scheme B: Single Nginx)
 if [ "${FRONTEND_EXISTS:-0}" -gt 0 ] || [ "${FRONTEND_IMAGE_EXISTS:-0}" -gt 0 ]; then
-    echo "Creating nginx configuration with frontend support..."
+    echo "Creating nginx configuration with frontend support (Scheme B: Single Nginx)..."
+    echo "Note: Frontend static files should be in ./frontend/dist directory"
     cat > nginx/nginx.conf << 'EOF'
 events {
     worker_connections 1024;
@@ -124,17 +125,33 @@ http {
             access_log off;
         }
 
-        # Root location - proxy to API (frontend can be added later)
-        location / {
-            proxy_pass http://api_backend/;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
+        # Static file root directory (mounted from host directory ./frontend/dist)
+        root /usr/share/nginx/html;
+        index index.html;
 
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
+        # Frontend static files (supports Vue Router history mode)
+        location / {
+            try_files $uri $uri/ /index.html;
+
+            # Static resource caching
+            location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+                expires 1y;
+                add_header Cache-Control "public, immutable";
+            }
+        }
+
+        # Health check endpoint
+        location /health {
+            access_log off;
+            return 200 "healthy\n";
+            add_header Content-Type text/plain;
+        }
+
+        # Error pages
+        error_page 404 /index.html;
+        error_page 500 502 503 504 /50x.html;
+        location = /50x.html {
+            root /usr/share/nginx/html;
         }
     }
 }

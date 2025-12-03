@@ -187,37 +187,41 @@ services:
         max-size: "50m"
         max-file: "5"
 
-  # ==================== Frontend 前端（生产） ====================
-  frontend:
-    # 使用环境变量 IMAGE_TAG，如果未设置则使用 latest
-    image: pepgmp-frontend:${IMAGE_TAG:-latest}
-    container_name: pepgmp-frontend-prod
-    networks:
-      - frontend
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    # 资源限制
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 512M
-        reservations:
-          cpus: '0.5'
-          memory: 256M
-    # 日志配置
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+  # ==================== Frontend Init 前端初始化容器（提取静态文件） ====================
+  # 前端初始化容器：启动时自动提取静态文件到主机目录 ./frontend/dist，完成后自动退出
+  # Nginx 直接挂载该目录，无需手动操作
+  # 支持私有仓库：通过 IMAGE_REGISTRY 环境变量配置（默认为空，使用本地镜像）
+  frontend-init:
+    # 镜像格式：${IMAGE_REGISTRY}pepgmp-frontend:${IMAGE_TAG}
+    # 本地镜像：pepgmp-frontend:latest
+    # 私有仓库：registry.example.com/pepgmp-frontend:20251203
+    image: ${IMAGE_REGISTRY:-}pepgmp-frontend:${IMAGE_TAG:-latest}
+    container_name: pepgmp-frontend-init
+    volumes:
+      - ./frontend/dist:/target  # 挂载主机目录，用于自动提取静态文件
+    command: >
+      sh -c "
+        echo '=========================================================================' &&
+        echo 'Frontend Init Container - Extracting static files...' &&
+        echo '=========================================================================' &&
+        echo 'Image: ${IMAGE_REGISTRY:-}pepgmp-frontend:${IMAGE_TAG:-latest}' &&
+        echo 'Target: /target (mounted to ./frontend/dist)' &&
+        echo '' &&
+        mkdir -p /target &&
+        cp -r /usr/share/nginx/html/* /target/ &&
+        chmod -R 755 /target &&
+        echo '' &&
+        echo '[OK] Static files extracted successfully' &&
+        ls -la /target/ | head -10 &&
+        echo '' &&
+        echo 'Total files:' && find /target -type f | wc -l &&
+        echo '=========================================================================' &&
+        echo 'Frontend init completed - container will exit' &&
+        echo '========================================================================='
+      "
+    restart: "no"  # 完成任务后自动退出，不重启
 
-  # ==================== Nginx 反向代理（可选） ====================
+  # ==================== Nginx 统一服务（静态文件 + API 代理） ====================
   nginx:
     image: nginx:alpine
     container_name: pepgmp-nginx-prod
@@ -227,12 +231,19 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro  # SSL证书
+      - ./frontend/dist:/usr/share/nginx/html:ro  # 前端静态文件（直接挂载主机目录）
     networks:
       - frontend
     depends_on:
       - api
-      - frontend
+      - frontend  # 依赖前端容器，确保静态文件已提取
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     # 日志配置
     logging:
       driver: "json-file"

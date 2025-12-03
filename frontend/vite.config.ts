@@ -30,8 +30,17 @@ export default defineConfig({
       output: {
         // 代码分割策略 - 优化大型chunk
         manualChunks: (id) => {
-          // Vue 核心库
+          // Vue 核心库及其直接依赖（必须优先加载）
+          // 包括：vue, vue-router, @vicons/* 等 Vue 相关库
           if (id.includes('vue') && !id.includes('naive-ui')) {
+            return 'vue-vendor'
+          }
+          // vue-router 必须和 vue 在同一个 chunk
+          if (id.includes('vue-router')) {
+            return 'vue-vendor'
+          }
+          // Vue 图标库必须和 vue 在同一个 chunk
+          if (id.includes('@vicons/')) {
             return 'vue-vendor'
           }
 
@@ -132,8 +141,8 @@ export default defineConfig({
     assetsInlineLimit: 4096,
     // 启用 CSS 代码分割
     cssCodeSplit: true,
-    // 构建目标
-    target: 'es2015',
+    // 构建目标（提高版本以支持更好的模块初始化）
+    target: 'es2020',
     // 报告压缩详情
     reportCompressedSize: true,
   },
