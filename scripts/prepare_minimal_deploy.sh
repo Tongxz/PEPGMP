@@ -251,14 +251,127 @@ safe_copy_dir \
     "config/ (configuration directory)"
 
 # Copy model files directory (if exists)
-print_info "Copying models/ directory..."
+# 智能模型复制策略：
+# 1. 首次部署：如果目标目录不存在，复制所有模型
+# 2. 后续部署：检测新增模型，询问用户是否复制
+# 3. 已存在的模型：跳过（除非强制覆盖）
+print_step "Copying models/ directory"
 if [ -d "$PROJECT_ROOT/models" ] && [ -n "$(ls -A "$PROJECT_ROOT/models" 2>/dev/null)" ]; then
-    MODEL_COUNT=$(find "$PROJECT_ROOT/models" -type f | wc -l)
+    MODEL_COUNT=$(find "$PROJECT_ROOT/models" -type f | wc -l | tr -d ' ')
     print_info "Found $MODEL_COUNT model files"
-    safe_copy_dir \
-        "$PROJECT_ROOT/models" \
-        "$DEPLOY_DIR/models" \
-        "models/ (model files directory)"
+
+    # 计算总大小（用于显示）
+    if [ "$(uname)" = "Darwin" ]; then
+        TOTAL_SIZE=$(du -sh "$PROJECT_ROOT/models" 2>/dev/null | cut -f1)
+    else
+        TOTAL_SIZE=$(du -sh "$PROJECT_ROOT/models" 2>/dev/null | cut -f1)
+    fi
+    print_info "Total size: $TOTAL_SIZE"
+
+    # 首次部署：目标目录不存在或强制覆盖
+    if [ ! -d "$DEPLOY_DIR/models" ] || [ "$FORCE_OVERWRITE" = "yes" ] || [ "$FORCE_OVERWRITE" = "y" ]; then
+        if [ ! -d "$DEPLOY_DIR/models" ]; then
+            print_info "首次部署：复制所有模型文件..."
+        else
+            print_info "强制覆盖：复制所有模型文件..."
+        fi
+        mkdir -p "$(dirname "$DEPLOY_DIR/models")"
+
+        # 使用 rsync 带进度显示（如果可用）
+        if command -v rsync >/dev/null 2>&1; then
+            print_info "Using rsync with progress (this may take a while for large directories)..."
+            rsync -av --info=progress2 "$PROJECT_ROOT/models/" "$DEPLOY_DIR/models/" 2>&1 | \
+                while IFS= read -r line; do
+                    if echo "$line" | grep -qE "(to-check|to-chk|^[0-9])"; then
+                        echo -ne "\r${BLUE}[INFO]${NC} $line"
+                    fi
+                done
+            echo ""  # 换行
+            print_success "Copied models/ directory ($MODEL_COUNT files, $TOTAL_SIZE)"
+        else
+            print_info "Using cp (rsync not available, this may take a while)..."
+            print_info "Progress: Copying $MODEL_COUNT files..."
+            cp -r "$PROJECT_ROOT/models" "$(dirname "$DEPLOY_DIR/models")/"
+            print_success "Copied models/ directory ($MODEL_COUNT files, $TOTAL_SIZE)"
+        fi
+    else
+        # 后续部署：检测新增模型
+        print_info "检测新增模型文件..."
+
+        # 查找新增的模型文件（在源目录存在但目标目录不存在）
+        NEW_MODELS=()
+        while IFS= read -r -d '' file; do
+            # 获取相对路径
+            rel_path="${file#$PROJECT_ROOT/models/}"
+            dst_file="$DEPLOY_DIR/models/$rel_path"
+
+            # 如果目标文件不存在，则认为是新增的
+            if [ ! -f "$dst_file" ]; then
+                NEW_MODELS+=("$rel_path")
+            fi
+        done < <(find "$PROJECT_ROOT/models" -type f -print0 2>/dev/null)
+
+        if [ ${#NEW_MODELS[@]} -gt 0 ]; then
+            echo ""
+            print_warning "发现 ${#NEW_MODELS[@]} 个新增模型文件:"
+            echo ""
+            for model in "${NEW_MODELS[@]}"; do
+                # 显示文件大小
+                if [ "$(uname)" = "Darwin" ]; then
+                    FILE_SIZE=$(stat -f%z "$PROJECT_ROOT/models/$model" 2>/dev/null || echo "0")
+                else
+                    FILE_SIZE=$(stat -c%s "$PROJECT_ROOT/models/$model" 2>/dev/null || echo "0")
+                fi
+
+                # 转换为人类可读格式
+                if [ "$FILE_SIZE" -gt 1048576 ]; then
+                    SIZE_STR=$(echo "scale=2; $FILE_SIZE / 1048576" | bc)MB
+                elif [ "$FILE_SIZE" -gt 1024 ]; then
+                    SIZE_STR=$(echo "scale=2; $FILE_SIZE / 1024" | bc)KB
+                else
+                    SIZE_STR="${FILE_SIZE}B"
+                fi
+
+                echo "  - $model ($SIZE_STR)"
+            done
+            echo ""
+
+            # 询问用户是否复制
+            read -p "是否复制这些新增模型文件到部署目录? (y/N): " -n 1 -r
+            echo ""
+
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                print_info "复制新增模型文件..."
+
+                # 复制新增文件
+                for model in "${NEW_MODELS[@]}"; do
+                    src_file="$PROJECT_ROOT/models/$model"
+                    dst_file="$DEPLOY_DIR/models/$model"
+                    mkdir -p "$(dirname "$dst_file")"
+                    cp "$src_file" "$dst_file"
+                    print_success "已复制: $model"
+                done
+
+                echo ""
+                print_success "新增模型文件复制完成"
+            else
+                print_info "跳过新增模型文件复制"
+            fi
+        else
+            print_info "未发现新增模型文件，跳过复制"
+        fi
+
+        # 检查是否有文件变化（已存在的文件）
+        if command -v rsync >/dev/null 2>&1; then
+            print_info "检查已存在文件的变化..."
+            CHANGES=$(rsync -avnc --delete "$PROJECT_ROOT/models/" "$DEPLOY_DIR/models/" 2>/dev/null | grep -c "^[^>]" || echo "0")
+
+            if [ "$CHANGES" -gt 2 ]; then
+                print_warning "发现已存在文件有变化（${CHANGES} 个文件）"
+                print_info "注意: 已存在的模型文件不会被自动更新，如需更新请使用 --force 参数"
+            fi
+        fi
+    fi
 else
     print_warning "models/ directory does not exist or is empty"
     print_info "Creating empty models/ directory"
