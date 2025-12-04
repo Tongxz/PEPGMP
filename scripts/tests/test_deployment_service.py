@@ -8,7 +8,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.infrastructure.deployment.docker_service import DockerDeploymentService
+from src.infrastructure.deployment.docker_service import (  # noqa: E402
+    DockerDeploymentService,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -55,7 +57,7 @@ async def test_get_deployment_status():
         logger.info(f"测试部署: {test_deployment.id}")
 
         status = await service.get_deployment_status(test_deployment.id)
-        logger.info(f"状态详情:")
+        logger.info("状态详情:")
         logger.info(f"  - ID: {status.id}")
         logger.info(f"  - 状态: {status.status}")
         logger.info(f"  - 副本数: {status.replicas}")
@@ -83,7 +85,7 @@ async def test_create_deployment():
         # 测试1: 查找现有容器
         config1 = {
             "detection_task": "hairnet_detection",
-            "container_name": "pyt-postgres-dev",  # 使用已知存在的容器
+            "container_name": "pepgmp-postgres-dev",  # 使用已知存在的容器
         }
         logger.info(f"测试配置1: {config1}")
         deployment_id1 = await service.create_deployment(config1)

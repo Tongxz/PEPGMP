@@ -15,7 +15,7 @@ from src.detection.pose_detector import YOLOv8PoseDetector as PoseDetector
 from src.services.detection_service import DetectionResult
 
 
-def process_image(image_path, detectors):
+def process_image(image_path, detectors):  # noqa: C901
     """处理单张图片"""
     pose_detector, behavior_recognizer, human_detector = detectors
 
@@ -442,15 +442,17 @@ def main():
         print(f"❌ 检测器初始化失败: {e}")
         return
 
-    # 测试文件路径
-    fixtures_dir = "/Users/zhou/Code/python/Pyt/tests/fixtures"
+    # 测试文件路径 - 使用相对路径，基于项目根目录
+    from pathlib import Path
+
+    fixtures_dir = Path(__file__).resolve().parent.parent / "fixtures"
     image_files = [
-        os.path.join(fixtures_dir, "images/person/test_person.png"),
-        os.path.join(fixtures_dir, "images/hairnet/7月23日.png"),
+        str(fixtures_dir / "images/person/test_person.png"),
+        str(fixtures_dir / "images/hairnet/7月23日.png"),
     ]
     video_files = [
-        os.path.join(fixtures_dir, "videos/20250724072708.mp4"),
-        os.path.join(fixtures_dir, "videos/20250724072822_175680.mp4"),
+        str(fixtures_dir / "videos/20250724072708.mp4"),
+        str(fixtures_dir / "videos/20250724072822_175680.mp4"),
     ]
 
     print("\n📋 测试计划:")
@@ -472,7 +474,7 @@ def main():
                 # 显示图像
                 cv2.imshow(f"检测结果 - {os.path.basename(image_path)}", annotated_image)
 
-                print(f"\n   📊 检测结果统计:")
+                print("\n   📊 检测结果统计:")
                 if result:
                     print(f"     - 检测到人体: {len(result.person_detections)} 个")
                     hands_count = 0
@@ -481,7 +483,7 @@ def main():
                             cv2.imread(image_path)
                         )
                         hands_count = len(hands_results)
-                    except:
+                    except Exception:
                         pass
                     print(f"     - 检测到手部: {hands_count} 个")
                     print(

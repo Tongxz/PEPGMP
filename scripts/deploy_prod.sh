@@ -189,12 +189,12 @@ case $DEPLOY_MODE in
 
         # 等待部署完成
         echo "2. 等待部署完成..."
-        kubectl rollout status deployment/pyt-api
+        kubectl rollout status deployment/pepgmp-api
         echo ""
 
         # 显示Pod状态
         echo "3. Pod状态："
-        kubectl get pods -l app=pyt-api
+        kubectl get pods -l app=pepgmp-api
         ;;
 
     local)

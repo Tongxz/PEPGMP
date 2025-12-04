@@ -161,7 +161,7 @@ get_container_name() {
     fi
 
     # 方法2: 使用项目名称 + 服务名称（Docker Compose默认命名规则）
-    local project_name=$(basename "$(dirname "$(readlink -f "$compose_file")")" 2>/dev/null || echo "pyt")
+    local project_name=$(basename "$(dirname "$(readlink -f "$compose_file")")" 2>/dev/null || echo "pepgmp")
     project_name=$(echo "$project_name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g')
 
     # 尝试常见的容器命名模式
@@ -211,4 +211,3 @@ start_api_container() {
         return 1
     fi
 }
-

@@ -193,7 +193,7 @@ services:
   # ==================== Prometheus 监控（可选） ====================
   prometheus:
     image: prom/prometheus:latest
-    container_name: pyt-prometheus-prod
+    container_name: pepgmp-prometheus-prod
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -220,7 +220,7 @@ services:
   # ==================== Grafana 可视化（可选） ====================
   grafana:
     image: grafana/grafana:latest
-    container_name: pyt-grafana-prod
+    container_name: pepgmp-grafana-prod
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
@@ -247,7 +247,7 @@ services:
   # ==================== MLflow 服务（MLOps可选） ====================
   mlflow:
     image: ${DOCKER_REGISTRY:-192.168.30.83:5433}/mlflow:latest
-    container_name: pyt-mlflow-prod
+    container_name: pepgmp-mlflow-prod
     environment:
       - MLFLOW_BACKEND_STORE_URI=postgresql://${POSTGRES_USER:-pepgmp_prod}:${DATABASE_PASSWORD}@database:5432/${POSTGRES_DB:-pepgmp_production}
       - MLFLOW_DEFAULT_ARTIFACT_ROOT=file:///mlflow/artifacts
@@ -282,7 +282,7 @@ services:
   # ==================== DVC 数据版本控制（MLOps可选） ====================
   dvc:
     image: ${DOCKER_REGISTRY:-192.168.30.83:5433}/dvc:latest
-    container_name: pyt-dvc-prod
+    container_name: pepgmp-dvc-prod
     environment:
       - DVC_CACHE_DIR=/dvc/cache
       - DVC_REMOTE_URL=${DVC_REMOTE_URL:-/dvc/remote}

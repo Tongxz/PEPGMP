@@ -89,7 +89,7 @@ class MLOpsIntegrationTester:
                     "model_version": "test_v1.0",
                     "environment": "testing",
                     "replicas": 1,
-                    "image": "pyt-api:latest",
+                    "image": "pepgmp-backend:latest",
                     "environment_variables": {
                         "TEST_MODE": "true",
                         "LOG_LEVEL": "DEBUG",

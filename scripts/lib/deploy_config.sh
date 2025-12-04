@@ -40,7 +40,7 @@ REGISTRY_FRONTEND_IMAGE="${REGISTRY_URL}/${FRONTEND_IMAGE_NAME}"
 
 # ==================== 部署目录 / Deployment Directories ====================
 # WSL/Linux 默认部署目录
-DEFAULT_DEPLOY_DIR="${HOME}/projects/Pyt"
+DEFAULT_DEPLOY_DIR="${HOME}/projects/PEPGMP"
 DEPLOY_DIR="${DEPLOY_DIR:-$DEFAULT_DEPLOY_DIR}"
 
 # 镜像导出目录

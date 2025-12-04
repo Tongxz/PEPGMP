@@ -137,7 +137,7 @@ class DockerDeploymentService(IDeploymentService):
 
         Args:
             filters: 可选的过滤条件，例如：
-                - name: 容器名模式列表，如 ["pyt-"]
+                - name: 容器名模式列表，如 ["pepgmp-"]
                 - label: 标签过滤，如 ["app=detection"]
 
         Returns:
@@ -202,8 +202,8 @@ class DockerDeploymentService(IDeploymentService):
 
         if not container_name and detection_task:
             # 根据检测任务推断容器名
-            # 例如: hairnet_detection -> pyt-hairnet-detection 或 hairnet_detection_container
-            container_name = f"pyt-{detection_task.replace('_', '-')}"
+            # 例如: hairnet_detection -> pepgmp-hairnet-detection 或 hairnet_detection_container
+            container_name = f"pepgmp-{detection_task.replace('_', '-')}"
 
         if not container_name:
             # 如果没有指定容器名，尝试查找标签匹配的容器
@@ -224,7 +224,7 @@ class DockerDeploymentService(IDeploymentService):
 
             # 如果仍然没有找到，返回默认值
             logger.warning("未指定容器名且未找到匹配容器，返回默认部署ID")
-            return "pyt-api"
+            return "pepgmp-api"
 
         # 尝试查找现有容器
         try:

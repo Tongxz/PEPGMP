@@ -43,7 +43,13 @@ class IntelligentFeaturesTester:
         self.api_base_url = "http://localhost:8000"
         self.redis_client = None
         self.detection_system = None
-        self.test_video_path = "/Users/zhou/Code/Pyt/data/videos/handwash/handwashing_track1_20250813_150418_809383.mp4"
+        # 使用相对路径，基于项目根目录
+        project_root = Path(__file__).resolve().parent.parent
+        test_video = (
+            project_root
+            / "data/videos/handwash/handwashing_track1_20250813_150418_809383.mp4"
+        )
+        self.test_video_path = str(test_video)
 
     def setup_redis(self):
         """设置Redis连接"""

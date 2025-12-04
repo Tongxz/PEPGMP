@@ -15,7 +15,7 @@ services:
   # PostgreSQL数据库
   database:
     image: postgres:16-alpine
-    container_name: pyt-postgres-test
+    container_name: pepgmp-postgres-test
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-pepgmp_production}
       POSTGRES_USER: ${POSTGRES_USER:-pepgmp_prod}
@@ -36,7 +36,7 @@ services:
   # Redis缓存
   redis:
     image: redis:7-alpine
-    container_name: pyt-redis-test
+    container_name: pepgmp-redis-test
     command: >
       redis-server
       --appendonly yes
@@ -58,7 +58,7 @@ services:
   # API服务（使用Registry镜像）
   api:
     image: 192.168.30.83:5433/pepgmp-backend:latest
-    container_name: pyt-api-test
+    container_name: pepgmp-api-test
     env_file:
       - .env.production
     environment:
