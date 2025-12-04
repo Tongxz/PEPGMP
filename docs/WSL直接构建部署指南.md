@@ -182,7 +182,24 @@ cat .env.production | grep IMAGE_TAG
 # 应该显示: IMAGE_TAG=20251204
 ```
 
-### 步骤 6: 启动服务
+### 步骤 6: 清理旧容器（如需要）
+
+如果遇到容器名称冲突错误，需要先清理旧容器：
+
+```bash
+# 方式 1: 使用清理脚本（推荐）
+bash scripts/cleanup_old_containers.sh
+
+# 方式 2: 手动清理
+docker stop $(docker ps -aq --filter "name=pepgmp") 2>/dev/null || true
+docker rm $(docker ps -aq --filter "name=pepgmp") 2>/dev/null || true
+
+# 方式 3: 如果知道之前的部署目录
+cd ~/projects/Pyt  # 或其他部署目录
+docker compose -f docker-compose.prod.yml down
+```
+
+### 步骤 7: 启动服务
 
 ```bash
 # 启动所有服务
@@ -194,7 +211,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production logs -f
 # 等待约 60-90 秒让所有服务启动
 ```
 
-### 步骤 7: 验证部署
+### 步骤 8: 验证部署
 
 ```bash
 # 检查服务状态
