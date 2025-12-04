@@ -20,7 +20,7 @@
 
 ### 步骤 1: 同步代码到 WSL
 
-#### 方式 1: Git Clone（推荐）
+#### 方式 1: Git Clone（推荐，代码在远程仓库）
 
 ```bash
 # 在 WSL Ubuntu 中
@@ -29,24 +29,58 @@ git clone <your-repo-url> Pyt
 cd Pyt
 ```
 
-#### 方式 2: 从 Windows 文件系统复制
+#### 方式 2: 从 Windows 文件系统复制（代码已在 Windows 中）
+
+**重要**：如果代码在 Windows 文件系统中（`/mnt/c/...`），**强烈建议复制到 WSL 文件系统**以获得更好的构建性能。
 
 ```bash
 # 在 WSL Ubuntu 中
-# 如果代码在 Windows 文件系统中
+
+# 1. 检查代码位置
+ls -la /mnt/c/Users/YourName/Code/Pyt
+
+# 2. 复制到 WSL 文件系统（推荐）
+mkdir -p ~/projects
 cp -r /mnt/c/Users/YourName/Code/Pyt ~/projects/Pyt
 cd ~/projects/Pyt
 
-# 注意：建议复制到 WSL 文件系统以获得更好性能
+# 3. 验证复制
+ls -la ~/projects/Pyt
+ls -la ~/projects/Pyt/scripts/
+
+# 注意：
+# - Windows 文件系统（/mnt/c/...）I/O 性能较差
+# - WSL 文件系统（~/projects/...）性能更好
+# - 构建镜像时会有明显性能差异
 ```
 
-#### 方式 3: 通过共享文件夹
+**性能对比**：
+- Windows 文件系统构建：约 30-40 分钟（首次）
+- WSL 文件系统构建：约 15-25 分钟（首次）
+
+#### 方式 3: 使用 rsync（更高效，适合大项目）
 
 ```bash
 # 在 WSL Ubuntu 中
-# 如果代码在共享文件夹中
-cp -r /mnt/c/.../Pyt ~/projects/Pyt
-cd ~/projects/Pyt
+# 使用 rsync 可以更高效地同步，并支持增量更新
+
+mkdir -p ~/projects
+rsync -avz --progress /mnt/c/Users/YourName/Code/Pyt/ ~/projects/Pyt/
+
+# 后续更新时，rsync 只会同步变更的文件
+rsync -avz --progress /mnt/c/Users/YourName/Code/Pyt/ ~/projects/Pyt/
+```
+
+#### 方式 4: 直接使用 Windows 文件系统（不推荐，但可行）
+
+如果不想复制，也可以直接在 Windows 文件系统中构建，但性能会较差：
+
+```bash
+# 在 WSL Ubuntu 中
+cd /mnt/c/Users/YourName/Code/Pyt
+
+# 直接构建（性能较慢）
+bash scripts/build_prod_only.sh 20251204
 ```
 
 ### 步骤 2: 验证环境
