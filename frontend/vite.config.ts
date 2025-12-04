@@ -28,79 +28,17 @@ export default defineConfig({
     rollupOptions: {
       input: 'index.html',
       output: {
-        // 代码分割策略 - 优化大型chunk
+        // 代码分割策略 - 简化策略，避免循环依赖
+        // 将所有第三方库放在一个 vendor chunk 中，避免循环依赖问题
         manualChunks: (id) => {
-          // Vue 核心库及其直接依赖（必须优先加载）
-          // 包括：vue, vue-router, @vicons/* 等 Vue 相关库
-          if (id.includes('vue') && !id.includes('naive-ui')) {
-            return 'vue-vendor'
-          }
-          // vue-router 必须和 vue 在同一个 chunk
-          if (id.includes('vue-router')) {
-            return 'vue-vendor'
-          }
-          // Vue 图标库必须和 vue 在同一个 chunk
-          if (id.includes('@vicons/')) {
-            return 'vue-vendor'
+          // 只处理 node_modules 中的依赖
+          if (!id.includes('node_modules')) {
+            return
           }
 
-          // Naive UI 核心组件 - 进一步细分chunk
-          if (id.includes('naive-ui')) {
-            // 基础组件
-            if (id.includes('button') || id.includes('input') || id.includes('form')) {
-              return 'ui-basic'
-            }
-            // 布局组件
-            if (id.includes('card') || id.includes('space') || id.includes('grid') ||
-              id.includes('layout') || id.includes('divider')) {
-              return 'ui-layout'
-            }
-            // 数据展示组件
-            if (id.includes('table') || id.includes('list') || id.includes('tree') ||
-              id.includes('pagination') || id.includes('scrollbar')) {
-              return 'ui-data'
-            }
-            // 反馈组件
-            if (id.includes('message') || id.includes('notification') || id.includes('modal') ||
-              id.includes('drawer') || id.includes('popover') || id.includes('tooltip')) {
-              return 'ui-feedback'
-            }
-            // 导航组件
-            if (id.includes('tabs') || id.includes('menu') || id.includes('breadcrumb') ||
-              id.includes('steps') || id.includes('anchor')) {
-              return 'ui-navigation'
-            }
-            // 选择器组件
-            if (id.includes('select') || id.includes('cascader') || id.includes('transfer') ||
-              id.includes('tree-select') || id.includes('auto-complete')) {
-              return 'ui-selector'
-            }
-            // 日期时间组件
-            if (id.includes('date') || id.includes('time') || id.includes('calendar')) {
-              return 'ui-datetime'
-            }
-            // 上传和进度组件
-            if (id.includes('upload') || id.includes('progress') || id.includes('spin')) {
-              return 'ui-progress'
-            }
-            // 其他UI组件
-            return 'ui-misc'
-          }
-
-          // 工具库
-          if (id.includes('axios')) {
-            return 'utils-vendor'
-          }
-
-          // Pinia 状态管理
-          if (id.includes('pinia')) {
-            return 'state-vendor'
-          }
-
-          // 第三方库
-          if (id.includes('node_modules')) {
-            return 'vendor'
-          }
+          // 所有第三方库都放在 vendor chunk 中
+          // 这样可以避免循环依赖，因为所有依赖都在同一个 chunk 中
+          return 'vendor'
         },
         // 文件命名策略
         chunkFileNames: 'assets/js/[name]-[hash].js',
