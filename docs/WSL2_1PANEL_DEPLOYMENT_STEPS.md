@@ -32,8 +32,8 @@ docker images | grep pepgmp
 
 ```bash
 # 从 Windows 文件系统导入
-docker load -i /mnt/c/Users/YourName/Code/PythonCode/Pyt/pepgmp-backend-20251201.tar
-docker load -i /mnt/c/Users/YourName/Code/PythonCode/Pyt/pepgmp-frontend-20251201.tar
+docker load -i /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/pepgmp-backend-20251201.tar
+docker load -i /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/pepgmp-frontend-20251201.tar
 ```
 
 ---
@@ -46,10 +46,10 @@ docker load -i /mnt/c/Users/YourName/Code/PythonCode/Pyt/pepgmp-frontend-2025120
 
 ```bash
 # 从 Windows 项目目录运行准备脚本
-bash /mnt/c/Users/YourName/Code/PythonCode/Pyt/scripts/prepare_minimal_deploy.sh
+bash /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/scripts/prepare_minimal_deploy.sh
 
 # 脚本会：
-# 1. 创建 ~/projects/Pyt 目录
+# 1. 创建 ~/projects/PEPGMP目录
 # 2. 复制 docker-compose.prod.1panel.yml
 # 3. 复制 config/ 和 models/ 目录
 # 4. 复制 generate_production_config.sh 脚本
@@ -60,12 +60,12 @@ bash /mnt/c/Users/YourName/Code/PythonCode/Pyt/scripts/prepare_minimal_deploy.sh
 
 ```bash
 # 选项1: 重新运行（会覆盖现有文件）
-bash /mnt/c/Users/YourName/Code/PythonCode/Pyt/scripts/prepare_minimal_deploy.sh
+bash /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/scripts/prepare_minimal_deploy.sh
 
 # 选项2: 只更新特定文件
 cd ~/projects/Pyt
-cp /mnt/c/Users/YourName/Code/PythonCode/Pyt/docker-compose.prod.1panel.yml docker-compose.prod.yml
-cp /mnt/c/Users/YourName/Code/PythonCode/Pyt/scripts/generate_production_config.sh scripts/
+cp /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/docker-compose.prod.1panel.yml docker-compose.prod.yml
+cp /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/scripts/generate_production_config.sh scripts/
 chmod +x scripts/generate_production_config.sh
 ```
 
@@ -73,14 +73,14 @@ chmod +x scripts/generate_production_config.sh
 
 ```bash
 # 创建目录
-mkdir -p ~/projects/Pyt/{config,models,data,logs,scripts}
+mkdir -p ~/projects/PEPGMP{config,models,data,logs,scripts}
 cd ~/projects/Pyt
 
 # 复制必需文件
-cp /mnt/c/Users/YourName/Code/PythonCode/Pyt/docker-compose.prod.1panel.yml docker-compose.prod.yml
-cp -r /mnt/c/Users/YourName/Code/PythonCode/Pyt/config/* config/
-cp -r /mnt/c/Users/YourName/Code/PythonCode/Pyt/models/* models/ 2>/dev/null || true
-cp /mnt/c/Users/YourName/Code/PythonCode/Pyt/scripts/generate_production_config.sh scripts/
+cp /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/docker-compose.prod.1panel.yml docker-compose.prod.yml
+cp -r /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/config/* config/
+cp -r /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/models/* models/ 2>/dev/null || true
+cp /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/scripts/generate_production_config.sh scripts/
 chmod +x scripts/generate_production_config.sh
 ```
 
@@ -100,9 +100,9 @@ bash scripts/generate_production_config.sh
 **脚本会询问以下信息**（直接回车使用默认值）：
 
 ```
-API端口 [8000]: 
-管理员用户名 [admin]: 
-允许的CORS来源 [*]: 
+API端口 [8000]:
+管理员用户名 [admin]:
+允许的CORS来源 [*]:
 镜像标签 [latest]: 20251201  ← 输入你的镜像标签
 ```
 
@@ -150,12 +150,12 @@ grep IMAGE_TAG .env.production
 2. **创建新项目**
    - 点击 **"创建"** 或 **"新建"** 按钮
    - 项目名称：`pepgmp-production`
-   - 工作目录：`/home/你的用户名/projects/Pyt`（或 `~/projects/Pyt`）
+   - 工作目录：`/home/你的用户名/projects/Pyt`（或 `~/projects/PEPGMP）
 
 3. **配置 Compose 文件**
    - 方式1：上传 `docker-compose.prod.yml` 文件
    - 方式2：在编辑器中粘贴文件内容
-   - 方式3：选择 **"从文件创建"**，指向 `~/projects/Pyt/docker-compose.prod.yml`
+   - 方式3：选择 **"从文件创建"**，指向 `~/projects/PEPGMPdocker-compose.prod.yml`
 
 #### 5.3 启动服务
 
@@ -208,7 +208,7 @@ docker exec pepgmp-redis-prod redis-cli -a $(grep REDIS_PASSWORD .env.production
 部署前检查：
 
 - [ ] 镜像已导入到 WSL2（`docker images | grep pepgmp`）
-- [ ] 部署目录已创建（`~/projects/Pyt`）
+- [ ] 部署目录已创建（`~/projects/PEPGMP）
 - [ ] Docker Compose 文件已复制（`docker-compose.prod.yml`）
 - [ ] 配置文件目录已复制（`config/`）
 - [ ] 模型文件目录已复制（`models/`，如果需要）
@@ -236,7 +236,7 @@ docker exec pepgmp-redis-prod redis-cli -a $(grep REDIS_PASSWORD .env.production
 docker save pepgmp-backend:新标签 -o pepgmp-backend-新标签.tar
 
 # 3. 在 WSL2 中导入新镜像
-docker load -i /mnt/c/Users/YourName/Code/PythonCode/Pyt/pepgmp-backend-新标签.tar
+docker load -i /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/pepgmp-backend-新标签.tar
 
 # 4. 更新配置文件中的 IMAGE_TAG
 cd ~/projects/Pyt
@@ -312,10 +312,10 @@ docker compose -f docker-compose.prod.yml up -d --force-recreate api
 
 ```bash
 # 准备部署包
-bash /mnt/c/Users/YourName/Code/PythonCode/Pyt/scripts/prepare_minimal_deploy.sh
+bash /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/scripts/prepare_minimal_deploy.sh
 
 # 生成配置文件
-cd ~/projects/Pyt && bash scripts/generate_production_config.sh
+cd ~/projects/PEPGMP&& bash scripts/generate_production_config.sh
 
 # 验证配置
 docker compose -f docker-compose.prod.yml config
@@ -335,6 +335,5 @@ curl http://localhost:8000/api/v1/monitoring/health
 
 ---
 
-**最后更新**: 2025-12-01  
+**最后更新**: 2025-12-01
 **适用版本**: WSL2 Ubuntu + 1Panel
-

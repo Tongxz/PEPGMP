@@ -189,7 +189,7 @@ cd ~/deploy-packages
 scp -r Pyt user@wsl-ip:~/projects/
 
 # 或使用 rsync（更高效）
-rsync -avz --progress Pyt/ user@wsl-ip:~/projects/Pyt/
+rsync -avz --progress Pyt/ user@wsl-ip:~/projects/PEPGMP
 ```
 
 #### 方式 2: 通过 Windows 文件系统
@@ -211,8 +211,8 @@ cd Pyt
 
 # 只保留必要的文件（不需要 src/, frontend/src/ 等）
 # 使用 prepare_minimal_deploy.sh 脚本准备最小化部署包
-bash scripts/prepare_minimal_deploy.sh ~/projects/Pyt-deploy
-cd ~/projects/Pyt-deploy
+bash scripts/prepare_minimal_deploy.sh ~/projects/PEPGMP-deploy
+cd ~/projects/PEPGMP-deploy
 ```
 
 ### 步骤 3.3：验证部署文件

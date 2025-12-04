@@ -99,7 +99,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d
 ### WSL2 端
 - [ ] 导入镜像（如需要）：`docker load -i ...`
 - [ ] 验证镜像：`docker images | grep pepgmp`
-- [ ] 准备部署目录：`mkdir -p ~/projects/Pyt`
+- [ ] 准备部署目录：`mkdir -p ~/projects/PEPGMP
 - [ ] 复制部署包到部署目录
 - [ ] 生成配置：`bash scripts/generate_production_config.sh`
 - [ ] 检查配置：`cat .env.production | grep IMAGE_TAG`

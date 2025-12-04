@@ -17,7 +17,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Default values
-DEPLOY_DIR="${1:-$HOME/projects/Pyt-deploy}"
+DEPLOY_DIR="${1:-$HOME/projects/PEPGMP-deploy}"
 VERSION_TAG="${2:-$(date +%Y%m%d)}"
 UPDATE_TYPE="${3:-all}"  # all, backend, frontend
 
@@ -70,8 +70,8 @@ check_passed "环境检查通过"
 check_info "步骤 2: 同步代码..."
 
 # 检查是否需要从 Windows 文件系统同步
-if [ -d "/mnt/c" ] && [ -f "/mnt/c/Users/$USER/Code/Pyt/docker-compose.prod.yml" ]; then
-    WINDOWS_PROJECT="/mnt/c/Users/$USER/Code/Pyt"
+if [ -d "/mnt/c" ] && [ -f "/mnt/c/Users/$USER/Code/PEPGMP/docker-compose.prod.yml" ]; then
+    WINDOWS_PROJECT="/mnt/c/Users/$USER/Code/PEPGMP"
     check_info "检测到 Windows 文件系统中的项目"
     read -p "是否从 Windows 文件系统同步代码? (y/N): " -n 1 -r
     echo

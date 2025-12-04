@@ -38,7 +38,7 @@ git clone <your-repo-url> Pyt
 cd Pyt
 
 # 方式 2: 从 macOS 通过共享文件夹复制
-# cp -r /mnt/c/Users/YourName/Code/Pyt ~/projects/Pyt
+# cp -r /mnt/c/Users/YourName/Code/PEPGMP ~/projects/Pyt
 # cd ~/projects/Pyt
 ```
 
@@ -67,11 +67,11 @@ docker images | grep pepgmp
 ```bash
 # 如果当前目录就是部署目录，直接使用
 # 或创建单独的部署目录
-mkdir -p ~/projects/Pyt-deploy
-cd ~/projects/Pyt-deploy
+mkdir -p ~/projects/PEPGMP-deploy
+cd ~/projects/PEPGMP-deploy
 
 # 使用准备脚本创建最小化部署包
-bash ../Pyt/scripts/prepare_minimal_deploy.sh ~/projects/Pyt-deploy
+bash ../Pyt/scripts/prepare_minimal_deploy.sh ~/projects/PEPGMP-deploy
 
 # 或手动复制必要文件
 # cp ../Pyt/docker-compose.prod.yml .
@@ -83,7 +83,7 @@ bash ../Pyt/scripts/prepare_minimal_deploy.sh ~/projects/Pyt-deploy
 ### 步骤 A.4：生成配置并启动
 
 ```bash
-cd ~/projects/Pyt-deploy
+cd ~/projects/PEPGMP-deploy
 
 # 生成配置
 bash scripts/generate_production_config.sh

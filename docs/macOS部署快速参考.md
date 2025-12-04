@@ -10,7 +10,7 @@ cd /Users/zhou/Code/Pyt
 bash scripts/deploy_prod_macos.sh
 
 # 或指定部署目录和版本
-bash scripts/deploy_prod_macos.sh ~/projects/Pyt 20251202
+bash scripts/deploy_prod_macos.sh ~/projects/PEPGMP20251202
 ```
 
 脚本会自动完成：

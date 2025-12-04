@@ -17,7 +17,7 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 WSL_TARGET="${1:-}"
-DEPLOY_DIR="${2:-$HOME/projects/Pyt}"
+DEPLOY_DIR="${2:-$HOME/projects/PEPGMP"
 
 echo "========================================================================="
 echo -e "${BLUE}Remote Deployment Verification${NC}"
@@ -35,7 +35,7 @@ if [ -z "$WSL_TARGET" ]; then
     echo "  bash $0 user@wsl-ip"
     echo ""
     echo "  # With custom deploy directory"
-    echo "  bash $0 user@wsl-ip /home/user/projects/Pyt"
+    echo "  bash $0 user@wsl-ip /home/user/projects/PEPGMP"
     exit 1
 fi
 

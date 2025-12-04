@@ -18,7 +18,7 @@ cd ~/projects/Pyt
 bash scripts/deploy_prod_wsl.sh
 
 # 或指定部署目录和版本号
-bash scripts/deploy_prod_wsl.sh ~/projects/Pyt-deploy 20251204
+bash scripts/deploy_prod_wsl.sh ~/projects/PEPGMP-deploy 20251204
 ```
 
 **脚本自动完成**：
@@ -36,7 +36,7 @@ bash scripts/deploy_prod_wsl.sh ~/projects/Pyt-deploy 20251204
 
 ```bash
 # 如果镜像已构建，可以跳过构建步骤
-bash scripts/deploy_prod_wsl.sh ~/projects/Pyt-deploy 20251204 true
+bash scripts/deploy_prod_wsl.sh ~/projects/PEPGMP-deploy 20251204 true
 ```
 
 ---
@@ -53,21 +53,21 @@ cd ~/projects/Pyt
 bash scripts/update_deployment_wsl.sh
 
 # 或指定参数
-bash scripts/update_deployment_wsl.sh ~/projects/Pyt-deploy 20251204 all
+bash scripts/update_deployment_wsl.sh ~/projects/PEPGMP-deploy 20251204 all
 ```
 
 ### 仅更新后端
 
 ```bash
 # 只更新后端，前端保持不变
-bash scripts/update_deployment_wsl.sh ~/projects/Pyt-deploy 20251204 backend
+bash scripts/update_deployment_wsl.sh ~/projects/PEPGMP-deploy 20251204 backend
 ```
 
 ### 仅更新前端
 
 ```bash
 # 只更新前端，后端保持不变
-bash scripts/update_deployment_wsl.sh ~/projects/Pyt-deploy 20251204 frontend
+bash scripts/update_deployment_wsl.sh ~/projects/PEPGMP-deploy 20251204 frontend
 ```
 
 **更新脚本自动完成**：
@@ -126,7 +126,7 @@ cd ~/projects/Pyt
 # git pull 或手动更新
 
 # 2. 仅更新后端
-bash scripts/update_deployment_wsl.sh ~/projects/Pyt-deploy $(date +%Y%m%d) backend
+bash scripts/update_deployment_wsl.sh ~/projects/PEPGMP-deploy $(date +%Y%m%d) backend
 ```
 
 ### 场景 4: 仅更新前端代码
@@ -138,7 +138,7 @@ cd ~/projects/Pyt
 # git pull 或手动更新
 
 # 2. 仅更新前端
-bash scripts/update_deployment_wsl.sh ~/projects/Pyt-deploy $(date +%Y%m%d) frontend
+bash scripts/update_deployment_wsl.sh ~/projects/PEPGMP-deploy $(date +%Y%m%d) frontend
 ```
 
 ---
@@ -152,7 +152,7 @@ bash scripts/deploy_prod_wsl.sh [DEPLOY_DIR] [VERSION_TAG] [SKIP_BUILD]
 ```
 
 **参数**：
-- `DEPLOY_DIR`: 部署目录（默认: `~/projects/Pyt-deploy`）
+- `DEPLOY_DIR`: 部署目录（默认: `~/projects/PEPGMP-deploy`）
 - `VERSION_TAG`: 镜像版本标签（默认: 当前日期，如 `20251204`）
 - `SKIP_BUILD`: 是否跳过构建（默认: `false`，设置为 `true` 跳过构建）
 
@@ -162,10 +162,10 @@ bash scripts/deploy_prod_wsl.sh [DEPLOY_DIR] [VERSION_TAG] [SKIP_BUILD]
 bash scripts/deploy_prod_wsl.sh
 
 # 指定部署目录和版本
-bash scripts/deploy_prod_wsl.sh ~/projects/Pyt-prod 20251204
+bash scripts/deploy_prod_wsl.sh ~/projects/PEPGMPprod 20251204
 
 # 跳过构建（使用已有镜像）
-bash scripts/deploy_prod_wsl.sh ~/projects/Pyt-deploy 20251204 true
+bash scripts/deploy_prod_wsl.sh ~/projects/PEPGMP-deploy 20251204 true
 ```
 
 ### update_deployment_wsl.sh
@@ -175,7 +175,7 @@ bash scripts/update_deployment_wsl.sh [DEPLOY_DIR] [VERSION_TAG] [UPDATE_TYPE]
 ```
 
 **参数**：
-- `DEPLOY_DIR`: 部署目录（默认: `~/projects/Pyt-deploy`）
+- `DEPLOY_DIR`: 部署目录（默认: `~/projects/PEPGMP-deploy`）
 - `VERSION_TAG`: 新镜像版本标签（默认: 当前日期）
 - `UPDATE_TYPE`: 更新类型（默认: `all`）
   - `all`: 更新前后端
@@ -188,10 +188,10 @@ bash scripts/update_deployment_wsl.sh [DEPLOY_DIR] [VERSION_TAG] [UPDATE_TYPE]
 bash scripts/update_deployment_wsl.sh
 
 # 仅更新后端
-bash scripts/update_deployment_wsl.sh ~/projects/Pyt-deploy 20251204 backend
+bash scripts/update_deployment_wsl.sh ~/projects/PEPGMP-deploy 20251204 backend
 
 # 仅更新前端
-bash scripts/update_deployment_wsl.sh ~/projects/Pyt-deploy 20251204 frontend
+bash scripts/update_deployment_wsl.sh ~/projects/PEPGMP-deploy 20251204 frontend
 ```
 
 ---
@@ -238,7 +238,7 @@ cd ~/projects/Pyt
 
 # 仅更新后端
 VERSION_TAG=$(date +%Y%m%d)
-bash scripts/update_deployment_wsl.sh ~/projects/Pyt-deploy $VERSION_TAG backend
+bash scripts/update_deployment_wsl.sh ~/projects/PEPGMP-deploy $VERSION_TAG backend
 ```
 
 ### 仅更新前端
@@ -251,7 +251,7 @@ cd ~/projects/Pyt
 
 # 仅更新前端
 VERSION_TAG=$(date +%Y%m%d)
-bash scripts/update_deployment_wsl.sh ~/projects/Pyt-deploy $VERSION_TAG frontend
+bash scripts/update_deployment_wsl.sh ~/projects/PEPGMP-deploy $VERSION_TAG frontend
 ```
 
 ---

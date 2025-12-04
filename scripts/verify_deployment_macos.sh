@@ -16,7 +16,7 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-DEPLOY_DIR="${1:-$HOME/projects/Pyt}"
+DEPLOY_DIR="${1:-$HOME/projects/PEPGMP"
 
 echo "========================================================================="
 echo -e "${BLUE}macOS Deployment Verification (WSL2)${NC}"

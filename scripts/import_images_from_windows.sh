@@ -39,7 +39,7 @@ echo "Version Tag: $VERSION_TAG"
 echo ""
 
 # Set import directory (Windows project path in WSL)
-WINDOWS_PROJECT_PATH="/mnt/f/code/PythonCode/Pyt"
+WINDOWS_PROJECT_PATH="/mnt/f/code/PythonCode/PEPGMP"
 IMPORT_DIR="$WINDOWS_PROJECT_PATH/docker-images"
 
 if [ ! -d "$IMPORT_DIR" ]; then
@@ -152,13 +152,12 @@ echo "========================================================================="
 echo ""
 echo "Next steps:"
 echo "  1. Verify configuration:"
-echo "     cd ~/projects/Pyt"
+echo "     cd ~/projects/PEPGMP
 echo "     docker-compose -f docker-compose.prod.yml --env-file .env.production config"
 echo ""
 echo "  2. Deploy in 1Panel:"
 echo "     - Create Compose project"
-echo "     - Working directory: ~/projects/Pyt"
+echo "     - Working directory: ~/projects/PEPGMP
 echo "     - Compose file: docker-compose.prod.yml"
 echo ""
 echo "========================================================================="
-

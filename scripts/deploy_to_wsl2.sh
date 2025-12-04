@@ -19,7 +19,7 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 # Default values
 WSL2_HOST="${1:-}"
 VERSION_TAG="${2:-$(date +%Y%m%d)}"
-DEPLOY_DIR="${3:-~/projects/Pyt}"
+DEPLOY_DIR="${3:-~/projects/PEPGMP"
 
 echo "========================================================================="
 echo -e "${BLUE}WSL2/Ubuntu 自动化部署脚本${NC}"
@@ -106,7 +106,7 @@ fi
 # ==================== 步骤 4: 准备部署包 ====================
 check_info "步骤 4: 准备部署包..."
 
-DEPLOY_PACKAGE_DIR="$PROJECT_ROOT/deploy-packages/Pyt-$VERSION_TAG"
+DEPLOY_PACKAGE_DIR="$PROJECT_ROOT/deploy-packages/PEPGMP-$VERSION_TAG"
 
 if [ -d "$DEPLOY_PACKAGE_DIR" ]; then
     read -p "部署包已存在，是否覆盖? (y/N): " -n 1 -r

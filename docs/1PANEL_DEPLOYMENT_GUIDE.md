@@ -33,23 +33,23 @@
 cd ~/projects
 
 # 从 Windows 项目目录运行准备脚本
-bash /mnt/c/Users/YourName/Code/PythonCode/Pyt/scripts/prepare_minimal_deploy.sh
+bash /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/scripts/prepare_minimal_deploy.sh
 
 # 或指定目标目录
-bash /mnt/c/Users/YourName/Code/PythonCode/Pyt/scripts/prepare_minimal_deploy.sh ~/projects/Pyt
+bash /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/scripts/prepare_minimal_deploy.sh ~/projects/Pyt
 ```
 
 #### 方式2: 手动准备
 
 ```bash
 # 创建部署目录
-mkdir -p ~/projects/Pyt/{config,models,data,logs}
+mkdir -p ~/projects/PEPGMP{config,models,data,logs}
 cd ~/projects/Pyt
 
 # 复制必需文件
-cp /mnt/c/Users/YourName/Code/PythonCode/Pyt/docker-compose.prod.yml .
-cp -r /mnt/c/Users/YourName/Code/PythonCode/Pyt/config/* config/
-cp -r /mnt/c/Users/YourName/Code/PythonCode/Pyt/models/* models/ 2>/dev/null || true
+cp /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/docker-compose.prod.yml .
+cp -r /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/config/* config/
+cp -r /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/models/* models/ 2>/dev/null || true
 
 # 创建环境变量文件
 cat > .env.production << 'EOF'
@@ -361,7 +361,7 @@ chmod -R 755 config models
 ## 🎯 快速部署检查清单
 
 - [ ] 镜像已导入到 WSL2（`docker images | grep pepgmp`）
-- [ ] 项目文件在 WSL2 文件系统中（`~/projects/Pyt`）
+- [ ] 项目文件在 WSL2 文件系统中（`~/projects/PEPGMP）
 - [ ] `.env.production` 配置文件已创建并配置
 - [ ] Docker Compose 文件已准备好
 - [ ] 1Panel 可以访问项目目录
@@ -378,6 +378,5 @@ chmod -R 755 config models
 
 ---
 
-**最后更新**: 2025-12-01  
+**最后更新**: 2025-12-01
 **适用版本**: 1Panel + WSL2 Ubuntu
-

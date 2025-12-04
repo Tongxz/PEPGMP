@@ -98,10 +98,10 @@ docker compose version
 # 注意：路径需要根据实际情况调整
 
 # 导入后端镜像
-docker load -i /mnt/c/Users/zhou/Code/Pyt/docker-images/pepgmp-backend-20251202.tar
+docker load -i /mnt/c/Users/YourName/Code/PEPGMP/docker-images/pepgmp-backend-20251202.tar
 
 # 导入前端镜像
-docker load -i /mnt/c/Users/zhou/Code/Pyt/docker-images/pepgmp-frontend-20251202.tar
+docker load -i /mnt/c/Users/YourName/Code/PEPGMP/docker-images/pepgmp-frontend-20251202.tar
 
 # 验证镜像已导入
 docker images | grep pepgmp
@@ -123,11 +123,11 @@ pepgmp-frontend   latest      def456ghi789   1 hour ago     150MB
 
 ```bash
 # 从 Windows 项目目录运行准备脚本
-bash /mnt/c/Users/zhou/Code/Pyt/scripts/prepare_minimal_deploy.sh ~/projects/Pyt
+bash /mnt/c/Users/YourName/Code/PEPGMP/scripts/prepare_minimal_deploy.sh ~/projects/Pyt
 ```
 
 **脚本会自动**：
-1. 创建 `~/projects/Pyt` 目录
+1. 创建 `~/projects/PEPGMP 目录
 2. 复制 `docker-compose.prod.1panel.yml` → `docker-compose.prod.yml`
 3. 复制 `config/` 目录
 4. 复制 `models/` 目录（如果存在）
@@ -238,7 +238,7 @@ docker compose -f docker-compose.prod.yml config > /dev/null && echo "配置语�
 3. **配置 Compose 文件**
    - 方式1：上传 `docker-compose.prod.yml` 文件
    - 方式2：在编辑器中粘贴文件内容
-   - 方式3：选择 **"从文件创建"**，指向 `~/projects/Pyt/docker-compose.prod.yml`
+   - 方式3：选择 **"从文件创建"**，指向 `~/projects/PEPGMPdocker-compose.prod.yml`
 
 #### 步骤 5.3：启动服务
 
@@ -446,8 +446,8 @@ docker save pepgmp-backend:20251203 -o docker-images/pepgmp-backend-20251203.tar
 docker save pepgmp-frontend:20251203 -o docker-images/pepgmp-frontend-20251203.tar
 
 # 3. 在 WSL2 中导入新镜像
-docker load -i /mnt/c/Users/zhou/Code/Pyt/docker-images/pepgmp-backend-20251203.tar
-docker load -i /mnt/c/Users/zhou/Code/Pyt/docker-images/pepgmp-frontend-20251203.tar
+docker load -i /mnt/c/Users/YourName/Code/PEPGMP/docker-images/pepgmp-backend-20251203.tar
+docker load -i /mnt/c/Users/YourName/Code/PEPGMP/docker-images/pepgmp-frontend-20251203.tar
 
 # 4. 更新配置文件中的 IMAGE_TAG
 cd ~/projects/Pyt
@@ -484,14 +484,14 @@ docker save pepgmp-frontend:20251202 -o docker-images/pepgmp-frontend-20251202.t
 
 # ========== WSL2 部署阶段 ==========
 # 导入镜像（WSL2）
-docker load -i /mnt/c/Users/zhou/Code/Pyt/docker-images/pepgmp-backend-20251202.tar
-docker load -i /mnt/c/Users/zhou/Code/Pyt/docker-images/pepgmp-frontend-20251202.tar
+docker load -i /mnt/c/Users/YourName/Code/PEPGMP/docker-images/pepgmp-backend-20251202.tar
+docker load -i /mnt/c/Users/YourName/Code/PEPGMP/docker-images/pepgmp-frontend-20251202.tar
 
 # 准备部署包（WSL2）
-bash /mnt/c/Users/zhou/Code/Pyt/scripts/prepare_minimal_deploy.sh ~/projects/Pyt
+bash /mnt/c/Users/YourName/Code/PEPGMP/scripts/prepare_minimal_deploy.sh ~/projects/Pyt
 
 # 生成配置文件（WSL2）
-cd ~/projects/Pyt && bash scripts/generate_production_config.sh
+cd ~/projects/PEPGMP&& bash scripts/generate_production_config.sh
 
 # 启动服务（WSL2）
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d

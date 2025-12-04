@@ -89,7 +89,7 @@ fi
 # ==================== 步骤 3: 准备部署包 ====================
 log_info "步骤 3: 准备部署包..."
 
-DEPLOY_PACKAGE_DIR="$PROJECT_ROOT/deploy-packages/Pyt-$VERSION_TAG"
+DEPLOY_PACKAGE_DIR="$PROJECT_ROOT/deploy-packages/PEPGMP-$VERSION_TAG"
 
 if [ -d "$DEPLOY_PACKAGE_DIR" ]; then
     read -p "部署包已存在，是否覆盖? (y/N): " -n 1 -r
@@ -162,8 +162,8 @@ docker load -i pepgmp-frontend-$VERSION_TAG.tar
 
 ### 3. 准备部署目录
 \`\`\`bash
-mkdir -p ~/projects/Pyt
-cd ~/projects/Pyt
+mkdir -p ~/projects/PEPGMP
+cd ~/projects/PEPGMP
 cp -r ../$PACKAGE_NAME/deploy-package/* .
 \`\`\`
 

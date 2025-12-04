@@ -28,8 +28,8 @@ log_error() {
 }
 
 # 默认路径
-SOURCE_PATH="${1:-/mnt/c/Users/$USER/Code/Pyt}"
-TARGET_PATH="${2:-$HOME/projects/Pyt}"
+SOURCE_PATH="${1:-/mnt/c/Users/$USER/Code/PEPGMP}"
+TARGET_PATH="${2:-$HOME/projects/PEPGMP"
 
 echo "========================================================================="
 echo "                     同步代码到 WSL 文件系统"
@@ -44,7 +44,7 @@ if [ ! -d "$SOURCE_PATH" ]; then
     log_error "源路径不存在: $SOURCE_PATH"
     echo ""
     echo "请指定正确的源路径，例如："
-    echo "  bash scripts/sync_code_to_wsl.sh /mnt/c/Users/YourName/Code/Pyt"
+    echo "  bash scripts/sync_code_to_wsl.sh /mnt/c/Users/$USER/Code/PEPGMP"
     exit 1
 fi
 

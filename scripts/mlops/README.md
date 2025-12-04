@@ -8,7 +8,7 @@
 ### data.yaml 配置说明
 
 ```yaml
-path: /Users/zhou/Code/Pyt/data/datasets/hairnet_roboflow_v6
+path: /Users/zhou/Code/PEPGMP/data/datasets/hairnet_roboflow_v6
 train: train/images
 val: valid/images
 test: test/images
@@ -84,7 +84,7 @@ ls -la models/runs/
 
 ### Q: 训练需要多长时间？
 
-**A**: 
+**A**:
 - GPU: 1-3小时
 - CPU: 10-20小时
 

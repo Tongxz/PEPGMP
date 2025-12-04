@@ -9,7 +9,7 @@
 docker images | grep pepgmp
 
 # 如果看不到镜像，需要导入：
-docker load -i /mnt/c/Users/YourName/Code/PythonCode/Pyt/pepgmp-backend-20251201.tar
+docker load -i /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/pepgmp-backend-20251201.tar
 ```
 
 ---
@@ -18,10 +18,10 @@ docker load -i /mnt/c/Users/YourName/Code/PythonCode/Pyt/pepgmp-backend-20251201
 
 ```bash
 # 在 WSL2 Ubuntu 中运行准备脚本
-bash /mnt/c/Users/YourName/Code/PythonCode/Pyt/scripts/prepare_minimal_deploy.sh
+bash /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/scripts/prepare_minimal_deploy.sh
 
 # 脚本会：
-# ✓ 创建 ~/projects/Pyt 目录
+# ✓ 创建 ~/projects/PEPGMP目录
 # ✓ 复制 docker-compose.prod.1panel.yml
 # ✓ 复制 config/ 和 models/ 目录
 # ✓ 复制 generate_production_config.sh 脚本
@@ -116,7 +116,7 @@ echo ""
 
 # 步骤2: 准备部署包
 echo "步骤2: 准备部署包..."
-bash /mnt/c/Users/YourName/Code/PythonCode/Pyt/scripts/prepare_minimal_deploy.sh
+bash /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/scripts/prepare_minimal_deploy.sh
 echo ""
 
 # 步骤3: 生成配置文件
@@ -143,7 +143,7 @@ echo ""
 echo "下一步："
 echo "  1. 登录 1Panel"
 echo "  2. 创建 Compose 项目"
-echo "  3. 工作目录: ~/projects/Pyt"
+echo "  3. 工作目录: ~/projects/PEPGMP
 echo "  4. Compose 文件: docker-compose.prod.yml"
 echo ""
 ```
@@ -189,7 +189,7 @@ nano .env.production
 
 ```bash
 # 查看实际路径
-cd ~/projects/Pyt && pwd
+cd ~/projects/PEPGMP&& pwd
 # 输出类似: /home/username/projects/Pyt
 ```
 
@@ -206,4 +206,3 @@ cd ~/projects/Pyt && pwd
 ---
 
 **最后更新**: 2025-12-01
-

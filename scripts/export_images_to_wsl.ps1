@@ -120,7 +120,7 @@ if ($frontendExists) {
 Write-Host ""
 
 # WSL2 path
-$WSL_PROJECT_PATH = "/mnt/f/code/PythonCode/Pyt"
+$WSL_PROJECT_PATH = "/mnt/f/code/PythonCode/PEPGMP"
 $WSL_EXPORT_DIR = "$WSL_PROJECT_PATH/docker-images"
 
 Write-Host "Next steps (in WSL2 Ubuntu):" -ForegroundColor Yellow
@@ -140,8 +140,7 @@ if ($frontendExists) {
 Write-Host "   docker images | grep pepgmp" -ForegroundColor Gray
 Write-Host ""
 Write-Host "4. Ensure IMAGE_TAG in .env.production matches:" -ForegroundColor Cyan
-Write-Host "   grep IMAGE_TAG ~/projects/Pyt/.env.production" -ForegroundColor Gray
+Write-Host "   grep IMAGE_TAG ~/projects/PEPGMP.env.production" -ForegroundColor Gray
 Write-Host "   (Should show: IMAGE_TAG=$VERSION_TAG)" -ForegroundColor Gray
 Write-Host ""
 Write-Host "=========================================================================" -ForegroundColor Cyan
-

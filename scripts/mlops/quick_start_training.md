@@ -35,8 +35,8 @@ curl -X POST "http://localhost:8000/api/v1/mlops/workflows" \
         "type": "multi_behavior_training",
         "name": "训练发网检测模型",
         "config": {
-          "dataset_dir": "/Users/zhou/Code/Pyt/data/datasets/hairnet_roboflow_v6",
-          "data_config": "/Users/zhou/Code/Pyt/data/datasets/hairnet_roboflow_v6/data.yaml",
+          "dataset_dir": "/Users/zhou/Code/PEPGMP/data/datasets/hairnet_roboflow_v6",
+          "data_config": "/Users/zhou/Code/PEPGMP/data/datasets/hairnet_roboflow_v6/data.yaml",
           "training_params": {
             "model": "yolov8s.pt",
             "epochs": 150,
@@ -99,8 +99,8 @@ workflow = {
         "type": "multi_behavior_training",
         "name": "训练发网检测模型",
         "config": {
-            "dataset_dir": "/Users/zhou/Code/Pyt/data/datasets/hairnet_roboflow_v6",
-            "data_config": "/Users/zhou/Code/Pyt/data/datasets/hairnet_roboflow_v6/data.yaml",
+            "dataset_dir": "/Users/zhou/Code/PEPGMP/data/datasets/hairnet_roboflow_v6",
+            "data_config": "/Users/zhou/Code/PEPGMP/data/datasets/hairnet_roboflow_v6/data.yaml",
             "training_params": {
                 "model": "yolov8s.pt",
                 "epochs": 150,
@@ -193,15 +193,14 @@ python -m src.api.app
 
 ### Q: 训练需要多长时间？
 
-**A**: 
+**A**:
 - 取决于数据集大小和GPU性能
 - 对于3947张训练图像，使用GPU（CUDA）大约需要1-3小时
 - 使用CPU可能需要10-20小时
 
 ### Q: 如何查看训练进度？
 
-**A**: 
+**A**:
 - 通过API: `GET /api/v1/mlops/workflows/{workflow_id}`
 - 查看训练日志: `models/runs/{run_name}/` 目录
 - 查看训练曲线: `models/runs/{run_name}/results.png`
-

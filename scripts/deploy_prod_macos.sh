@@ -20,7 +20,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Default values
-DEPLOY_DIR="${1:-$HOME/projects/Pyt}"
+DEPLOY_DIR="${1:-$HOME/projects/PEPGMP"
 VERSION_TAG="${2:-$(date +%Y%m%d)}"
 
 echo "========================================================================="

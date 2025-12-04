@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Default deployment directory
-DEPLOY_DIR="${1:-$HOME/projects/Pyt}"
+DEPLOY_DIR="${1:-$HOME/projects/PEPGMP}"
 # Force overwrite flag (default: no)
 FORCE_OVERWRITE="${2:-no}"
 

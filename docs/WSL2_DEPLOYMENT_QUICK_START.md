@@ -54,7 +54,7 @@ git clone <your-repo-url> Pyt
 cd Pyt
 
 # 方法2: 从 Windows 文件系统复制（如果已经在 Windows 中）
-# cp -r /mnt/c/Users/YourName/Code/PythonCode/Pyt ~/projects/Pyt
+# cp -r /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt ~/projects/Pyt
 # cd ~/projects/Pyt
 ```
 
@@ -149,8 +149,8 @@ Compress-Archive -Path pepgmp-frontend-20251201.tar -DestinationPath pepgmp-fron
 ```bash
 # 在 WSL2 Ubuntu 中
 # 从 Windows 文件系统复制到 WSL2 文件系统
-cp /mnt/c/Users/YourName/Code/PythonCode/Pyt/pepgmp-backend-20251201.tar ~/
-cp /mnt/c/Users/YourName/Code/PythonCode/Pyt/pepgmp-frontend-20251201.tar ~/
+cp /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/pepgmp-backend-20251201.tar ~/
+cp /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/pepgmp-frontend-20251201.tar ~/
 
 # 如果压缩了，先解压
 # unzip ~/pepgmp-backend-20251201.zip -d ~/
@@ -351,6 +351,5 @@ curl http://localhost:8000/api/v1/monitoring/health
 
 ---
 
-**最后更新**: 2025-12-01  
+**最后更新**: 2025-12-01
 **适用版本**: Docker Desktop with WSL2 Integration
-

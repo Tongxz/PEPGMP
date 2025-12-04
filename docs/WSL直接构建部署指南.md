@@ -37,16 +37,16 @@ cd Pyt
 # 在 WSL Ubuntu 中
 
 # 1. 检查代码位置
-ls -la /mnt/c/Users/YourName/Code/Pyt
+ls -la /mnt/c/Users/YourName/Code/PEPGMP
 
 # 2. 复制到 WSL 文件系统（推荐）
 mkdir -p ~/projects
-cp -r /mnt/c/Users/YourName/Code/Pyt ~/projects/Pyt
+cp -r /mnt/c/Users/YourName/Code/PEPGMP ~/projects/Pyt
 cd ~/projects/Pyt
 
 # 3. 验证复制
 ls -la ~/projects/Pyt
-ls -la ~/projects/Pyt/scripts/
+ls -la ~/projects/PEPGMPscripts/
 
 # 注意：
 # - Windows 文件系统（/mnt/c/...）I/O 性能较差
@@ -65,10 +65,10 @@ ls -la ~/projects/Pyt/scripts/
 # 使用 rsync 可以更高效地同步，并支持增量更新
 
 mkdir -p ~/projects
-rsync -avz --progress /mnt/c/Users/YourName/Code/Pyt/ ~/projects/Pyt/
+rsync -avz --progress /mnt/c/Users/YourName/Code/PEPGMP/ ~/projects/PEPGMP
 
 # 后续更新时，rsync 只会同步变更的文件
-rsync -avz --progress /mnt/c/Users/YourName/Code/Pyt/ ~/projects/Pyt/
+rsync -avz --progress /mnt/c/Users/YourName/Code/PEPGMP/ ~/projects/PEPGMP
 ```
 
 #### 方式 4: 直接使用 Windows 文件系统（不推荐，但可行）
@@ -77,7 +77,7 @@ rsync -avz --progress /mnt/c/Users/YourName/Code/Pyt/ ~/projects/Pyt/
 
 ```bash
 # 在 WSL Ubuntu 中
-cd /mnt/c/Users/YourName/Code/Pyt
+cd /mnt/c/Users/YourName/Code/PEPGMP
 
 # 直接构建（性能较慢）
 bash scripts/build_prod_only.sh 20251204
@@ -134,11 +134,11 @@ docker images | grep pepgmp
 
 ```bash
 # 创建单独的部署目录（推荐，保持代码和部署分离）
-mkdir -p ~/projects/Pyt-deploy
-cd ~/projects/Pyt-deploy
+mkdir -p ~/projects/PEPGMP-deploy
+cd ~/projects/PEPGMP-deploy
 
 # 使用准备脚本
-bash ../Pyt/scripts/prepare_minimal_deploy.sh ~/projects/Pyt-deploy
+bash ../Pyt/scripts/prepare_minimal_deploy.sh ~/projects/PEPGMP-deploy
 
 # 脚本会复制：
 # - docker-compose.prod.yml
@@ -163,8 +163,8 @@ ls -la scripts/generate_production_config.sh
 ### 步骤 5: 生成配置文件
 
 ```bash
-cd ~/projects/Pyt-deploy
-# 或 cd ~/projects/Pyt（如果直接使用项目目录）
+cd ~/projects/PEPGMP-deploy
+# 或 cd ~/projects/PEPGMP��如果直接使用项目目录）
 
 # 运行配置生成脚本
 bash scripts/generate_production_config.sh
@@ -195,7 +195,7 @@ docker stop $(docker ps -aq --filter "name=pepgmp") 2>/dev/null || true
 docker rm $(docker ps -aq --filter "name=pepgmp") 2>/dev/null || true
 
 # 方式 3: 如果知道之前的部署目录
-cd ~/projects/Pyt  # 或其他部署目录
+cd ~/projects/PEPGMP # 或其他部署目录
 docker compose -f docker-compose.prod.yml down
 ```
 
@@ -280,7 +280,7 @@ api:
 ## 📋 快速检查清单
 
 ### 代码同步
-- [ ] 代码已同步到 WSL（`~/projects/Pyt`）
+- [ ] 代码已同步到 WSL（`~/projects/PEPGMP）
 - [ ] 代码完整（包含所有必要文件）
 
 ### 环境检查
@@ -320,7 +320,7 @@ VERSION_TAG=$(date +%Y%m%d)
 bash scripts/build_prod_only.sh $VERSION_TAG
 
 # 3. 更新部署配置
-cd ~/projects/Pyt-deploy
+cd ~/projects/PEPGMP-deploy
 # 更新 .env.production 中的 IMAGE_TAG
 sed -i "s/IMAGE_TAG=.*/IMAGE_TAG=$VERSION_TAG/" .env.production
 

@@ -17,7 +17,7 @@
 只需要以下文件和目录：
 
 ```
-~/projects/Pyt/
+~/projects/PEPGMP
 ├── docker-compose.prod.yml          # Docker Compose 配置文件（必需）
 ├── .env.production                  # 环境变量配置（必需）
 ├── config/                          # 配置文件目录（必需，容器挂载）
@@ -61,16 +61,16 @@ mkdir -p config models data logs
 ```bash
 # 在 WSL2 Ubuntu 中
 # 复制 Docker Compose 文件
-cp /mnt/c/Users/YourName/Code/PythonCode/Pyt/docker-compose.prod.yml ~/projects/Pyt/
+cp /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/docker-compose.prod.yml ~/projects/PEPGMP
 
 # 复制配置文件目录
-cp -r /mnt/c/Users/YourName/Code/PythonCode/Pyt/config ~/projects/Pyt/
+cp -r /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/config ~/projects/PEPGMP
 
 # 复制模型目录（如果存在）
-cp -r /mnt/c/Users/YourName/Code/PythonCode/Pyt/models ~/projects/Pyt/ 2>/dev/null || mkdir -p ~/projects/Pyt/models
+cp -r /mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt/models ~/projects/PEPGMP 2>/dev/null || mkdir -p ~/projects/PEPGMPmodels
 
 # 创建数据目录
-mkdir -p ~/projects/Pyt/data
+mkdir -p ~/projects/PEPGMPdata
 ```
 
 **方式2: 使用 Git（如果项目在 Git 仓库中）**
@@ -154,7 +154,7 @@ services:
 # 创建最小化部署包
 
 PROJECT_DIR="$HOME/projects/Pyt"
-WINDOWS_PROJECT="/mnt/c/Users/YourName/Code/PythonCode/Pyt"
+WINDOWS_PROJECT="/mnt/c/Users/YourName/Code/PEPGMPhonCode/Pyt"
 
 # 创建目录
 mkdir -p "$PROJECT_DIR"/{config,models,data,logs}
@@ -382,4 +382,3 @@ echo "3. 在 1Panel 中创建 Compose 项目，使用 $DEPLOY_DIR 作为工作�
 - ❌ 开发文件（`tests/`, `docs/`, `scripts/`）- 不需要
 
 这样只需要复制几个必要的文件和目录即可，大大简化了部署过程。
-
