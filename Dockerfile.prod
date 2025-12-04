@@ -19,12 +19,17 @@ RUN sed -i 's|http://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc
     sed -i 's|http://security.debian.org|https://mirrors.tuna.tsinghua.edu.cn/debian-security|g' /etc/apt/sources.list.d/debian.sources
 
 # 安装系统依赖（添加重试机制）
-# 注意：使用 opencv-python-headless 后，无需安装图形库依赖（libgl1, libxrender-dev 等）
-# 这样可以减少 100MB+ 的镜像体积，并避免 X11 相关报错
+# OpenCV GUI 功能所需的图形库依赖
 RUN apt-get update && \
     apt-get install -y --no-install-recommends --fix-missing \
-    # 基础库（OpenCV headless 只需要这些）
+    # 基础库
     libgomp1 \
+    # OpenCV GUI 依赖
+    libgl1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
     # 网络工具
     curl \
     wget \
