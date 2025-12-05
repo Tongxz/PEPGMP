@@ -29,7 +29,7 @@ log_error() {
 
 # 默认路径
 SOURCE_PATH="${1:-/mnt/c/Users/$USER/Code/PEPGMP}"
-TARGET_PATH="${2:-$HOME/projects/PEPGMP"
+TARGET_PATH="${2:-$HOME/projects/PEPGMP}"
 
 echo "========================================================================="
 echo "                     同步代码到 WSL 文件系统"

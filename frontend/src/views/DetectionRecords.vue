@@ -507,6 +507,12 @@ async function loadRecords() {
     return
   }
 
+  // 检查camera_id是否有效
+  if (!selectedCamera.value || selectedCamera.value.trim() === '') {
+    message.warning('请先选择摄像头')
+    return
+  }
+
   loading.value = true
   try {
     const params: any = {
@@ -710,7 +716,7 @@ onMounted(async () => {
     console.error('加载摄像头列表失败:', error)
     message.warning('加载摄像头列表失败，将使用默认选项')
   }
-  
+
   // 加载数据
   loadRecords()
   loadViolations()

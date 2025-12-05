@@ -50,7 +50,7 @@ export const detectionConfigApi = {
    * 获取检测配置
    */
   async getConfig(): Promise<DetectionConfig> {
-    const response = await http.get<DetectionConfig>('/api/v1/detection-config')
+    const response = await http.get<DetectionConfig>('/detection-config')
     return response.data
   },
 
@@ -62,7 +62,7 @@ export const detectionConfigApi = {
     applyImmediately: boolean = false
   ): Promise<DetectionConfigResponse> {
     const response = await http.put<DetectionConfigResponse>(
-      `/api/v1/detection-config?apply_immediately=${applyImmediately}`,
+      `/detection-config?apply_immediately=${applyImmediately}`,
       config
     )
     return response.data
