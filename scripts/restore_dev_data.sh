@@ -132,4 +132,3 @@ echo ""
 echo "验证步骤:"
 echo "  1. 检查数据库: docker exec $DB_CONTAINER psql -U $DB_USER -d $DB_NAME -c '\\dt'"
 echo "  2. 检查Redis: docker exec $REDIS_CONTAINER redis-cli -a pepgmp_dev_redis PING"
-

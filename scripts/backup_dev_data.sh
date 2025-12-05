@@ -61,10 +61,10 @@ if [ -n "$DB_CONTAINER" ]; then
         DB_USER="$DB_USER_NEW"
         DB_NAME="$DB_NAME_NEW"
     fi
-    
+
     BACKUP_FILE_DB="$BACKUP_DIR/db/backup_${DB_NAME}_${TIMESTAMP}.sql.gz"
     echo "正在备份数据库 $DB_NAME (用户: $DB_USER)..."
-    
+
     if docker exec "$DB_CONTAINER" pg_dump -U "$DB_USER" "$DB_NAME" | gzip > "$BACKUP_FILE_DB"; then
         FILE_SIZE=$(du -h "$BACKUP_FILE_DB" | cut -f1)
         echo -e "${GREEN}✅ 数据库备份成功: $BACKUP_FILE_DB (${FILE_SIZE})${NC}"
@@ -95,7 +95,7 @@ fi
 if [ -n "$REDIS_CONTAINER" ]; then
     BACKUP_FILE_REDIS="$BACKUP_DIR/redis/backup_redis_${TIMESTAMP}.rdb"
     echo "正在备份Redis数据..."
-    
+
     # Redis使用AOF持久化，备份RDB文件
     if docker exec "$REDIS_CONTAINER" redis-cli --no-auth-warning -a pepgmp_dev_redis SAVE > /dev/null 2>&1; then
         # 复制RDB文件
@@ -186,4 +186,3 @@ echo "  1. 停止旧容器: docker compose down"
 echo "  2. 重新构建: docker compose build"
 echo "  3. 启动新容器: docker compose up -d"
 echo "  4. 恢复数据: bash scripts/restore_dev_data.sh $BACKUP_DIR $TIMESTAMP"
-

@@ -146,7 +146,7 @@ response = requests.post(url, json=data)
 print(response.json())
 ```
 
-**注意**: 
+**注意**:
 - 对于大型数据集（>100MB），建议直接复制到 `data/datasets/` 目录，而不是通过API上传
 - API上传适合小文件或单个文件
 - 确保 `data.yaml` 文件中的路径配置正确
@@ -236,7 +236,7 @@ response = requests.post(url, json=data)
 }
 ```
 
-**注意**: 
+**注意**:
 - 发网检测使用 `multi_behavior_training` 步骤类型（支持YOLO格式）
 - 手部检测使用 `handwash_training` 步骤类型（时序模型）
 
@@ -346,16 +346,16 @@ for output in outputs:
     if output.get("step_name") == "训练发网检测模型":
         step_output = output.get("output", {})
         metrics = step_output.get("metrics", {})
-        
+
         print(f"mAP@0.5: {metrics.get('mAP50', 'N/A')}")
         print(f"mAP@0.5:0.95: {metrics.get('mAP50_95', 'N/A')}")
         print(f"Precision: {metrics.get('precision', 'N/A')}")
         print(f"Recall: {metrics.get('recall', 'N/A')}")
-        
+
         # 模型路径
         model_path = step_output.get("model_path")
         print(f"模型路径: {model_path}")
-        
+
         # 报告路径
         report_path = step_output.get("report_path")
         print(f"报告路径: {report_path}")
@@ -463,7 +463,7 @@ print(f"F1-Score: {metrics.get('f1_score', 'N/A')}")
 - 自动提取训练指标（mAP、Precision、Recall等）
 - 生成训练报告和可视化图表
 
-**数据集路径**: 
+**数据集路径**:
 - `dataset_dir`: 数据集根目录（包含train/valid目录）
 - `data_config`: data.yaml文件路径（必须）
 
@@ -486,26 +486,26 @@ from pathlib import Path
 # 1. 上传数据集（如果还没有上传）
 def upload_dataset(dataset_dir: Path):
     url = "http://localhost:8000/api/v1/mlops/datasets/upload"
-    
+
     files = []
     # 添加 data.yaml
     data_yaml = dataset_dir / "data.yaml"
     if data_yaml.exists():
         files.append(("files", ("data.yaml", open(data_yaml, "rb"))))
-    
+
     data = {
         "dataset_name": "hairnet_roboflow_v1",
         "dataset_type": "detection",
         "description": "发网检测数据集，来自Roboflow"
     }
-    
+
     response = requests.post(url, files=files, data=data)
     return response.json()
 
 # 2. 创建工作流
 def create_training_workflow(dataset_path: str):
     url = "http://localhost:8000/api/v1/mlops/workflows"
-    
+
     workflow = {
         "name": "发网检测模型训练（Roboflow）",
         "type": "multi_behavior_training",
@@ -530,7 +530,7 @@ def create_training_workflow(dataset_path: str):
             }
         ]
     }
-    
+
     response = requests.post(url, json=workflow)
     return response.json()
 
@@ -543,19 +543,19 @@ def run_workflow(workflow_id: str):
 # 4. 监控工作流状态
 def monitor_workflow(workflow_id: str):
     url = f"http://localhost:8000/api/v1/mlops/workflows/{workflow_id}"
-    
+
     while True:
         response = requests.get(url)
         workflow = response.json()
         status = workflow.get("status")
-        
+
         print(f"工作流状态: {status}")
-        
+
         if status in ["success", "failed"]:
             break
-        
+
         time.sleep(10)  # 每10秒检查一次
-    
+
     return workflow
 
 # 5. 获取训练结果
@@ -563,14 +563,14 @@ def get_training_results(workflow_id: str):
     url = f"http://localhost:8000/api/v1/mlops/workflows/{workflow_id}"
     response = requests.get(url)
     workflow = response.json()
-    
+
     # 从工作流输出中获取模型信息
     last_run = workflow.get("last_run")
     if last_run:
         run_url = f"http://localhost:8000/api/v1/mlops/workflows/{workflow_id}/runs/{last_run}"
         response = requests.get(run_url)
         run_info = response.json()
-        
+
         outputs = run_info.get("outputs", [])
         for output in outputs:
             if output.get("step_name") == "训练发网检测模型":
@@ -579,25 +579,25 @@ def get_training_results(workflow_id: str):
                 print(f"模型路径: {model_path}")
                 print(f"评估指标: {json.dumps(metrics, indent=2)}")
                 return model_path, metrics
-    
+
     return None, None
 
 # 主流程
 if __name__ == "__main__":
     dataset_path = "data/datasets/hairnet_roboflow_v1"
-    
+
     # 1. 创建工作流
     workflow_result = create_training_workflow(dataset_path)
     workflow_id = workflow_result["workflow_id"]
     print(f"工作流创建成功: {workflow_id}")
-    
+
     # 2. 运行工作流
     run_result = run_workflow(workflow_id)
     print(f"工作流运行中: {run_result['run_id']}")
-    
+
     # 3. 监控工作流
     final_workflow = monitor_workflow(workflow_id)
-    
+
     # 4. 获取训练结果
     model_path, metrics = get_training_results(workflow_id)
     if model_path:
@@ -750,14 +750,14 @@ if __name__ == "__main__":
 
 ### Q1: 如何选择使用哪个训练步骤类型？
 
-**A**: 
+**A**:
 - **发网检测**: 使用 `multi_behavior_training`（YOLO格式数据集，支持data.yaml）
 - **手部检测**: 使用 `handwash_training`（时序模型，需要annotations.json）
 - **分类任务**: 使用 `model_training`（二分类：违规/正常）
 
 ### Q2: Roboflow数据集下载后如何使用？
 
-**A**: 
+**A**:
 1. 解压数据集到本地
 2. 复制到 `data/datasets/` 目录
 3. 检查并修改 `data.yaml` 中的路径配置（使用绝对路径或相对路径）
@@ -765,7 +765,7 @@ if __name__ == "__main__":
 
 ### Q3: data.yaml 路径配置错误怎么办？
 
-**A**: 
+**A**:
 修改 `data.yaml` 中的路径为绝对路径或相对于数据集目录的路径:
 ```yaml
 # 方式1: 绝对路径（推荐）
@@ -779,7 +779,7 @@ val: valid/images
 
 ### Q4: 训练过程中如何查看进度？
 
-**A**: 
+**A**:
 - 通过工作流运行状态API: `GET /api/v1/mlops/workflows/{workflow_id}`
 - 查看训练日志: `models/runs/{run_name}/` 目录
 - 查看训练曲线: `models/runs/{run_name}/results.png`
@@ -787,7 +787,7 @@ val: valid/images
 
 ### Q5: 如何判断模型训练是否成功？
 
-**A**: 
+**A**:
 检查评估指标:
 - **优秀**: mAP@0.5 ≥ 0.90, Precision ≥ 0.85, Recall ≥ 0.85
 - **良好**: mAP@0.5 ≥ 0.80, Precision ≥ 0.75, Recall ≥ 0.75
@@ -795,7 +795,7 @@ val: valid/images
 
 ### Q6: 训练完成后如何部署模型？
 
-**A**: 
+**A**:
 1. 从工作流输出获取模型路径（`outputs[0].output.model_path`）
 2. 复制模型到 `models/hairnet_detection/` 目录
 3. 更新配置文件中的模型路径
@@ -803,21 +803,21 @@ val: valid/images
 
 ### Q7: 训练时GPU内存不足怎么办？
 
-**A**: 
+**A**:
 - 减小 `batch_size`（如从16改为8）
 - 减小 `image_size`（如从640改为512）
 - 使用更小的模型（如yolov8n.pt而不是yolov8s.pt）
 
 ### Q8: 如何从训练结果中获取最佳模型？
 
-**A**: 
+**A**:
 - 最佳模型路径: `models/runs/{run_name}/weights/best.pt`
 - 从工作流输出中获取: `outputs[0].output.model_path`
 - 训练报告路径: `outputs[0].output.report_path`
 
 ### Q9: 工作流运行失败怎么办？
 
-**A**: 
+**A**:
 1. 查看工作流运行日志: `GET /api/v1/mlops/workflows/{workflow_id}/runs/{run_id}`
 2. 检查数据集路径是否正确
 3. 检查 `data.yaml` 文件格式是否正确
@@ -826,7 +826,7 @@ val: valid/images
 
 ### Q10: 如何评估训练程度？
 
-**A**: 
+**A**:
 **发网检测评估指标**:
 - **mAP@0.5**: 平均精度（IoU=0.5），目标 ≥ 0.90
 - **Precision**: 精确率，目标 ≥ 0.85
@@ -853,4 +853,3 @@ val: valid/images
 - [工作流引擎文档](../src/workflow/workflow_engine.py)
 - [Roboflow 官网](https://roboflow.com)
 - [YOLOv8 文档](https://docs.ultralytics.com/)
-

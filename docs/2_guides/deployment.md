@@ -26,7 +26,7 @@
 - **NVIDIA 驱动**: 安装与您的显卡和CUDA版本兼容的最新驱动。
 - **NVIDIA Container Toolkit**: 确保Docker可以利用GPU资源。 [安装指南](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
 
-**验证环境**: 
+**验证环境**:
 ```bash
 # 1. 验证 Docker 和 Docker Compose
 docker --version

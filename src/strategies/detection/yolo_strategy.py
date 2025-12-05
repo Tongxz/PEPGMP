@@ -180,7 +180,6 @@ class YOLOStrategy(IDetector):
             # 检查模型文件是否存在
             import os
 
-
             if not os.path.exists(self.model_path):
                 return False
             return True

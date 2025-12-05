@@ -4,8 +4,8 @@
 
 本文档列出了在生产环境部署前必须完成的所有工作、需要测试的内容、需要优化调整的地方，以及详细的部署流程。
 
-**更新日期**: 2025-11-24  
-**目标环境**: Ubuntu 22.04 LTS 内网环境  
+**更新日期**: 2025-11-24
+**目标环境**: Ubuntu 22.04 LTS 内网环境
 **部署方式**: Docker 容器化部署 / Docker Compose / 内网私有Registry
 
 ---
@@ -91,23 +91,23 @@ grep -E "PASSWORD|SECRET" .env.production | grep -v "^#"
     ```bash
     # 更新软件包索引
     sudo apt-get update
-    
+
     # 安装Docker依赖
     sudo apt-get install -y ca-certificates curl gnupg lsb-release
-    
+
     # 添加Docker官方GPG密钥
     sudo mkdir -p /etc/apt/keyrings
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-    
+
     # 添加Docker仓库
     echo \
       "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
       $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-    
+
     # 安装Docker Engine
     sudo apt-get update
     sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-    
+
     # 验证安装
     sudo docker --version
     sudo docker compose version
@@ -170,23 +170,23 @@ grep -E "PASSWORD|SECRET" .env.production | grep -v "^#"
   ```bash
   # 检查防火墙状态
   sudo ufw status
-  
+
   # 允许SSH（确保不会断开连接）
   sudo ufw allow 22/tcp
-  
+
   # 允许API端口
   sudo ufw allow 8000/tcp
-  
+
   # 允许Nginx端口（如使用）
   sudo ufw allow 80/tcp
   sudo ufw allow 443/tcp
-  
+
   # 如内网Registry在同一内网，确保端口可访问
   # sudo ufw allow from 192.168.0.0/16 to any port 5433
-  
+
   # 启用防火墙
   sudo ufw enable
-  
+
   # 验证防火墙规则
   sudo ufw status numbered
   ```
@@ -196,7 +196,7 @@ grep -E "PASSWORD|SECRET" .env.production | grep -v "^#"
   # 如内网有DNS服务器，配置 /etc/resolv.conf 或使用 netplan
   # Ubuntu 22.04 使用 netplan
   sudo nano /etc/netplan/00-installer-config.yaml
-  
+
   # 添加DNS配置示例:
   # network:
   #   version: 2
@@ -206,7 +206,7 @@ grep -E "PASSWORD|SECRET" .env.production | grep -v "^#"
   #         addresses:
   #           - 192.168.1.1  # 内网DNS服务器
   #       dhcp4: true
-  # 
+  #
   # sudo netplan apply
   ```
 
@@ -215,7 +215,7 @@ grep -E "PASSWORD|SECRET" .env.production | grep -v "^#"
   # 测试内网Registry连通性
   ping 192.168.30.83
   curl http://192.168.30.83:5433/v2/_catalog
-  
+
   # 测试其他内网服务连通性（如需要）
   # ping <其他内网服务IP>
   ```
@@ -863,7 +863,6 @@ Git Commit: <commit-hash>
 
 ---
 
-**状态**: ✅ **部署准备清单已完成**  
-**下一步**: 根据清单逐项检查和执行  
+**状态**: ✅ **部署准备清单已完成**
+**下一步**: 根据清单逐项检查和执行
 **优先级**: P0项必须完成，P1项强烈推荐，P2项建议完成
-

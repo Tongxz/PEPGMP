@@ -54,12 +54,12 @@ def _get_metadata(self, obj: Any, key: str, default: Any = None) -> Any:
 # 修改后
 def _get_metadata(self, obj: Any, key: Optional[str] = None, default: Any = None) -> Any:
     """获取元数据（兼容字典格式和对象格式）
-    
+
     Args:
         obj: 对象（字典或对象）
         key: 元数据键（如果为None，返回整个metadata字典）
         default: 默认值
-    
+
     Returns:
         元数据值或整个metadata字典
     """
@@ -183,4 +183,3 @@ tail -f logs/detect_vid1.log | grep -E "智能保存策略|保存策略|should_s
 修复了违规检测中的 `unhashable type: 'dict'` 错误，这个错误阻止了违规检测的正常执行。修复后，违规检测应该能正常工作，日志也会正常输出。
 
 **重要**：必须重启检测进程才能应用修复！
-

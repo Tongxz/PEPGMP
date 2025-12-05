@@ -215,4 +215,3 @@ location ~* \.(js|css)$ {
 1. **开发/测试**：始终开启"Disable cache"
 2. **部署后**：清除浏览器缓存（Ctrl+Shift+Delete）
 3. **生产环境**：使用文件哈希 + 长期缓存策略
-

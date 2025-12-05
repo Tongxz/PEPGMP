@@ -136,7 +136,7 @@ class HumanDetector:
                 print(f"Found and using TensorRT engine: {final_model_path}")
             else:
                 print(f"TensorRT engine not found at {engine_path}, falling back to PyTorch model.")
-        
+
         # YOLO会自动识别.engine文件并使用TensorRT运行时
         self.model = YOLO(final_model_path)
 

@@ -31,14 +31,14 @@ class MockAlertRepository(IAlertRepository):
             result = [a for a in result if a.camera_id == camera_id]
         if alert_type:
             result = [a for a in result if a.alert_type == alert_type]
-        
+
         # 排序
         if sort_by == "timestamp":
             reverse = sort_order == "desc"
             result.sort(key=lambda a: a.timestamp, reverse=reverse)
-        
+
         # 分页
-        return result[offset:offset + limit]
+        return result[offset : offset + limit]
 
     async def count(
         self,

@@ -6,7 +6,7 @@ import logging
 import os
 import tempfile
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import cv2
 import yaml
@@ -161,12 +161,12 @@ async def list_cameras(
     # 统一使用数据库（无回退）
     if get_camera_service is None:
         raise HTTPException(status_code=503, detail="相机服务不可用：数据库连接未初始化")
-    
+
     try:
         camera_service = await get_camera_service()  # type: ignore
         if not camera_service:
             raise HTTPException(status_code=503, detail="相机服务不可用：无法创建服务实例")
-        
+
         cameras = await camera_service.camera_repository.find_all()
         if active_only:
             cameras = [c for c in cameras if c.is_active]
@@ -225,12 +225,12 @@ async def create_camera(
     # 统一使用数据库（无回退）
     if get_camera_service is None:
         raise HTTPException(status_code=503, detail="相机服务不可用：数据库连接未初始化")
-    
+
     try:
         camera_service = await get_camera_service()  # type: ignore
         if not camera_service:
             raise HTTPException(status_code=503, detail="相机服务不可用：无法创建服务实例")
-        
+
         result = await camera_service.create_camera(payload)
         return result
     except ValueError as e:
@@ -262,12 +262,12 @@ async def update_camera(
     # 统一使用数据库（无回退）
     if get_camera_service is None:
         raise HTTPException(status_code=503, detail="相机服务不可用：数据库连接未初始化")
-    
+
     try:
         camera_service = await get_camera_service()  # type: ignore
         if not camera_service:
             raise HTTPException(status_code=503, detail="相机服务不可用：无法创建服务实例")
-        
+
         result = await camera_service.update_camera(camera_id, payload)
         return result
     except ValueError as e:
@@ -297,12 +297,12 @@ async def delete_camera(
     # 统一使用数据库（无回退）
     if get_camera_service is None:
         raise HTTPException(status_code=503, detail="相机服务不可用：数据库连接未初始化")
-    
+
     try:
         camera_service = await get_camera_service()  # type: ignore
         if not camera_service:
             raise HTTPException(status_code=503, detail="相机服务不可用：无法创建服务实例")
-        
+
         result = await camera_service.delete_camera(camera_id)
         return result
     except ValueError as e:
@@ -328,16 +328,16 @@ async def preview_camera(camera_id: str = Path(...)) -> Response:  # noqa: C901
     # 统一使用数据库（无回退）
     if get_camera_service is None:
         raise HTTPException(status_code=503, detail="相机服务不可用：数据库连接未初始化")
-    
+
     try:
         camera_service = await get_camera_service()  # type: ignore
         if not camera_service:
             raise HTTPException(status_code=503, detail="相机服务不可用：无法创建服务实例")
-        
+
         camera = await camera_service.camera_repository.find_by_id(camera_id)
         if not camera:
             raise HTTPException(status_code=404, detail="Camera not found")
-        
+
         # 转换为字典格式
         cam = camera.to_dict()
         metadata = cam.get("metadata", {})
@@ -347,11 +347,11 @@ async def preview_camera(camera_id: str = Path(...)) -> Response:  # noqa: C901
             # resolution是数组格式 [width, height]，转换为字符串
             if isinstance(cam["resolution"], list) and len(cam["resolution"]) == 2:
                 cam["resolution"] = f"{cam['resolution'][0]}x{cam['resolution'][1]}"
-        
+
         source = str(cam.get("source", "")).strip()
         if source == "":
             raise HTTPException(status_code=400, detail="Camera source is empty")
-        
+
         # 打开视频源
         cap = None
         if source.isdigit():
@@ -397,12 +397,12 @@ async def start_camera(
     # 统一使用数据库（无回退）
     if get_camera_control_service is None:
         raise HTTPException(status_code=503, detail="相机控制服务不可用：数据库连接未初始化")
-    
+
     try:
         control_service = await get_camera_control_service()  # type: ignore
         if not control_service:
             raise HTTPException(status_code=503, detail="相机控制服务不可用：无法创建服务实例")
-        
+
         result = await control_service.start_camera(camera_id)
         return result
     except ValueError as e:
@@ -424,12 +424,12 @@ async def stop_camera(
     # 统一使用数据库（无回退）
     if get_camera_control_service is None:
         raise HTTPException(status_code=503, detail="相机控制服务不可用：数据库连接未初始化")
-    
+
     try:
         control_service = await get_camera_control_service()  # type: ignore
         if not control_service:
             raise HTTPException(status_code=503, detail="相机控制服务不可用：无法创建服务实例")
-        
+
         result = control_service.stop_camera(camera_id)
         return result
     except ValueError as e:
@@ -451,12 +451,12 @@ async def restart_camera(
     # 统一使用数据库（无回退）
     if get_camera_control_service is None:
         raise HTTPException(status_code=503, detail="相机控制服务不可用：数据库连接未初始化")
-    
+
     try:
         control_service = await get_camera_control_service()  # type: ignore
         if not control_service:
             raise HTTPException(status_code=503, detail="相机控制服务不可用：无法创建服务实例")
-        
+
         result = await control_service.restart_camera(camera_id)
         return result
     except ValueError as e:
@@ -597,12 +597,12 @@ async def activate_camera(
     # 统一使用数据库（无回退）
     if get_camera_control_service is None:
         raise HTTPException(status_code=503, detail="相机控制服务不可用：数据库连接未初始化")
-    
+
     try:
         control_service = await get_camera_control_service()  # type: ignore
         if not control_service:
             raise HTTPException(status_code=503, detail="相机控制服务不可用：无法创建服务实例")
-        
+
         result = await control_service.activate_camera(camera_id)
         return result
     except ValueError as e:
@@ -624,12 +624,12 @@ async def deactivate_camera(
     # 统一使用数据库（无回退）
     if get_camera_control_service is None:
         raise HTTPException(status_code=503, detail="相机控制服务不可用：数据库连接未初始化")
-    
+
     try:
         control_service = await get_camera_control_service()  # type: ignore
         if not control_service:
             raise HTTPException(status_code=503, detail="相机控制服务不可用：无法创建服务实例")
-        
+
         result = await control_service.deactivate_camera(camera_id)
         return result
     except ValueError as e:
@@ -661,12 +661,12 @@ async def toggle_auto_start(
     # 统一使用数据库（无回退）
     if get_camera_control_service is None:
         raise HTTPException(status_code=503, detail="相机控制服务不可用：数据库连接未初始化")
-    
+
     try:
         control_service = await get_camera_control_service()  # type: ignore
         if not control_service:
             raise HTTPException(status_code=503, detail="相机控制服务不可用：无法创建服务实例")
-        
+
         result = await control_service.toggle_auto_start(camera_id, auto_start)
         return result
     except ValueError as e:

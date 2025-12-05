@@ -74,4 +74,3 @@ validate_config() {
         return 0
     fi
 }
-

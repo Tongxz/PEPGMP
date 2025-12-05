@@ -10,8 +10,8 @@ password authentication failed for user "pepgmp_dev"
 FATAL: role "pepgmp_dev" does not exist
 ```
 
-**发生时间**: 2025-11-25  
-**影响范围**: 开发环境  
+**发生时间**: 2025-11-25
+**影响范围**: 开发环境
 **严重程度**: 🔴 **高** - 导致应用完全无法运行
 
 ---
@@ -112,7 +112,7 @@ docker exec pepgmp-postgres-dev psql -U pepgmp_dev -d pepgmp_development -c "SEL
 2. **卷映射错误**: 容器实际挂载了 `pyt_postgres_dev_data` 而不是 `postgres_dev_data`
 3. **数据残留**: 即使删除了卷，Docker可能保留了部分数据
 
-**最终解决方案**: 
+**最终解决方案**:
 - ✅ 完全删除所有相关数据卷（包括 `pyt_postgres_dev_data`）
 - ✅ 重新创建数据卷
 - ✅ 确保容器使用正确的数据卷
@@ -153,7 +153,7 @@ docker exec pepgmp-postgres-dev psql -U pepgmp_dev -d pepgmp_development -c "SEL
 - 自动执行初始化
 - 创建用户和数据库
 
-**预防措施**: 
+**预防措施**:
 - ✅ 生产环境配置正确（`docker-compose.prod.yml`）
 - ✅ 环境变量设置正确（`POSTGRES_USER`, `POSTGRES_DB`）
 
@@ -378,7 +378,7 @@ fi
 
 **根本原因**: PostgreSQL Docker容器在数据目录已存在时**跳过初始化**，不会创建新用户
 
-**触发条件**: 
+**触发条件**:
 - 数据卷已存在且包含数据库文件
 - 从旧环境迁移时复用了旧数据卷
 
@@ -426,7 +426,6 @@ fi
 
 ---
 
-**分析完成日期**: 2025-11-25  
-**分析人员**: AI Assistant  
+**分析完成日期**: 2025-11-25
+**分析人员**: AI Assistant
 **状态**: ✅ **问题已解决，生产环境需要预防措施**
-

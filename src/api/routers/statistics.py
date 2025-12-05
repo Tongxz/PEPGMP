@@ -77,9 +77,7 @@ async def get_detection_realtime_statistics() -> Dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"获取检测实时统计失败: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail=f"获取检测实时统计失败: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"获取检测实时统计失败: {str(e)}")
 
 
 @router.get("/statistics/summary", summary="事件统计汇总")

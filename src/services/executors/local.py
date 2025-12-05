@@ -226,21 +226,18 @@ class LocalProcessExecutor(AbstractProcessExecutor):
                 except Exception as e:
                     logger.error(f"从数据库读取相机配置失败: {e}", exc_info=True)
                     raise RuntimeError(
-                        f"无法从数据库读取相机配置: {e}。"
-                        "请确保数据库服务正在运行，并且DATABASE_URL环境变量已正确设置。"
+                        f"无法从数据库读取相机配置: {e}。" "请确保数据库服务正在运行，并且DATABASE_URL环境变量已正确设置。"
                     )
 
             except Exception as e:
                 logger.error(f"从数据库读取相机配置时出错: {e}", exc_info=True)
                 raise RuntimeError(
-                    f"无法从数据库读取相机配置: {e}。"
-                    "请确保数据库服务正在运行，并且DATABASE_URL环境变量已正确设置。"
+                    f"无法从数据库读取相机配置: {e}。" "请确保数据库服务正在运行，并且DATABASE_URL环境变量已正确设置。"
                 )
-        
+
         # 如果到达这里，说明数据库连接未初始化
         raise RuntimeError(
-            "无法从数据库读取相机配置：数据库连接未初始化。"
-            "请确保数据库服务正在运行，并且DATABASE_URL环境变量已正确设置。"
+            "无法从数据库读取相机配置：数据库连接未初始化。" "请确保数据库服务正在运行，并且DATABASE_URL环境变量已正确设置。"
         )
 
     def _build_command(self, cam: Dict[str, Any]) -> List[str]:

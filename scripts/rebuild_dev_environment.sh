@@ -116,4 +116,3 @@ echo "  1. 查看日志: docker compose logs -f"
 echo "  2. 检查健康状态: docker compose ps"
 echo "  3. 访问前端: http://localhost:5173"
 echo "  4. 访问API: http://localhost:8000"
-

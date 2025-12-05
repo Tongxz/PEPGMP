@@ -91,29 +91,29 @@ def detect_hairnet_compliance(
     优化的发网检测：只检测头部ROI区域
     """
     # ... 现有的人体检测逻辑 ...
-    
+
     if not human_detections:
         return self._create_error_result("未检测到人体")
-    
+
     # 确保图像是numpy数组
     if isinstance(image, str):
         image_array = cv2.imread(image)
     else:
         image_array = image
-    
+
     compliance_detections = []
     persons_with_hairnet = 0
     persons_without_hairnet = 0
-    
+
     # 对每个人进行头部ROI检测
     for i, human_det in enumerate(human_detections):
         human_bbox = human_det.get("bbox", [0, 0, 0, 0])
         human_confidence = human_det.get("confidence", 0.0)
-        
+
         # 提取头部区域
         head_bbox = self._get_head_bbox(human_bbox)
         x1, y1, x2, y2 = map(int, head_bbox)
-        
+
         # 裁剪头部ROI
         head_roi = image_array[y1:y2, x1:x2]
         if head_roi.size == 0:
@@ -125,19 +125,19 @@ def detect_hairnet_compliance(
                 "hairnet_confidence": 0.0,
             })
             continue
-        
+
         # 在头部ROI上运行发网检测
         hairnet_result = self._detect_hairnet_in_roi(head_roi, head_bbox)
-        
+
         has_hairnet = hairnet_result.get("has_hairnet")
         hairnet_confidence = hairnet_result.get("confidence", 0.0)
         hairnet_bbox = hairnet_result.get("bbox", head_bbox)
-        
+
         if has_hairnet is True:
             persons_with_hairnet += 1
         elif has_hairnet is False:
             persons_without_hairnet += 1
-        
+
         compliance_detections.append({
             "bbox": human_bbox,
             "has_hairnet": has_hairnet,
@@ -145,9 +145,9 @@ def detect_hairnet_compliance(
             "hairnet_confidence": hairnet_confidence,
             "hairnet_bbox": hairnet_bbox,
         })
-    
+
     # ... 返回结果 ...
-    
+
 def _detect_hairnet_in_roi(
     self,
     head_roi: np.ndarray,
@@ -155,29 +155,29 @@ def _detect_hairnet_in_roi(
 ) -> Dict[str, Any]:
     """
     在头部ROI区域进行发网检测
-    
+
     Args:
         head_roi: 头部区域图像
         head_bbox: 头部区域在原图中的坐标 [x1, y1, x2, y2]
-    
+
     Returns:
         检测结果字典
     """
     # 运行YOLO检测（在裁剪后的ROI上）
     results = self.model(head_roi, conf=self.conf_thres, iou=self.iou_thres, verbose=False)
-    
+
     has_hairnet = None
     hairnet_confidence = 0.0
     best_bbox = None
-    
+
     for r in results:
         if r.boxes is None:
             continue
-        
+
         for box in r.boxes:
             cls_id = int(box.cls[0])
             conf = float(box.conf[0])
-            
+
             # 检查是否是发网类别
             if cls_id == 0:  # 假设0是hairnet类别，需要根据实际模型调整
                 if conf > hairnet_confidence:
@@ -192,7 +192,7 @@ def _detect_hairnet_in_roi(
                         bbox_roi[2] + x1_orig,
                         bbox_roi[3] + y1_orig,
                     ]
-    
+
     # 判定逻辑
     if hairnet_confidence > self.conf_thres:
         has_hairnet = True
@@ -200,7 +200,7 @@ def _detect_hairnet_in_roi(
         has_hairnet = False
     else:
         has_hairnet = None  # 不明确
-    
+
     return {
         "has_hairnet": has_hairnet,
         "confidence": hairnet_confidence,
@@ -210,17 +210,17 @@ def _detect_hairnet_in_roi(
 def _get_head_bbox(self, person_bbox: List[float]) -> List[float]:
     """
     根据人体框计算头部区域
-    
+
     Args:
         person_bbox: 人体边界框 [x1, y1, x2, y2]
-    
+
     Returns:
         头部边界框 [x1, y1, x2, y2]
     """
     x1, y1, x2, y2 = person_bbox
     person_height = y2 - y1
     head_height = int(person_height * 0.3)  # 头部占人体高度的30%
-    
+
     return [x1, y1, x2, y1 + head_height]
 ```
 
@@ -242,37 +242,37 @@ def _batch_detect_hairnets_in_rois(
 ) -> List[Dict[str, Any]]:
     """
     批量检测多个头部ROI
-    
+
     Args:
         head_rois: 头部区域图像列表
         head_bboxes: 头部区域在原图中的坐标列表
         target_size: 目标尺寸（模型输入尺寸）
-    
+
     Returns:
         检测结果列表
     """
     if not head_rois:
         return []
-    
+
     # 将ROI resize到统一尺寸
     resized_rois = []
     for roi in head_rois:
         resized = cv2.resize(roi, target_size)
         resized_rois.append(resized)
-    
+
     # 合并为批量图像（如果模型支持批量推理）
     # 注意：YOLO模型通常支持批量推理
     batch_images = np.stack(resized_rois) if len(resized_rois) > 1 else resized_rois[0]
-    
+
     # 批量推理
     results = self.model(batch_images, conf=self.conf_thres, iou=self.iou_thres, verbose=False)
-    
+
     # 处理结果并映射回原图坐标
     detection_results = []
     for i, (result, head_bbox) in enumerate(zip(results, head_bboxes)):
         # ... 处理单个结果 ...
         detection_results.append(self._process_single_result(result, head_bbox, target_size))
-    
+
     return detection_results
 ```
 
@@ -301,39 +301,39 @@ def detect_in_rois(
 ) -> List[Dict[str, Any]]:
     """
     在指定的人体ROI区域进行姿态检测
-    
+
     Args:
         image: 完整图像
         person_bboxes: 人体边界框列表 [x1, y1, x2, y2]
-    
+
     Returns:
         检测结果列表，每个结果包含关键点信息
     """
     if self.model is None:
         raise RuntimeError("YOLOv8姿态模型未正确加载")
-    
+
     all_detections = []
-    
+
     # 对每个人体ROI进行检测
     for person_bbox in person_bboxes:
         x1, y1, x2, y2 = map(int, person_bbox)
-        
+
         # 外扩20%边距（确保关键点不被裁剪）
         w = x2 - x1
         h = y2 - y1
         pad_x = int(0.2 * w)
         pad_y = int(0.2 * h)
-        
+
         x1_pad = max(0, x1 - pad_x)
         y1_pad = max(0, y1 - pad_y)
         x2_pad = min(image.shape[1], x2 + pad_x)
         y2_pad = min(image.shape[0], y2 + pad_y)
-        
+
         # 裁剪ROI
         person_roi = image[y1_pad:y2_pad, x1_pad:x2_pad]
         if person_roi.size == 0:
             continue
-        
+
         # 在ROI上运行姿态检测
         results = self.model(
             person_roi,
@@ -341,16 +341,16 @@ def detect_in_rois(
             iou=self.iou_threshold,
             verbose=False
         )
-        
+
         # 处理结果并映射回原图坐标
         for result in results:
             if result.boxes is None or result.keypoints is None:
                 continue
-            
+
             for box, keypoints in zip(result.boxes, result.keypoints):
                 if int(box.cls[0]) != 0:  # 只处理person类别
                     continue
-                
+
                 # 获取ROI坐标系下的边界框和关键点
                 bbox_roi = box.xyxy[0].cpu().numpy().astype(int)
                 kpts_xy_roi = keypoints.xy[0].cpu().numpy()
@@ -359,7 +359,7 @@ def detect_in_rois(
                     if keypoints.conf is not None
                     else np.ones(len(kpts_xy_roi))
                 )
-                
+
                 # 映射回原图坐标
                 bbox_orig = [
                     bbox_roi[0] + x1_pad,
@@ -367,11 +367,11 @@ def detect_in_rois(
                     bbox_roi[2] + x1_pad,
                     bbox_roi[3] + y1_pad,
                 ]
-                
+
                 kpts_xy_orig = kpts_xy_roi.copy()
                 kpts_xy_orig[:, 0] += x1_pad  # x坐标
                 kpts_xy_orig[:, 1] += y1_pad  # y坐标
-                
+
                 detection = {
                     "bbox": bbox_orig,
                     "confidence": float(box.conf[0]),
@@ -383,7 +383,7 @@ def detect_in_rois(
                     "class_name": "person",
                 }
                 all_detections.append(detection)
-    
+
     return all_detections
 ```
 
@@ -404,10 +404,10 @@ def _execute_detection_pipeline(
 ) -> DetectionResult:
     # ... 人体检测 ...
     person_detections = self._detect_persons(image)
-    
+
     # 提取人体边界框列表
     person_bboxes = [det.get("bbox", [0, 0, 0, 0]) for det in person_detections]
-    
+
     # 阶段2: 发网检测（ROI优化）
     hairnet_results = []
     if enable_hairnet and len(person_detections) > 0:
@@ -420,7 +420,7 @@ def _execute_detection_pipeline(
             )
             # ... 处理结果 ...
         processing_times["hairnet_detection"] = time.time() - hairnet_start
-    
+
     # 阶段3: 姿态检测（ROI优化）
     pose_detections = []
     if self.pose_detector is not None and len(person_bboxes) > 0:
@@ -432,7 +432,7 @@ def _execute_detection_pipeline(
             # 回退到全帧检测
             pose_detections = self.pose_detector.detect(image)
         processing_times["pose_detection"] = time.time() - pose_start
-    
+
     # 阶段4: 行为检测（使用姿态检测结果）
     # ... 后续逻辑 ...
 ```
@@ -534,11 +534,11 @@ performance:
   use_roi_detection: true  # 是否启用ROI检测
   hairnet_roi_detection: true  # 发网检测是否使用ROI
   pose_roi_detection: true  # 姿态检测是否使用ROI
-  
+
   # ROI参数
   head_region_ratio: 0.3  # 头部区域占人体高度的比例
   pose_padding_ratio: 0.2  # 姿态检测ROI外扩比例
-  
+
   # 批量检测
   batch_roi_detection: false  # 是否启用批量ROI检测
   max_batch_size: 8  # 最大批量大小
@@ -552,4 +552,3 @@ performance:
 - `docs/DETECTION_MODELS_INVENTORY.md` - 检测模型清单
 - `src/detection/yolo_hairnet_detector.py` - 发网检测器实现
 - `src/detection/pose_detector.py` - 姿态检测器实现
-

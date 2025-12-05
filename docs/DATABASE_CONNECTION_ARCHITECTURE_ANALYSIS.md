@@ -279,7 +279,7 @@ database_url = os.getenv(
 
 **问题**: 为什么MLOps连接失败，其他模块正常？
 
-**答案**: 
+**答案**:
 1. **环境变量配置不一致**
    - `DATABASE_URL` 已设置 → 其他模块正常
    - `ASYNC_DATABASE_URL` 未设置 → MLOps使用默认值 `localhost` → 失败
@@ -332,7 +332,7 @@ if DATABASE_URL.startswith("postgresql://"):
 
 ### 8.2 配置管理建议
 
-**当前状态**: 
+**当前状态**:
 - `DATABASE_URL` 已设置
 - `ASYNC_DATABASE_URL` 自动生成（修复后）
 
@@ -374,6 +374,5 @@ if DATABASE_URL.startswith("postgresql://"):
 
 ---
 
-**分析完成日期**: 2025-11-25  
+**分析完成日期**: 2025-11-25
 **状态**: ✅ **问题已分析清楚，架构差异已明确**
-

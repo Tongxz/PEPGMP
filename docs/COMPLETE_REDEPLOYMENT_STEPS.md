@@ -320,4 +320,3 @@ pepgmp-redis-prod        Up (healthy)
    docker logs -f pepgmp-nginx-prod
    docker logs -f pepgmp-api-prod
    ```
-

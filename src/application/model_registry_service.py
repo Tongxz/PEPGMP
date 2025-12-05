@@ -187,7 +187,11 @@ class ModelRegistryService:
             version = payload.get("model_version")
             if not version:
                 stem = Path(model_path_str).stem
-                version = stem.split("mlops_model_", 1)[-1] if "mlops_model_" in stem else stem
+                version = (
+                    stem.split("mlops_model_", 1)[-1]
+                    if "mlops_model_" in stem
+                    else stem
+                )
 
             name = payload.get("model_name") or Path(model_path_str).stem
 

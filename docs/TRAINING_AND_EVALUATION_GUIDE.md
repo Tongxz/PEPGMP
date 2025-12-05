@@ -210,7 +210,7 @@ from pathlib import Path
 def evaluate_model(model_path, test_data_yaml):
     """评估发网检测模型"""
     model = YOLO(model_path)
-    
+
     # 在测试集上评估
     results = model.val(
         data=test_data_yaml,
@@ -220,7 +220,7 @@ def evaluate_model(model_path, test_data_yaml):
         save_json=True,
         plots=True
     )
-    
+
     # 提取指标
     metrics = {
         "mAP50": results.box.map50,
@@ -229,7 +229,7 @@ def evaluate_model(model_path, test_data_yaml):
         "recall": results.box.mr,
         "f1": 2 * (results.box.mp * results.box.mr) / (results.box.mp + results.box.mr)
     }
-    
+
     return metrics
 
 # 使用示例
@@ -292,37 +292,37 @@ def evaluate_handwash_model(model_path, test_loader, device="cuda:0"):
     """评估手部检测模型"""
     model = torch.load(model_path)
     model.eval()
-    
+
     total_correct = 0
     total_samples = 0
     true_positives = 0
     false_positives = 0
     false_negatives = 0
-    
+
     with torch.no_grad():
         for sequences, labels in test_loader:
             sequences = sequences.to(device)
             labels = labels.to(device)
-            
+
             logits = model(sequences)
             predictions = torch.sigmoid(logits) > 0.5
-            
+
             # 计算准确率
             correct = (predictions.float() == labels).sum().item()
             total_correct += correct
             total_samples += labels.numel()
-            
+
             # 计算混淆矩阵
             true_positives += ((predictions == 1) & (labels == 1)).sum().item()
             false_positives += ((predictions == 1) & (labels == 0)).sum().item()
             false_negatives += ((predictions == 0) & (labels == 1)).sum().item()
-    
+
     # 计算指标
     accuracy = total_correct / total_samples if total_samples > 0 else 0.0
     precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0.0
     recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0.0
     f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
-    
+
     metrics = {
         "accuracy": accuracy,
         "precision": precision,
@@ -332,7 +332,7 @@ def evaluate_handwash_model(model_path, test_loader, device="cuda:0"):
         "false_positives": false_positives,
         "false_negatives": false_negatives
     }
-    
+
     return metrics
 ```
 
@@ -405,17 +405,17 @@ def augment_sequence(sequence, label):
     # 时间扭曲
     if random.random() < 0.3:
         sequence = time_warp(sequence, sigma=0.2)
-    
+
     # 噪声添加
     if random.random() < 0.3:
         noise = np.random.normal(0, 0.01, sequence.shape)
         sequence = sequence + noise
-    
+
     # 关键点抖动
     if random.random() < 0.3:
         jitter = np.random.normal(0, 2, sequence.shape)
         sequence = sequence + jitter
-    
+
     return sequence, label
 ```
 
@@ -478,9 +478,9 @@ scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 scheduler = ReduceLROnPlateau(
-    optimizer, 
-    mode='min', 
-    factor=0.5, 
+    optimizer,
+    mode='min',
+    factor=0.5,
     patience=10,
     verbose=True
 )
@@ -754,4 +754,3 @@ F1 = 2 × (Precision × Recall) / (Precision + Recall)
 - [训练脚本文档](../scripts/training/train_hairnet_model.py)
 - [ML融合准确率分析](./ML_FUSION_ACCURACY_ANALYSIS.md)
 - [发网检测优化总结](./HAIRNET_DETECTION_OPTIMIZATION_SUMMARY.md)
-

@@ -70,13 +70,17 @@ class PostgreSQLCameraRepository(ICameraRepository):
                     # 表已存在，检查并添加缺失的列
                     # 注意：id列如果是VARCHAR，需要迁移到UUID（通过迁移脚本处理）
                     required_columns = {
-                        'status': ('VARCHAR(20)', "'inactive'", True),
-                        'region_id': ('VARCHAR(100)', 'NULL', False),
-                        'metadata': ('JSONB', "'{}'::jsonb", True),
-                        'stream_url': ('VARCHAR(500)', 'NULL', False),
+                        "status": ("VARCHAR(20)", "'inactive'", True),
+                        "region_id": ("VARCHAR(100)", "NULL", False),
+                        "metadata": ("JSONB", "'{}'::jsonb", True),
+                        "stream_url": ("VARCHAR(500)", "NULL", False),
                     }
-                    
-                    for column_name, (column_type, default_value, update_existing) in required_columns.items():
+
+                    for column_name, (
+                        column_type,
+                        default_value,
+                        update_existing,
+                    ) in required_columns.items():
                         column_exists = await conn.fetchval(
                             """
                             SELECT EXISTS (
@@ -86,13 +90,13 @@ class PostgreSQLCameraRepository(ICameraRepository):
                                 AND column_name = $1
                             )
                             """,
-                            column_name
+                            column_name,
                         )
-                        
+
                         if not column_exists:
                             logger.warning(f"cameras表缺少{column_name}列，正在添加...")
                             try:
-                                if default_value == 'NULL':
+                                if default_value == "NULL":
                                     await conn.execute(
                                         f"""
                                         ALTER TABLE cameras
@@ -106,9 +110,9 @@ class PostgreSQLCameraRepository(ICameraRepository):
                                         ADD COLUMN {column_name} {column_type} DEFAULT {default_value}
                                         """
                                     )
-                                    
+
                                     # 如果列有默认值且需要更新现有记录，为现有记录设置默认值
-                                    if default_value != 'NULL' and update_existing:
+                                    if default_value != "NULL" and update_existing:
                                         await conn.execute(
                                             f"""
                                             UPDATE cameras
@@ -119,7 +123,7 @@ class PostgreSQLCameraRepository(ICameraRepository):
                                 logger.info(f"已添加{column_name}列到cameras表")
                             except Exception as col_error:
                                 # 如果列已存在（并发情况），忽略错误
-                                if 'already exists' in str(col_error).lower():
+                                if "already exists" in str(col_error).lower():
                                     logger.debug(f"{column_name}列已存在，跳过")
                                 else:
                                     logger.warning(f"添加{column_name}列时出错: {col_error}")
@@ -154,7 +158,7 @@ class PostgreSQLCameraRepository(ICameraRepository):
 
             # 将UUID转换为字符串
             camera_id = str(row["id"]) if row["id"] else None
-            
+
             # 处理 status 字段，如果为空则默认为 inactive
             status_value = row.get("status") or "inactive"
             try:
@@ -162,7 +166,7 @@ class PostgreSQLCameraRepository(ICameraRepository):
             except ValueError:
                 logger.warning(f"无效的status值: {status_value}，使用默认值 inactive")
                 camera_status = CameraStatus.INACTIVE
-            
+
             # 处理 camera_type 字段，如果为空则默认为 fixed
             camera_type_value = row.get("camera_type") or "fixed"
             try:
@@ -170,7 +174,7 @@ class PostgreSQLCameraRepository(ICameraRepository):
             except ValueError:
                 logger.warning(f"无效的camera_type值: {camera_type_value}，使用默认值 fixed")
                 camera_type = CameraType.FIXED
-            
+
             return Camera(
                 id=camera_id,
                 name=row["name"],
@@ -210,8 +214,10 @@ class PostgreSQLCameraRepository(ICameraRepository):
                 # 从 metadata 中提取 stream_url，如果没有则使用 source 作为 stream_url
                 stream_url = None
                 if camera.metadata:
-                    stream_url = camera.metadata.get('stream_url') or camera.metadata.get('source')
-                
+                    stream_url = camera.metadata.get(
+                        "stream_url"
+                    ) or camera.metadata.get("source")
+
                 # 检查 id 列的类型
                 id_type = await conn.fetchval(
                     """
@@ -222,11 +228,11 @@ class PostgreSQLCameraRepository(ICameraRepository):
                     AND column_name = 'id'
                     """
                 )
-                
+
                 # 如果camera.id为空或空字符串，让数据库自动生成ID
                 if camera.id and camera.id.strip():
                     # 更新现有记录
-                    if id_type == 'uuid':
+                    if id_type == "uuid":
                         # UUID 类型
                         await conn.execute(
                             """
@@ -261,8 +267,7 @@ class PostgreSQLCameraRepository(ICameraRepository):
                         )
                         # 从RETURNING获取ID（确保一致性）
                         generated_id = await conn.fetchval(
-                            "SELECT id FROM cameras WHERE id = $1::uuid",
-                            camera.id
+                            "SELECT id FROM cameras WHERE id = $1::uuid", camera.id
                         )
                     else:
                         # VARCHAR 类型
@@ -300,7 +305,7 @@ class PostgreSQLCameraRepository(ICameraRepository):
                         generated_id = camera.id
                 else:
                     # 插入新记录，让数据库自动生成ID
-                    if id_type == 'uuid':
+                    if id_type == "uuid":
                         # UUID 类型，自动生成
                         generated_id = await conn.fetchval(
                             """
@@ -324,6 +329,7 @@ class PostgreSQLCameraRepository(ICameraRepository):
                     else:
                         # VARCHAR 类型，需要生成一个ID（使用UUID字符串）
                         import uuid
+
                         generated_id_str = str(uuid.uuid4())
                         await conn.execute(
                             """
@@ -380,14 +386,14 @@ class PostgreSQLCameraRepository(ICameraRepository):
                     AND column_name = 'id'
                     """
                 )
-                
-                if id_type == 'uuid':
+
+                if id_type == "uuid":
                     # UUID 类型，需要类型转换
                     where_clause = "WHERE id = $1::uuid"
                 else:
                     # VARCHAR 类型，直接比较
                     where_clause = "WHERE id = $1"
-                
+
                 row = await conn.fetchrow(
                     f"""
                     SELECT id, name, location, status, camera_type, resolution, fps,
@@ -572,12 +578,14 @@ class PostgreSQLCameraRepository(ICameraRepository):
                     AND column_name = 'id'
                     """
                 )
-                
-                if id_type == 'uuid':
-                    exists_query = "SELECT EXISTS(SELECT 1 FROM cameras WHERE id = $1::uuid)"
+
+                if id_type == "uuid":
+                    exists_query = (
+                        "SELECT EXISTS(SELECT 1 FROM cameras WHERE id = $1::uuid)"
+                    )
                 else:
                     exists_query = "SELECT EXISTS(SELECT 1 FROM cameras WHERE id = $1)"
-                
+
                 exists = await conn.fetchval(exists_query, camera_id)
                 return exists or False
             finally:

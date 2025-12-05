@@ -498,7 +498,7 @@ class ViolationService:
             metadata = self._get_metadata(obj)
             if not isinstance(metadata, dict):
                 metadata = {}
-            
+
             is_handwashing = metadata.get("is_handwashing")
             handwash_confidence = metadata.get("handwash_confidence", 0.0)
             min_handwash_confidence = rule_config.get("min_handwash_confidence", 0.3)
@@ -564,7 +564,7 @@ class ViolationService:
             metadata = self._get_metadata(obj)
             if not isinstance(metadata, dict):
                 metadata = {}
-            
+
             is_sanitizing = metadata.get("is_sanitizing")
             sanitize_confidence = metadata.get("sanitize_confidence", 0.0)
             min_sanitize_confidence = rule_config.get("min_sanitize_confidence", 0.3)

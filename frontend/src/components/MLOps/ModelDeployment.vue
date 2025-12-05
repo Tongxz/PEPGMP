@@ -113,19 +113,19 @@
     <n-modal v-model:show="showDeployDialog" preset="dialog" title="部署模型" style="width: 600px;" @after-enter="fetchModels">
       <n-form :model="deployForm" label-placement="left" label-width="120px">
         <n-form-item label="模型选择" required>
-          <n-select 
-            v-model:value="deployForm.model_id" 
-            placeholder="选择要部署的模型" 
-            :options="modelOptions" 
+          <n-select
+            v-model:value="deployForm.model_id"
+            placeholder="选择要部署的模型"
+            :options="modelOptions"
             :loading="loadingModels"
             filterable
             clearable
           />
         </n-form-item>
         <n-form-item label="部署到检测任务" required>
-          <n-select 
-            v-model:value="deployForm.detection_task" 
-            placeholder="选择检测任务" 
+          <n-select
+            v-model:value="deployForm.detection_task"
+            placeholder="选择检测任务"
             :options="detectionTaskOptions"
           />
         </n-form-item>
@@ -418,19 +418,19 @@ async function fetchModels() {
     // 获取所有模型（不筛选状态）
     const allModels = await listModels()
     console.log('[模型部署] 获取模型列表:', allModels)
-    
+
     // 过滤模型：只显示状态为 'active' 或 'ready' 的模型，或者没有状态字段的模型
     // 排除状态为 'archived' 或 'deprecated' 的模型
     models.value = allModels.filter(m => {
       const status = m.status?.toLowerCase()
-      return !status || 
-             status === 'active' || 
+      return !status ||
+             status === 'active' ||
              status === 'ready' ||
              (status !== 'archived' && status !== 'deprecated' && status !== 'error')
     })
-    
+
     console.log(`[模型部署] 获取到 ${allModels.length} 个模型，其中 ${models.value.length} 个可用`)
-    
+
     if (models.value.length === 0 && allModels.length > 0) {
       console.warn('[模型部署] 所有模型都被过滤掉了，显示所有模型')
       models.value = allModels
@@ -698,7 +698,7 @@ async function submitDeployment() {
     message.warning('请选择检测任务')
     return
   }
-  
+
   deploying.value = true
   try {
     // 获取选中的模型信息
@@ -707,7 +707,7 @@ async function submitDeployment() {
       message.error('选择的模型不存在')
       return
     }
-    
+
     // 构建部署配置
     const deploymentConfig = {
       model_id: selectedModel.id,
@@ -715,14 +715,14 @@ async function submitDeployment() {
       name: deployForm.value.name || undefined, // 如果为空，后端会自动生成
       apply_immediately: deployForm.value.apply_immediately
     }
-    
+
     // 调用部署API
     const response = await fetch('/api/v1/mlops/deployments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(deploymentConfig)
     })
-    
+
     if (response.ok) {
       const result = await response.json()
       message.success(result.message || '模型部署成功')
@@ -735,7 +735,7 @@ async function submitDeployment() {
         apply_immediately: false
       }
       refreshDeployments()
-      
+
       // 显示部署信息
       if (result.note) {
         message.info(result.note, { duration: 5000 })
@@ -787,18 +787,18 @@ function loadLogs() {
 // 提交更新
 async function submitUpdate() {
   if (!selectedDeployment.value) return
-  
+
   updating.value = true
   try {
     message.loading('正在更新部署...')
-    
+
     // 调用更新API
     const response = await fetch(`/api/v1/mlops/deployments/${selectedDeployment.value.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updateForm.value)
     })
-    
+
     if (response.ok) {
       message.success('部署更新成功')
       showUpdateDialog.value = false

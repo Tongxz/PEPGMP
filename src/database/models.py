@@ -247,9 +247,7 @@ class WorkflowRun(Base):
     error_message = Column(Text, nullable=True)
     run_log = Column(Text, nullable=True)  # 运行日志
     run_config = Column(JSON, nullable=True)  # 运行时的配置快照
-    created_at = Column(
-        DateTime, nullable=False, default=lambda: datetime.utcnow()
-    )
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.utcnow())
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""

@@ -1003,17 +1003,17 @@ async function loadSamplePreview() {
 // 应用样本筛选
 function applySampleFilter() {
   let filtered = [...allSamples.value]
-  
+
   // 根据筛选条件过滤
   if (sampleFilter.value === 'normal') {
     filtered = filtered.filter(sample => !sample.has_violation)
   } else if (sampleFilter.value === 'violation') {
     filtered = filtered.filter(sample => sample.has_violation)
   }
-  
+
   // 更新总数
   samplePreviewTotal.value = filtered.length
-  
+
   // 分页
   const offset = (samplePreviewPage.value - 1) * samplePreviewLimit.value
   samplePreview.value = filtered.slice(offset, offset + samplePreviewLimit.value)

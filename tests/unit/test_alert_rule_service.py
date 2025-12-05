@@ -30,7 +30,7 @@ class MockAlertRuleRepository(IAlertRuleRepository):
         if enabled is not None:
             result = [r for r in result if r.enabled == enabled]
         # 分页
-        return result[offset:offset + limit]
+        return result[offset : offset + limit]
 
     async def count(
         self,

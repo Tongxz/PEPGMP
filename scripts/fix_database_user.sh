@@ -24,11 +24,11 @@ if docker exec "$CONTAINER" sh -c 'psql -U "$POSTGRES_USER" -d postgres -c "SELE
     docker exec "$CONTAINER" sh -c "psql -U \"\$POSTGRES_USER\" -d postgres -c \"CREATE DATABASE $DB_NAME OWNER $DB_USER;\" 2>&1 || echo '数据库可能已存在'"
 else
     echo "⚠️  方法1失败，尝试方法2..."
-    
+
     # 方法2: 检查是否有其他可用的超级用户
     echo "尝试方法2: 查找可用的超级用户..."
     SUPER_USER=$(docker exec "$CONTAINER" sh -c 'psql -t -A -c "SELECT usename FROM pg_user WHERE usesuper = true LIMIT 1;"' 2>/dev/null | head -1 | tr -d ' ')
-    
+
     if [ -n "$SUPER_USER" ] && [ "$SUPER_USER" != "" ]; then
         echo "找到超级用户: $SUPER_USER"
         docker exec "$CONTAINER" sh -c "psql -U $SUPER_USER -d postgres -c \"CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';\" 2>&1 || echo '用户可能已存在'"
@@ -49,4 +49,3 @@ else
     echo "❌ 验证失败"
     exit 1
 fi
-

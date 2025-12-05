@@ -44,7 +44,7 @@ echo "正在备份数据库..."
 # 使用pg_dump导出并gzip压缩
 if docker exec "$DB_CONTAINER" pg_dump -U "$DB_USER" "$DB_NAME" | gzip > "$BACKUP_FILE"; then
     echo -e "${GREEN}✅ 备份成功: $BACKUP_FILE${NC}"
-    
+
     # 获取文件大小
     FILE_SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
     echo "文件大小: $FILE_SIZE"
@@ -72,5 +72,3 @@ echo ""
 echo "========================================================================="
 echo "                     备份完成"
 echo "========================================================================="
-
-

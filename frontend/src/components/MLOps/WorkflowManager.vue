@@ -107,9 +107,9 @@
               <n-space justify="end">
                 <n-button size="small" @click="viewWorkflow(workflow)">详情</n-button>
                 <n-button size="small" @click="editWorkflow(workflow)">编辑</n-button>
-                <n-button 
+                <n-button
                   v-if="!isWorkflowRunning(workflow)"
-                  size="small" 
+                  size="small"
                   @click="runWorkflow(workflow)"
                 >
                   运行
@@ -697,8 +697,8 @@
               </n-descriptions>
               <n-divider style="margin: 8px 0;" />
               <n-text depth="3" style="font-size: 12px;">输出内容</n-text>
-              <n-code 
-                :code="JSON.stringify(entry.output ?? {}, null, 2)" 
+              <n-code
+                :code="JSON.stringify(entry.output ?? {}, null, 2)"
                 language="json"
                 :show-line-numbers="true"
                 :word-wrap="true"
@@ -1643,7 +1643,7 @@ function prepareStepForForm(step: any): WorkflowStep {
       model: configTrainingParams.model ?? stepTrainingParams.model ?? ''
     }
   }
-  
+
   return {
     name: step?.name || '',
     type: step?.type || 'data_processing',
@@ -1945,14 +1945,14 @@ async function stopWorkflow(workflow: Workflow) {
     if (!confirmed) {
       return
     }
-    
+
     const loadingMessage = message.loading('正在停止工作流...', { duration: 0 })
     try {
       const response = await fetch(`/api/v1/mlops/workflows/${workflow.id}/stop`, {
         method: 'POST'
       })
       loadingMessage.destroy()
-      
+
       if (response.ok) {
         const result = await response.json()
         if (result.success) {
@@ -1986,9 +1986,9 @@ async function toggleWorkflow(workflow: Workflow) {
     if (!confirmed) {
       return
     }
-    
+
     const loadingMessage = message.loading(`正在${action}...`, { duration: 0 })
-    
+
     try {
       // 如果停用工作流，先尝试停止正在运行的训练
       if (workflow.status === 'active') {
@@ -2007,7 +2007,7 @@ async function toggleWorkflow(workflow: Workflow) {
           console.warn('停止工作流失败（可能未在运行）:', stopError)
         }
       }
-      
+
       // 更新工作流状态
       const response = await fetch(`/api/v1/mlops/workflows/${workflow.id}`, {
         method: 'PUT',
@@ -2019,12 +2019,12 @@ async function toggleWorkflow(workflow: Workflow) {
           status: newStatus
         })
       })
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ detail: '更新失败' }))
         throw new Error(errorData.detail || '更新失败')
       }
-      
+
       loadingMessage.destroy()
       message.success(`工作流${action}成功`)
       refreshWorkflows()
@@ -2158,10 +2158,10 @@ async function viewRunDetails(run: WorkflowRun) {
         message.error('无法获取工作流ID')
         return
       }
-      
+
       const response = await fetch(`/api/v1/mlops/workflows/${workflowId}/runs/${run.id}`)
       loadingMessage.destroy()
-      
+
       if (response.ok) {
         const runDetail = await response.json()
         // 更新currentRun，使用API返回的完整数据
@@ -2176,7 +2176,7 @@ async function viewRunDetails(run: WorkflowRun) {
           run_log: runDetail.run_log,
           run_config: runDetail.run_config
         } as WorkflowRun
-        
+
         // 解析步骤输出
         let entries: WorkflowStepOutput[] = []
         if (runDetail.step_outputs && Array.isArray(runDetail.step_outputs)) {

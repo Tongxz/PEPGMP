@@ -944,20 +944,20 @@ class YOLOHairnetDetector:
                 if x2 <= x1 or y2 <= y1:
                     logger.warning(f"无效的人体边界框: {human_bbox}")
                     continue
-                
+
                 # 2. 检查人体高度是否足够（至少需要检测到上半身）
                 # 如果高度小于宽度的1.2倍，可能是只检测到部分人体（如只检测到头部或上半身）
                 # 或者高度小于某个最小值（如100像素），也认为是部分检测
                 min_person_height = 100  # 最小人体高度阈值（像素）
                 min_height_width_ratio = 1.2  # 最小高度/宽度比（正常人体高度应该大于宽度）
-                
+
                 if person_height < min_person_height:
                     logger.debug(
                         f"跳过发网检测：人体高度不足（{person_height} < {min_person_height}），"
                         f"可能是部分检测: track_id={track_id}, bbox={human_bbox}"
                     )
                     continue
-                
+
                 if person_height < person_width * min_height_width_ratio:
                     logger.debug(
                         f"跳过发网检测：人体高度/宽度比不足（{person_height}/{person_width}={person_height/person_width:.2f} < {min_height_width_ratio}），"
@@ -970,7 +970,9 @@ class YOLOHairnetDetector:
 
                 # 确保头部高度有效
                 if head_height <= 0:
-                    logger.warning(f"无效的头部高度: {head_height}, person_height={person_height}, bbox={human_bbox}")
+                    logger.warning(
+                        f"无效的头部高度: {head_height}, person_height={person_height}, bbox={human_bbox}"
+                    )
                     continue
 
                 # 优化：使用配置化的padding，确保包含发网边缘但不超出太多

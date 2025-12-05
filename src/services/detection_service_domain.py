@@ -1193,6 +1193,7 @@ class DetectionServiceDomain:
         """
         try:
             from datetime import timedelta
+
             import psutil
 
             # 获取最近1小时的记录用于计算统计
@@ -1218,30 +1219,32 @@ class DetectionServiceDomain:
 
             for record in records:
                 # 统计处理帧数
-                if hasattr(record, 'processing_time') and record.processing_time > 0:
+                if hasattr(record, "processing_time") and record.processing_time > 0:
                     processed_frames += 1
                 else:
                     skipped_frames += 1
 
                 # 统计FPS
-                if hasattr(record, 'fps') and record.fps:
-                    fps_value = record.fps if isinstance(record.fps, (int, float)) else 0.0
+                if hasattr(record, "fps") and record.fps:
+                    fps_value = (
+                        record.fps if isinstance(record.fps, (int, float)) else 0.0
+                    )
                     if fps_value > 0:
                         total_fps += fps_value
                         fps_count += 1
 
                 # 场景分布（根据元数据判断）
-                metadata = record.metadata if hasattr(record, 'metadata') else {}
-                scene_type = metadata.get('scene_type', '').lower()
-                if scene_type == 'static':
+                metadata = record.metadata if hasattr(record, "metadata") else {}
+                scene_type = metadata.get("scene_type", "").lower()
+                if scene_type == "static":
                     static_scenes += 1
-                elif scene_type == 'dynamic':
+                elif scene_type == "dynamic":
                     dynamic_scenes += 1
-                elif scene_type == 'critical':
+                elif scene_type == "critical":
                     critical_scenes += 1
                 else:
                     # 默认根据对象数量判断
-                    obj_count = len(record.objects) if hasattr(record, 'objects') else 0
+                    obj_count = len(record.objects) if hasattr(record, "objects") else 0
                     if obj_count == 0:
                         static_scenes += 1
                     elif obj_count > 3:
@@ -1271,6 +1274,7 @@ class DetectionServiceDomain:
                 # GPU使用率（如果可用）
                 try:
                     import pynvml
+
                     pynvml.nvmlInit()
                     handle = pynvml.nvmlDeviceGetHandleByIndex(0)
                     utilization = pynvml.nvmlDeviceGetUtilizationRates(handle)

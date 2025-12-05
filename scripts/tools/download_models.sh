@@ -84,13 +84,13 @@ echo ""
 # 这里简单处理，实际项目可以解析 JSON 配置文件
 for model_info in "${DEFAULT_MODELS[@]}"; do
     IFS="|" read -r name url checksum <<< "$model_info"
-    
+
     # 如果是示例URL，跳过
     if [[ "$url" == *"example.com"* ]]; then
         echo -e "${YELLOW}跳过示例模型: $name (请配置真实URL)${NC}"
         continue
     fi
-    
+
     download_model "$name" "$url" "$checksum"
 done
 
@@ -98,5 +98,3 @@ echo ""
 echo "========================================================================="
 echo "                     处理完成"
 echo "========================================================================="
-
-

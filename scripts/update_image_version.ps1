@@ -47,12 +47,12 @@ if ($args.Count -gt 0) {
 # 如果未指定版本号，自动查找最新的日期版本号镜像
 if ($VERSION_TAG -eq "auto") {
     Write-Info "自动查找最新的日期版本号镜像..."
-    
+
     try {
         # 查找所有 pepgmp-backend 镜像的日期版本号（格式：YYYYMMDD）
         $allTags = docker images pepgmp-backend --format "{{.Tag}}" 2>$null
         $dateTags = $allTags | Where-Object { $_ -match '^\d{8}$' } | Sort-Object -Descending
-        
+
         if ($dateTags.Count -gt 0) {
             $LATEST_TAG = $dateTags[0]
         } else {
@@ -63,13 +63,13 @@ if ($VERSION_TAG -eq "auto") {
                 $LATEST_TAG = $nonLatestTags[0]
             }
         }
-        
+
         if ([string]::IsNullOrEmpty($LATEST_TAG)) {
             Write-Error "未找到可用的镜像版本"
             Write-Info "请先构建镜像: .\scripts\build_prod_only.ps1"
             exit 1
         }
-        
+
         $VERSION_TAG = $LATEST_TAG
         Write-Info "找到最新版本: $VERSION_TAG"
     } catch {
@@ -84,11 +84,11 @@ Write-Info "更新 $ENV_FILE 中的 IMAGE_TAG=$VERSION_TAG..."
 try {
     $content = Get-Content $ENV_FILE -Raw
     $lines = Get-Content $ENV_FILE
-    
+
     # 检查是否已存在 IMAGE_TAG
     $hasImageTag = $false
     $newLines = @()
-    
+
     foreach ($line in $lines) {
         if ($line -match '^IMAGE_TAG=') {
             $newLines += "IMAGE_TAG=$VERSION_TAG"
@@ -97,7 +97,7 @@ try {
             $newLines += $line
         }
     }
-    
+
     if (-not $hasImageTag) {
         # 添加新行
         if ($newLines.Count -gt 0 -and $newLines[-1] -ne "") {
@@ -109,10 +109,10 @@ try {
     } else {
         Write-Success "已更新 IMAGE_TAG=$VERSION_TAG"
     }
-    
+
     # 写入文件
     $newLines | Set-Content $ENV_FILE -NoNewline:$false
-    
+
 } catch {
     Write-Error "更新文件失败: $_"
     exit 1
@@ -133,5 +133,3 @@ Write-Host ""
 Write-Host "  2. 验证使用的镜像版本:"
 Write-Host "     docker compose -f docker-compose.prod.yml config | Select-String image"
 Write-Host ""
-
-

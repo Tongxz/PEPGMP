@@ -66,7 +66,7 @@ services:
   api:
     # ${IMAGE_REGISTRY:-} 表示：使用 IMAGE_REGISTRY 环境变量，如果未设置则为空
     image: ${IMAGE_REGISTRY:-}pepgmp-backend:${IMAGE_TAG:-latest}
-  
+
   frontend-init:
     image: ${IMAGE_REGISTRY:-}pepgmp-frontend:${IMAGE_TAG:-latest}
 ```
@@ -328,7 +328,7 @@ IMAGE_TAG=20251203
 services:
   api:
     image: ${IMAGE_REGISTRY:-}pepgmp-backend:${IMAGE_TAG:-latest}  # 从私有仓库拉取
-  
+
   frontend-init:
     image: pepgmp-frontend:latest  # 使用本地镜像（硬编码）
 ```
@@ -345,4 +345,3 @@ services:
 **建议**：
 - 测试环境：继续使用本地镜像（简单快速）
 - 生产环境：搭建私有仓库（标准化、自动化）
-

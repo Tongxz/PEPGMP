@@ -13,18 +13,20 @@ def mock_camera_service():
     """创建Mock摄像头服务."""
     from src.domain.entities.camera import Camera, CameraStatus
     from src.domain.repositories.camera_repository import ICameraRepository
-    
+
     # 创建Mock仓储
     mock_repo = MagicMock(spec=ICameraRepository)
-    mock_repo.find_by_id = AsyncMock(return_value=Camera(
-        id="camera_001",
-        name="测试摄像头",
-        location="测试位置",
-        status=CameraStatus.ACTIVE,
-        region_id="region_001"
-    ))
+    mock_repo.find_by_id = AsyncMock(
+        return_value=Camera(
+            id="camera_001",
+            name="测试摄像头",
+            location="测试位置",
+            status=CameraStatus.ACTIVE,
+            region_id="region_001",
+        )
+    )
     mock_repo.find_all = AsyncMock(return_value=[])
-    
+
     # 创建Mock服务
     service = MagicMock(spec=CameraService)
     service.camera_repository = mock_repo
@@ -51,9 +53,7 @@ def mock_scheduler():
     scheduler.status = MagicMock(
         return_value={"running": True, "pid": 12345, "log": "/tmp/log.txt"}
     )
-    scheduler.get_batch_status = MagicMock(
-        return_value={}  # 默认返回空字典，表示没有运行中的摄像头
-    )
+    scheduler.get_batch_status = MagicMock(return_value={})  # 默认返回空字典，表示没有运行中的摄像头
 
     return scheduler
 
@@ -99,7 +99,11 @@ class TestStopCamera:
         """测试成功停止摄像头."""
         camera_id = "camera_001"
         # 设置摄像头为运行状态
-        mock_scheduler.get_status.return_value = {"running": True, "pid": 12345, "log": "/tmp/log.txt"}
+        mock_scheduler.get_status.return_value = {
+            "running": True,
+            "pid": 12345,
+            "log": "/tmp/log.txt",
+        }
 
         result = camera_control_service.stop_camera(camera_id)
 
@@ -110,7 +114,11 @@ class TestStopCamera:
         """测试停止摄像头失败."""
         camera_id = "camera_001"
         # 设置摄像头为运行状态
-        mock_scheduler.get_status.return_value = {"running": True, "pid": 12345, "log": "/tmp/log.txt"}
+        mock_scheduler.get_status.return_value = {
+            "running": True,
+            "pid": 12345,
+            "log": "/tmp/log.txt",
+        }
         mock_scheduler.stop_detection.return_value = {"ok": False, "error": "停止失败"}
 
         with pytest.raises(ValueError):
@@ -152,7 +160,11 @@ class TestGetCameraStatus:
         """测试成功获取摄像头状态."""
         camera_id = "camera_001"
         # 设置返回运行状态
-        mock_scheduler.get_status.return_value = {"running": True, "pid": 12345, "log": "/tmp/log.txt"}
+        mock_scheduler.get_status.return_value = {
+            "running": True,
+            "pid": 12345,
+            "log": "/tmp/log.txt",
+        }
 
         result = camera_control_service.get_camera_status(camera_id)
 
@@ -178,7 +190,7 @@ class TestGetBatchStatus:
         # 设置批量状态返回
         mock_scheduler.get_batch_status.return_value = {
             "camera_001": {"running": True, "pid": 12345},
-            "camera_002": {"running": False, "pid": None}
+            "camera_002": {"running": False, "pid": None},
         }
 
         result = camera_control_service.get_batch_status(camera_ids)

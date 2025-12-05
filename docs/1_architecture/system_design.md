@@ -184,7 +184,7 @@ graph TD
 
     subgraph "Docker 容器化环境 (Docker Compose)"
         NGINX[Nginx<br/>反向代理/负载均衡]
-        
+
         subgraph "应用服务 (App Service)"
             FASTAPI_APP[FastAPI 应用<br/>(可多副本)]
         end
@@ -201,7 +201,7 @@ graph TD
 
     FASTAPI_APP -- "读/写" --> PROD_DB
     FASTAPI_APP -- "订阅/发布" --> PROD_REDIS
-    
+
     DETECTOR_1 -- "发布" --> PROD_REDIS
     DETECTOR_2 -- "发布" --> PROD_REDIS
     DETECTOR_N -- "发布" --> PROD_REDIS

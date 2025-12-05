@@ -340,14 +340,14 @@ class DetectionApplicationService:
         annotated_image: Optional[np.ndarray] = None,
     ) -> Optional[SnapshotInfo]:
         """尝试保存快照并返回结果
-        
+
         Args:
             frame: 原始视频帧
             camera_id: 摄像头ID
             violation_type: 违规类型（如果有）
             metadata: 元数据
             annotated_image: 标注后的图片（优先使用，如果提供）
-        
+
         Returns:
             快照信息，如果保存失败则返回None
         """
@@ -364,7 +364,7 @@ class DetectionApplicationService:
         # 优先使用标注后的图片，如果没有则使用原始帧
         # 违规记录中应该显示标注框，方便查看违规详情
         image_to_save = annotated_image if annotated_image is not None else frame
-        
+
         try:
             snapshot_info = await self.snapshot_storage.save_frame(
                 image_to_save,
@@ -449,7 +449,7 @@ class DetectionApplicationService:
             key = track_id if track_id is not None else person_id
             if key is not None:
                 handwash_map[key] = result
-        
+
         for result in detection_result.sanitize_results:
             track_id = result.get("track_id")
             person_id = result.get("person_id")
@@ -636,7 +636,7 @@ class DetectionApplicationService:
                 and detection_result.annotated_image is not None
                 else None
             )
-            
+
             snapshot_info = await self._save_snapshot_if_possible(
                 image,
                 camera_id,
@@ -742,7 +742,7 @@ class DetectionApplicationService:
                 and detection_result.annotated_image is not None
                 else None
             )
-            
+
             snapshot_info = await self._save_snapshot_if_possible(
                 frame,
                 camera_id,

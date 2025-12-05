@@ -42,7 +42,7 @@ if [ -f ".env.production" ]; then
     IMAGE_TAG=$(grep "^IMAGE_TAG=" .env.production | cut -d'=' -f2)
     echo "  IMAGE_TAG in .env.production: $IMAGE_TAG"
     echo ""
-    
+
     # Check if image with this tag exists
     if docker images | grep -q "pepgmp-backend.*$IMAGE_TAG"; then
         echo "  [OK] Backend image with tag '$IMAGE_TAG' found"
@@ -76,4 +76,3 @@ else
 fi
 
 echo "========================================================================="
-

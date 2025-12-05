@@ -111,7 +111,7 @@ try {
         -t "pepgmp-backend:$VERSION_TAG" `
         -t "pepgmp-backend:latest" `
         .
-    
+
     if ($LASTEXITCODE -eq 0) {
         Write-Success "Backend API image build completed"
         Write-Info "Created the following tags:"
@@ -141,7 +141,7 @@ if ($BUILD_FRONTEND) {
     Write-Info "Starting to build frontend image..."
     Write-Info "Dockerfile: Dockerfile.frontend"
     Write-Info "Image name: pepgmp-frontend:$VERSION_TAG"
-    
+
     # 预先拉取前端构建所需的基础镜像
     Write-Info "Pulling base images for frontend build..."
     try {
@@ -151,7 +151,7 @@ if ($BUILD_FRONTEND) {
         } else {
             Write-Success "Pulled node:20-alpine"
         }
-        
+
         docker pull nginx:1.27-alpine 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
             Write-Warning "Failed to pull nginx:1.27-alpine, will try during build"
@@ -173,7 +173,7 @@ if ($BUILD_FRONTEND) {
             -t "pepgmp-frontend:$VERSION_TAG" `
             -t "pepgmp-frontend:latest" `
             .
-        
+
         if ($LASTEXITCODE -eq 0) {
             Write-Success "Frontend image build completed"
             Write-Info "Created the following tags:"

@@ -19,13 +19,13 @@ logger = logging.getLogger(__name__)
 
 class FrameSkipDetector:
     """帧跳检测器
-    
+
     功能：
     1. 可配置的帧跳检测：每N帧检测一次
     2. 运动检测：基于帧差检测运动，只在有运动时检测
     3. 时序稳定性：确保检测结果在时间窗口内稳定
     """
-    
+
     def __init__(
         self,
         skip_interval: int = 5,  # 每N帧检测一次
@@ -35,7 +35,7 @@ class FrameSkipDetector:
     ):
         """
         初始化帧跳检测器
-        
+
         Args:
             skip_interval: 帧跳间隔（每N帧检测一次）
             motion_threshold: 运动检测阈值（0-1）
@@ -46,26 +46,26 @@ class FrameSkipDetector:
         self.motion_threshold = motion_threshold
         self.enable_motion_detection = enable_motion_detection
         self.min_detection_interval = min_detection_interval
-        
+
         # 帧计数器（按摄像头）
         self.frame_counters: Dict[str, int] = {}
-        
+
         # 上一帧缓存（用于运动检测）
         self.prev_frames: Dict[str, np.ndarray] = {}
-        
+
         # 上次检测时间（按摄像头）
         self.last_detection_times: Dict[str, float] = {}
-        
+
         # 检测历史（用于时序稳定性）
         self.detection_history: Dict[str, deque] = {}
-        
+
         logger.info(
             f"FrameSkipDetector initialized: skip_interval={skip_interval}, "
             f"motion_threshold={motion_threshold}, "
             f"enable_motion_detection={enable_motion_detection}, "
             f"min_detection_interval={min_detection_interval}"
         )
-    
+
     def should_detect(
         self,
         frame: np.ndarray,
@@ -74,12 +74,12 @@ class FrameSkipDetector:
     ) -> bool:
         """
         判断是否应该进行检测
-        
+
         Args:
             frame: 当前帧
             camera_id: 摄像头ID
             timestamp: 时间戳（可选）
-        
+
         Returns:
             True表示应该检测，False表示跳过
         """
@@ -89,16 +89,16 @@ class FrameSkipDetector:
             self.frame_counters[camera_id] = 0
             self.last_detection_times[camera_id] = 0.0
             self.detection_history[camera_id] = deque(maxlen=10)
-        
+
         self.frame_counters[camera_id] += 1
         frame_count = self.frame_counters[camera_id]
-        
+
         # 检查最小检测间隔（第一帧总是允许检测）
         if not is_first_frame and timestamp is not None:
             time_since_last = timestamp - self.last_detection_times[camera_id]
             if time_since_last < self.min_detection_interval:
                 return False
-        
+
         # 基础帧跳检测：每N帧检测一次
         if frame_count % self.skip_interval == 0:
             # 如果启用运动检测，检查是否有运动
@@ -118,10 +118,10 @@ class FrameSkipDetector:
                 self.last_detection_times[camera_id] = timestamp or 0.0
                 self.detection_history[camera_id].append(True)
                 return True
-        
+
         # 不在检测间隔内，跳过
         return False
-    
+
     def _detect_motion(
         self,
         frame: np.ndarray,
@@ -129,11 +129,11 @@ class FrameSkipDetector:
     ) -> bool:
         """
         检测帧间运动
-        
+
         Args:
             frame: 当前帧
             camera_id: 摄像头ID
-        
+
         Returns:
             True表示有运动，False表示无运动
         """
@@ -141,9 +141,9 @@ class FrameSkipDetector:
             # 第一帧，保存并返回True（需要检测）
             self.prev_frames[camera_id] = frame.copy()
             return True
-        
+
         prev_frame = self.prev_frames[camera_id]
-        
+
         # 转换为灰度图
         if len(frame.shape) == 3:
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -151,28 +151,28 @@ class FrameSkipDetector:
         else:
             gray = frame
             prev_gray = prev_frame
-        
+
         # 计算帧差
         diff = cv2.absdiff(gray, prev_gray)
-        
+
         # 计算运动比例
         motion_ratio = np.sum(diff > 30) / (diff.shape[0] * diff.shape[1])
-        
+
         # 更新上一帧
         self.prev_frames[camera_id] = frame.copy()
-        
+
         # 判断是否有运动
         has_motion = motion_ratio > self.motion_threshold
-        
+
         logger.debug(
             f"Motion detection for {camera_id}: "
             f"motion_ratio={motion_ratio:.4f}, "
             f"threshold={self.motion_threshold}, "
             f"has_motion={has_motion}"
         )
-        
+
         return has_motion
-    
+
     def reset(self, camera_id: Optional[str] = None):
         """重置检测器状态"""
         if camera_id:
@@ -193,7 +193,7 @@ class FrameSkipDetector:
             self.last_detection_times.clear()
             self.detection_history.clear()
             logger.info("Reset all FrameSkipDetector state")
-    
+
     def get_stats(self, camera_id: Optional[str] = None) -> Dict[str, Any]:
         """获取统计信息"""
         if camera_id:
@@ -202,7 +202,7 @@ class FrameSkipDetector:
             total = len(history)
             detected = sum(history) if history else 0
             skip_rate = 1.0 - (detected / total) if total > 0 else 0.0
-            
+
             return {
                 "camera_id": camera_id,
                 "frame_count": self.frame_counters.get(camera_id, 0),
@@ -221,8 +221,6 @@ class FrameSkipDetector:
                 "motion_threshold": self.motion_threshold,
                 "enable_motion_detection": self.enable_motion_detection,
                 "cameras": {
-                    cid: self.get_stats(cid)
-                    for cid in self.frame_counters.keys()
+                    cid: self.get_stats(cid) for cid in self.frame_counters.keys()
                 },
             }
-

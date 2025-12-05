@@ -63,4 +63,3 @@ export async function updateModelStatus(modelId: string, status: string): Promis
 export async function deleteModel(modelId: string): Promise<void> {
   await http.delete(`/mlops/models/${modelId}`)
 }
-

@@ -124,4 +124,3 @@ echo "验证命令:"
 echo "  curl http://${PRODUCTION_HOST}:8000/api/v1/monitoring/health"
 echo "  ssh ${PRODUCTION_USER}@${PRODUCTION_HOST} 'docker ps'"
 echo ""
-

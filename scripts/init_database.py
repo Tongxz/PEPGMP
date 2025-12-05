@@ -6,7 +6,6 @@
 
 import asyncio
 import logging
-import os
 import sys
 from pathlib import Path
 
@@ -18,8 +17,7 @@ from src.database.init_db import main
 
 # 配置日志
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
 if __name__ == "__main__":

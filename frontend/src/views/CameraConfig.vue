@@ -472,7 +472,7 @@ const columns: DataTableColumns = [
       return h(NSpace, { vertical: true, size: 2 }, {
         default: () => [
           h(NText, { strong: true }, { default: () => row.name || '-' }),
-          h(NText, { 
+          h(NText, {
             style: { fontFamily: 'monospace', fontSize: '11px', color: '#999' }
           }, { default: () => row.id })
         ]
@@ -555,8 +555,8 @@ const columns: DataTableColumns = [
       const status = row.runtime_status
       if (status?.running) {
         // 简化显示：只显示状态标签，PID信息通过tooltip显示
-        return h(NTag, { 
-          type: 'success', 
+        return h(NTag, {
+          type: 'success',
           size: 'small',
           title: status.pid ? `PID: ${status.pid}` : '运行中'
         }, { default: () => '🟢 运行中' })
@@ -918,7 +918,7 @@ function fillForm(camera: any) {
   formData.camera_type = camera.camera_type || 'fixed'
   // status：配置状态（是否允许启动检测）
   formData.status = camera.status || 'inactive'
-  
+
   // resolution 字段：后端返回的是元组 [width, height]，需要转换为字符串 "widthxheight"
   if (camera.resolution) {
     if (Array.isArray(camera.resolution) && camera.resolution.length === 2) {
@@ -933,7 +933,7 @@ function fillForm(camera: any) {
   } else {
     formData.resolution = ''
   }
-  
+
   formData.fps = camera.fps || null
   formData.regions_file = camera.regions_file || ''
   // 检测与视频流配置（从camera配置或默认值）
@@ -951,14 +951,14 @@ function collectFormData(includeEmpty: boolean) {
     payload.id = formData.id.trim()
   }
   // 创建模式下不包含 id，让后端自动生成
-  
+
   // name 字段：创建和编辑模式都需要
   if (mode.value === 'create' && (includeEmpty || formData.name.trim())) {
     payload.name = formData.name.trim()
   } else if (mode.value === 'edit' && formData.name.trim()) {
     payload.name = formData.name.trim()
   }
-  
+
   // source 字段：创建模式下必填，编辑模式下允许修改
   // 在编辑模式下，source 字段总是被包含在 payload 中（如果表单中有值）
   if (mode.value === 'create') {
@@ -974,15 +974,15 @@ function collectFormData(includeEmpty: boolean) {
       payload.source = formData.source.trim()
     }
   }
-  
+
   // resolution 字段：需要将字符串 "widthxheight" 转换为数组 [width, height]
   // 后端期望的是列表格式，如 [1920, 1080]
   if (formData.resolution) {
     // 确保 resolution 是字符串类型
-    const resolutionStr = typeof formData.resolution === 'string' 
-      ? formData.resolution.trim() 
+    const resolutionStr = typeof formData.resolution === 'string'
+      ? formData.resolution.trim()
       : String(formData.resolution || '').trim()
-    
+
     if (resolutionStr) {
       // 解析 "1280x720" 格式
       if (resolutionStr.includes('x')) {
@@ -999,19 +999,19 @@ function collectFormData(includeEmpty: boolean) {
     }
   }
   // 注意：编辑模式下，如果 resolution 为空或不合法，不包含在 payload 中，保持原值
-  
+
   if (includeEmpty || formData.fps !== null) payload.fps = formData.fps
-  
+
   // location 字段：可选
   if (formData.location && formData.location.trim()) {
     payload.location = formData.location.trim()
   }
-  
+
   // camera_type 字段：可选，默认 fixed
   if (formData.camera_type) {
     payload.camera_type = formData.camera_type
   }
-  
+
   // status 字段：可选，默认 inactive
   // 注意：后端期望的是 status 字段，同时也会使用 active 标志（用于兼容）
   if (formData.status) {
@@ -1019,12 +1019,12 @@ function collectFormData(includeEmpty: boolean) {
     // 同时设置 active 标志（用于兼容旧代码）
     payload.active = formData.status === 'active'
   }
-  
+
   // regions_file 字段：确保是字符串类型
   // 编辑模式下，如果 regions_file 为空，不包含在 payload 中（保持原值）
   if (formData.regions_file !== undefined && formData.regions_file !== null) {
-    const regionsFileStr = typeof formData.regions_file === 'string' 
-      ? formData.regions_file.trim() 
+    const regionsFileStr = typeof formData.regions_file === 'string'
+      ? formData.regions_file.trim()
       : String(formData.regions_file).trim()
     // 编辑模式下，即使为空字符串，如果用户清空了字段，也应该更新
     if (includeEmpty || regionsFileStr) {

@@ -75,4 +75,3 @@ services:
   #   depends_on:
   #     - database
   #   restart: unless-stopped
-

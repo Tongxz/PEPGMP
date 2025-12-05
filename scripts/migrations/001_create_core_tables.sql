@@ -11,23 +11,23 @@ CREATE TABLE IF NOT EXISTS detection_records (
     camera_id VARCHAR(50) NOT NULL,
     timestamp TIMESTAMP NOT NULL DEFAULT NOW(),
     frame_number INTEGER,
-    
+
     -- 检测数量统计
     person_count INTEGER DEFAULT 0,
     hairnet_violations INTEGER DEFAULT 0,
     handwash_events INTEGER DEFAULT 0,
     sanitize_events INTEGER DEFAULT 0,
-    
+
     -- 详细检测结果 (JSON格式)
     person_detections JSONB,
     hairnet_results JSONB,
     handwash_results JSONB,
     sanitize_results JSONB,
-    
+
     -- 性能指标
     processing_time FLOAT,
     fps FLOAT,
-    
+
     -- 元数据
     created_at TIMESTAMP DEFAULT NOW()
 );
@@ -53,22 +53,22 @@ CREATE TABLE IF NOT EXISTS violation_events (
     detection_id BIGINT REFERENCES detection_records(id) ON DELETE CASCADE,
     camera_id VARCHAR(50) NOT NULL,
     timestamp TIMESTAMP NOT NULL DEFAULT NOW(),
-    
+
     -- 违规信息
     violation_type VARCHAR(50) NOT NULL,  -- 'no_hairnet', 'no_handwash', 'no_sanitize'
     track_id INTEGER,
     confidence FLOAT,
-    
+
     -- 截图和位置
     snapshot_path VARCHAR(500),
     bbox JSONB,  -- {"x": 0, "y": 0, "width": 100, "height": 100}
-    
+
     -- 处理状态
     status VARCHAR(20) DEFAULT 'pending',  -- pending, confirmed, false_positive, resolved
     handled_at TIMESTAMP,
     handled_by VARCHAR(100),
     notes TEXT,
-    
+
     -- 元数据
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
@@ -92,24 +92,24 @@ CREATE TABLE IF NOT EXISTS statistics_hourly (
     id BIGSERIAL PRIMARY KEY,
     camera_id VARCHAR(50) NOT NULL,
     hour_start TIMESTAMP NOT NULL,
-    
+
     -- 检测统计
     total_frames INTEGER DEFAULT 0,
     total_persons INTEGER DEFAULT 0,
     total_hairnet_violations INTEGER DEFAULT 0,
     total_handwash_events INTEGER DEFAULT 0,
     total_sanitize_events INTEGER DEFAULT 0,
-    
+
     -- 性能统计
     avg_fps FLOAT,
     avg_processing_time FLOAT,
     min_processing_time FLOAT,
     max_processing_time FLOAT,
-    
+
     -- 元数据
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
-    
+
     -- 唯一约束：每个摄像头每小时一条记录
     CONSTRAINT uq_camera_hour UNIQUE (camera_id, hour_start)
 );
@@ -129,19 +129,19 @@ CREATE TABLE IF NOT EXISTS alert_rules (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     camera_id VARCHAR(50),  -- NULL表示全局规则
-    
+
     -- 规则配置
     rule_type VARCHAR(50) NOT NULL,  -- 'violation_threshold', 'continuous_violation', 'no_detection'
     conditions JSONB NOT NULL,  -- {"threshold": 10, "duration_seconds": 60}
-    
+
     -- 通知配置
     notification_channels JSONB,  -- ["email", "websocket", "webhook"]
     recipients JSONB,  -- ["user@example.com", "admin@example.com"]
-    
+
     -- 状态
     enabled BOOLEAN DEFAULT true,
     priority VARCHAR(20) DEFAULT 'medium',  -- low, medium, high, critical
-    
+
     -- 元数据
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
@@ -165,16 +165,16 @@ CREATE TABLE IF NOT EXISTS alert_history (
     rule_id INTEGER REFERENCES alert_rules(id) ON DELETE CASCADE,
     camera_id VARCHAR(50) NOT NULL,
     timestamp TIMESTAMP NOT NULL DEFAULT NOW(),
-    
+
     -- 告警信息
     alert_type VARCHAR(50) NOT NULL,
     message TEXT,
     details JSONB,
-    
+
     -- 通知状态
     notification_sent BOOLEAN DEFAULT false,
     notification_channels_used JSONB,
-    
+
     -- 元数据
     created_at TIMESTAMP DEFAULT NOW()
 );
@@ -193,7 +193,7 @@ COMMENT ON TABLE alert_history IS '告警历史表 - 记录所有触发的告警
 
 -- 最近违规事件视图 (带检测记录信息)
 CREATE OR REPLACE VIEW v_recent_violations AS
-SELECT 
+SELECT
     ve.id,
     ve.camera_id,
     ve.timestamp,
@@ -211,7 +211,7 @@ ORDER BY ve.timestamp DESC;
 
 -- 每日统计视图
 CREATE OR REPLACE VIEW v_daily_statistics AS
-SELECT 
+SELECT
     camera_id,
     DATE(hour_start) as date,
     SUM(total_frames) as total_frames,
@@ -274,4 +274,3 @@ BEGIN
     RAISE NOTICE '   - 已创建 3 个触发器';
     RAISE NOTICE '   - 已插入 2 条默认告警规则';
 END $$;
-

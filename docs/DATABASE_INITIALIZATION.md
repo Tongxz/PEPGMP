@@ -313,4 +313,3 @@ docker exec pyt-api-dev python scripts/init_database.py
 5. 插入初始数据（可选）
 
 这样可以确保所有表都能正确创建，并且数据持久化到 Docker volume 中。
-

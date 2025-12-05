@@ -197,9 +197,12 @@ class ModelConfig:
         """
         try:
             import torch
+
             logger.debug(f"[设备选择] 开始选择设备，请求: {requested}")
             logger.debug(f"[设备选择] PyTorch版本: {torch.__version__}")
-            logger.debug(f"[设备选择] torch.cuda.is_available() = {torch.cuda.is_available()}")
+            logger.debug(
+                f"[设备选择] torch.cuda.is_available() = {torch.cuda.is_available()}"
+            )
         except Exception:
             logger.warning("PyTorch 未安装，强制使用 CPU 设备")
             return "cpu"
@@ -220,7 +223,7 @@ class ModelConfig:
                 # 使用闭包变量，直接引用外层函数的 torch
                 # 注意：这里不能使用 locals() 或 globals()，因为内层函数的作用域不同
                 # 应该直接使用外层作用域的 torch 变量
-                
+
                 # 尝试从外层作用域获取 torch
                 # 由于 Python 的作用域规则，内层函数可以直接访问外层函数的局部变量
                 # 但这里 torch 是在 select_device 函数中导入的，所以可以直接使用
@@ -230,30 +233,39 @@ class ModelConfig:
                 except NameError:
                     # 如果外层作用域没有 torch，则重新导入
                     import torch
+
                     torch_obj = torch
-                
+
                 available = bool(torch_obj.cuda.is_available())
                 # 输出诊断信息（使用 INFO 级别，确保可见）
-                logger.info(f"[CUDA检查] PyTorch版本: {torch_obj.__version__}, CUDA可用: {available}")
-                if hasattr(torch_obj, '__file__'):
+                logger.info(
+                    f"[CUDA检查] PyTorch版本: {torch_obj.__version__}, CUDA可用: {available}"
+                )
+                if hasattr(torch_obj, "__file__"):
                     logger.info(f"[CUDA检查] torch模块路径: {torch_obj.__file__}")
-                if hasattr(torch_obj.version, 'cuda') and torch_obj.version.cuda:
+                if hasattr(torch_obj.version, "cuda") and torch_obj.version.cuda:
                     logger.info(f"[CUDA检查] CUDA编译版本: {torch_obj.version.cuda}")
                 else:
                     logger.warning(f"[CUDA检查] PyTorch是CPU版本，不支持CUDA")
-                
+
                 if not available:
                     # 输出详细的诊断信息（使用 INFO 级别，确保可见）
                     logger.info(f"[CUDA诊断] PyTorch版本: {torch_obj.__version__}")
                     logger.info(f"[CUDA诊断] torch.cuda.is_available() = {available}")
-                    
+
                     # 检查 PyTorch 是否支持 CUDA
-                    has_cuda_attr = hasattr(torch_obj.version, 'cuda')
-                    cuda_version = getattr(torch_obj.version, 'cuda', None) if has_cuda_attr else None
+                    has_cuda_attr = hasattr(torch_obj.version, "cuda")
+                    cuda_version = (
+                        getattr(torch_obj.version, "cuda", None)
+                        if has_cuda_attr
+                        else None
+                    )
                     has_cuda_support = has_cuda_attr and cuda_version is not None
-                    
+
                     if has_cuda_support:
-                        logger.warning(f"[CUDA诊断] PyTorch支持CUDA (编译版本: {cuda_version})，但运行时检测不到GPU")
+                        logger.warning(
+                            f"[CUDA诊断] PyTorch支持CUDA (编译版本: {cuda_version})，但运行时检测不到GPU"
+                        )
                         logger.warning(f"[CUDA诊断] 可能原因:")
                         logger.warning(f"  1. GPU驱动未安装或版本不匹配")
                         logger.warning(f"  2. CUDA运行时库未正确安装")
@@ -262,30 +274,37 @@ class ModelConfig:
                     else:
                         logger.warning(f"[CUDA诊断] PyTorch是CPU版本，不支持CUDA")
                         logger.warning(f"[CUDA诊断] 解决方案: 安装CUDA版本的PyTorch")
-                        logger.warning(f"[CUDA诊断] 例如: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121")
-                    
+                        logger.warning(
+                            f"[CUDA诊断] 例如: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121"
+                        )
+
                     # 检查环境变量
-                    cuda_path = os.environ.get('CUDA_PATH') or os.environ.get('CUDA_HOME')
+                    cuda_path = os.environ.get("CUDA_PATH") or os.environ.get(
+                        "CUDA_HOME"
+                    )
                     if cuda_path:
                         logger.info(f"[CUDA诊断] 环境变量 CUDA_PATH/CUDA_HOME: {cuda_path}")
                     else:
                         logger.warning(f"[CUDA诊断] 未设置 CUDA_PATH 或 CUDA_HOME 环境变量")
-                    
+
                     # 尝试运行 nvidia-smi（如果可用）
                     try:
                         import subprocess
-                        result = subprocess.run(['nvidia-smi'], capture_output=True, text=True, timeout=5)
+
+                        result = subprocess.run(
+                            ["nvidia-smi"], capture_output=True, text=True, timeout=5
+                        )
                         if result.returncode == 0:
                             logger.info(f"[CUDA诊断] nvidia-smi 可用，GPU驱动正常")
                             # 提取驱动版本
-                            for line in result.stdout.split('\n'):
-                                if 'Driver Version' in line:
+                            for line in result.stdout.split("\n"):
+                                if "Driver Version" in line:
                                     logger.info(f"[CUDA诊断] {line.strip()}")
                         else:
                             logger.warning(f"[CUDA诊断] nvidia-smi 不可用或返回错误")
                     except Exception as nv_error:
                         logger.warning(f"[CUDA诊断] 无法运行 nvidia-smi: {nv_error}")
-                
+
                 return available
             except Exception as e:
                 logger.error(f"[CUDA诊断] 检查CUDA可用性时出错: {e}", exc_info=True)
@@ -321,7 +340,7 @@ class ModelConfig:
         if _mps_available():
             logger.info("Device selected: mps (auto)")
             return "mps"
-        
+
         # 检查 CUDA 可用性（带详细诊断）
         cuda_available = _cuda_available()
         if cuda_available:

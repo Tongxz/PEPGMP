@@ -3,17 +3,21 @@
 提供数据库连接、会话创建和关闭功能
 """
 
-import os
 import logging
-from typing import AsyncGenerator, Optional
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.orm import sessionmaker
+import os
+from typing import AsyncGenerator
+
 from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import sessionmaker
 
 logger = logging.getLogger(__name__)
 
 # 数据库配置
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://pepgmp_dev:pepgmp_dev_password@localhost:5432/pepgmp_development")
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://pepgmp_dev:pepgmp_dev_password@localhost:5432/pepgmp_development",
+)
 
 # 如果 ASYNC_DATABASE_URL 未设置，从 DATABASE_URL 自动生成
 _async_db_url = os.getenv("ASYNC_DATABASE_URL")
@@ -23,7 +27,9 @@ else:
     # 从 DATABASE_URL 自动生成异步数据库URL
     # 将 postgresql:// 替换为 postgresql+asyncpg://
     if DATABASE_URL.startswith("postgresql://"):
-        ASYNC_DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+        ASYNC_DATABASE_URL = DATABASE_URL.replace(
+            "postgresql://", "postgresql+asyncpg://", 1
+        )
     else:
         # 如果格式不匹配，使用默认值
         ASYNC_DATABASE_URL = "postgresql+asyncpg://pepgmp_dev:pepgmp_dev_password@localhost:5432/pepgmp_development"
@@ -70,11 +76,11 @@ async def init_database():
     """
     try:
         from src.database.models import Base
-        
+
         # 创建所有表
         async with async_engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        
+
         logger.info("数据库初始化完成")
     except Exception as e:
         logger.error(f"数据库初始化失败: {e}")
@@ -109,6 +115,7 @@ async def check_database_health() -> bool:
     try:
         async with AsyncSessionLocal() as session:
             from sqlalchemy import text
+
             await session.execute(text("SELECT 1"))
         return True
     except Exception as e:

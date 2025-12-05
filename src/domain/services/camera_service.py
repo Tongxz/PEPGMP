@@ -101,18 +101,26 @@ class CameraService:
                     camera_status = CameraStatus(status_value)
                 except ValueError:
                     # 如果 status 值无效，回退到 active 标志
-                    camera_status = CameraStatus.ACTIVE if camera_data.get("active", True) else CameraStatus.INACTIVE
+                    camera_status = (
+                        CameraStatus.ACTIVE
+                        if camera_data.get("active", True)
+                        else CameraStatus.INACTIVE
+                    )
             else:
                 # 如果没有提供 status，使用 active 标志（兼容旧代码）
-                camera_status = CameraStatus.ACTIVE if camera_data.get("active", True) else CameraStatus.INACTIVE
-            
+                camera_status = (
+                    CameraStatus.ACTIVE
+                    if camera_data.get("active", True)
+                    else CameraStatus.INACTIVE
+                )
+
             # 处理 camera_type 字段
             camera_type_value = camera_data.get("camera_type", "fixed")
             try:
                 camera_type = CameraType(camera_type_value)
             except ValueError:
                 camera_type = CameraType.FIXED  # 默认类型
-            
+
             camera = Camera(
                 id=camera_id if camera_id else "",  # 空字符串表示自动生成
                 name=camera_data["name"],
@@ -146,7 +154,7 @@ class CameraService:
 
             # 保存到数据库（主要数据源），获取自动生成的ID
             generated_id = await self.camera_repository.save(camera)
-            
+
             # 更新camera实体的ID（如果之前为空）
             if not camera_id:
                 camera.id = generated_id
@@ -223,7 +231,9 @@ class CameraService:
                     logger.warning(f"无效的status值: {status_value}，保持原值")
             elif "active" in updates:
                 # 兼容旧代码：使用 active 标志
-                camera.status = CameraStatus.ACTIVE if updates["active"] else CameraStatus.INACTIVE
+                camera.status = (
+                    CameraStatus.ACTIVE if updates["active"] else CameraStatus.INACTIVE
+                )
             if "camera_type" in updates:
                 # 处理 camera_type 字段
                 camera_type_value = updates["camera_type"]

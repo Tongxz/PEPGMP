@@ -8,7 +8,6 @@ from unittest.mock import Mock
 from fastapi.testclient import TestClient
 
 from src.api.app import app
-from src.api.dependencies import get_hairnet_pipeline, get_optimized_pipeline
 from src.services.region_service import get_region_service
 
 
@@ -41,9 +40,11 @@ class TestAPIEndpoints:
     def test_detect_image_endpoint(self):
         """测试图像检测端点."""
         # 模拟检测应用服务
-        from src.application.detection_application_service import DetectionApplicationService
         from src.api.dependencies import get_detection_app_service
-        
+        from src.application.detection_application_service import (
+            DetectionApplicationService,
+        )
+
         async def mock_process_image_detection(*args, **kwargs):
             return {
                 "ok": True,
@@ -58,7 +59,7 @@ class TestAPIEndpoints:
                 "saved_to_db": True,
                 "status": "success",
             }
-        
+
         mock_app_service = Mock(spec=DetectionApplicationService)
         mock_app_service.process_image_detection = mock_process_image_detection
         app.dependency_overrides[get_detection_app_service] = lambda: mock_app_service
@@ -78,9 +79,11 @@ class TestAPIEndpoints:
     def test_detect_hairnet_endpoint(self):
         """测试发网检测端点."""
         # 模拟检测应用服务
-        from src.application.detection_application_service import DetectionApplicationService
         from src.api.dependencies import get_detection_app_service
-        
+        from src.application.detection_application_service import (
+            DetectionApplicationService,
+        )
+
         async def mock_process_image_detection(*args, **kwargs):
             return {
                 "ok": True,
@@ -95,7 +98,7 @@ class TestAPIEndpoints:
                 "saved_to_db": True,
                 "status": "success",
             }
-        
+
         mock_app_service = Mock(spec=DetectionApplicationService)
         mock_app_service.process_image_detection = mock_process_image_detection
         app.dependency_overrides[get_detection_app_service] = lambda: mock_app_service
@@ -126,6 +129,7 @@ class TestAPIEndpoints:
         """测试图像检测端点管道未初始化情况."""
         # 模拟应用服务未初始化
         from src.api.dependencies import get_detection_app_service
+
         app.dependency_overrides[get_detection_app_service] = lambda: None
 
         test_image_data = b"fake_image_data"
@@ -140,6 +144,7 @@ class TestAPIEndpoints:
         """测试发网检测端点管道未初始化情况."""
         # 模拟应用服务未初始化
         from src.api.dependencies import get_detection_app_service
+
         app.dependency_overrides[get_detection_app_service] = lambda: None
 
         test_image_data = b"fake_image_data"

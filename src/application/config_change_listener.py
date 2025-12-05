@@ -72,7 +72,9 @@ class ConfigChangeListener:
 
                 # 订阅全局配置变更频道和相机特定配置变更频道
                 await pubsub.subscribe("detection_config:change")
-                await pubsub.subscribe(f"detection_config:change:camera:{self.camera_id}")
+                await pubsub.subscribe(
+                    f"detection_config:change:camera:{self.camera_id}"
+                )
                 await pubsub.subscribe("detection_config:change:global")
 
                 logger.info(
@@ -133,7 +135,7 @@ class ConfigChangeListener:
 
             config_type = notification.get("config_type")
             config_key = notification.get("config_key")
-            config_value = notification.get("config_value")
+            notification.get("config_value")
             change_type = notification.get("change_type", "update")
 
             logger.info(

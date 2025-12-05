@@ -22,7 +22,7 @@ async def make_stream_url_nullable():
         if not db_service or not db_service.pool:
             print("无法获取数据库连接池")
             return False
-        
+
         pool = db_service.pool
         conn = await pool.acquire()
         try:
@@ -36,15 +36,15 @@ async def make_stream_url_nullable():
                 AND column_name = 'stream_url'
                 """
             )
-            
+
             if not column_info:
                 print("stream_url 列不存在，无需迁移")
                 return True
-            
-            is_nullable = column_info['is_nullable']
+
+            is_nullable = column_info["is_nullable"]
             print(f"当前 stream_url 列可空性: {is_nullable}")
-            
-            if is_nullable == 'NO':
+
+            if is_nullable == "NO":
                 print("将 stream_url 列改为可空...")
                 await conn.execute(
                     """
@@ -57,12 +57,13 @@ async def make_stream_url_nullable():
             else:
                 print("[OK] stream_url 列已经是可空的，无需迁移")
                 return True
-                
+
         finally:
             await pool.release(conn)
     except Exception as e:
         print(f"迁移失败: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -70,4 +71,3 @@ async def make_stream_url_nullable():
 if __name__ == "__main__":
     success = asyncio.run(make_stream_url_nullable())
     sys.exit(0 if success else 1)
-
