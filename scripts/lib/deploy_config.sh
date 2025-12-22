@@ -32,7 +32,7 @@ VERSION_TAG="${VERSION_TAG:-$DEFAULT_VERSION_TAG}"
 
 # ==================== Registry 配置 / Registry Configuration ====================
 # 私有 Registry 地址（可通过环境变量覆盖）
-REGISTRY_URL="${REGISTRY_URL:-192.168.30.83:5433}"
+REGISTRY_URL="${REGISTRY_URL:-11.25.125.115:5433}"
 
 # Registry 中的完整镜像路径
 REGISTRY_BACKEND_IMAGE="${REGISTRY_URL}/${BACKEND_IMAGE_NAME}"

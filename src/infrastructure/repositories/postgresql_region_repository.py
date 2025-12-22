@@ -7,12 +7,13 @@ from typing import List, Optional
 from asyncpg import Pool
 
 from src.core.region import Region, RegionType
+from src.domain.repositories.region_repository import IRegionRepository
 from src.interfaces.repositories.detection_repository_interface import RepositoryError
 
 logger = logging.getLogger(__name__)
 
 
-class PostgreSQLRegionRepository:
+class PostgreSQLRegionRepository(IRegionRepository):
     """PostgreSQL区域仓储实现."""
 
     def __init__(self, pool: Pool):

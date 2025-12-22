@@ -4,9 +4,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from src.core.region import Region, RegionType
-from src.infrastructure.repositories.postgresql_region_repository import (
-    PostgreSQLRegionRepository,
-)
+from src.domain.repositories.region_repository import IRegionRepository
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +15,7 @@ class RegionDomainService:
     提供区域相关的业务逻辑，包括CRUD操作。
     """
 
-    def __init__(self, region_repository: PostgreSQLRegionRepository):
+    def __init__(self, region_repository: IRegionRepository):
         """初始化区域服务.
 
         Args:

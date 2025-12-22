@@ -95,13 +95,59 @@ log_info "开始构建后端API镜像..."
 log_info "Dockerfile: Dockerfile.prod"
 log_info "镜像名称: pepgmp-backend:${VERSION_TAG}"
 
+# 生产 GPU（RTX 50 / sm_120）需要较新的 PyTorch wheel。
+# 与 deploy_mixed_registry.sh 保持一致：默认使用 nightly/cu126，可按需在 Dockerfile.prod 里切换 stable。
+TORCH_INSTALL_MODE_DEFAULT="nightly"
+TORCH_INDEX_URL_DEFAULT="https://download.pytorch.org/whl/nightly/cu126"
+
+# 检测架构并设置构建平台
+ARCH=$(uname -m)
+if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
+    # macOS ARM (M1/M2) 或 Linux ARM，需要构建 Linux amd64 镜像用于生产环境
+    BUILD_PLATFORM="linux/amd64"
+    log_info "检测到 ARM 架构，将构建 Linux amd64 镜像用于生产环境"
+    log_info "构建平台: ${BUILD_PLATFORM}"
+
+    # 检查是否安装了 buildx
+    if ! docker buildx version &> /dev/null; then
+        log_error "需要 Docker Buildx 来构建多架构镜像"
+        log_info "安装方法: Docker Desktop 已包含 buildx，或运行: docker buildx install"
+        exit 1
+    fi
+
+    # 关键：Docker Desktop 中 buildx builder 会用 “*” 标记当前 builder（例如 desktop-linux*）。
+    # 另外 builder 与 docker context 绑定：当前 context=desktop-linux 时，使用 default builder 会报错。
+    CURRENT_CTX="$(docker context show 2>/dev/null || echo "")"
+    BUILDER_NAME="$CURRENT_CTX"
+    if ! docker buildx ls | awk '{print $1}' | sed 's/\*$//' | grep -qx "${BUILDER_NAME}"; then
+        # fallback：优先 desktop-linux，其次 default
+        if docker buildx ls | awk '{print $1}' | sed 's/\*$//' | grep -qx 'desktop-linux'; then
+            BUILDER_NAME="desktop-linux"
+        else
+            BUILDER_NAME="default"
+        fi
+    fi
+    docker buildx use "${BUILDER_NAME}" 2>/dev/null || true
+else
+    # x86_64 架构，直接构建
+    BUILD_PLATFORM="linux/amd64"
+    log_info "检测到 x86_64 架构，直接构建"
+fi
+
 # 启用 BuildKit 以支持增量构建优化和缓存挂载
 export DOCKER_BUILDKIT=1
 
-if docker build -f Dockerfile.prod \
-    -t pepgmp-backend:${VERSION_TAG} \
-    -t pepgmp-backend:latest \
-    .; then
+# 根据架构选择构建命令
+if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
+    # 使用 buildx 构建 Linux amd64 镜像
+    BUILD_CMD=\"docker buildx build --builder ${BUILDER_NAME} --platform ${BUILD_PLATFORM} --pull=false -f Dockerfile.prod --build-arg BASE_IMAGE=nvidia/cuda:12.4.0-runtime-ubuntu22.04 --build-arg TORCH_INSTALL_MODE=${TORCH_INSTALL_MODE_DEFAULT} --build-arg TORCH_INDEX_URL=${TORCH_INDEX_URL_DEFAULT} -t pepgmp-backend:${VERSION_TAG} -t pepgmp-backend:latest --load .\"
+else
+    # 直接构建
+    BUILD_CMD=\"docker build -f Dockerfile.prod --build-arg BASE_IMAGE=nvidia/cuda:12.4.0-runtime-ubuntu22.04 --build-arg TORCH_INSTALL_MODE=${TORCH_INSTALL_MODE_DEFAULT} --build-arg TORCH_INDEX_URL=${TORCH_INDEX_URL_DEFAULT} -t pepgmp-backend:${VERSION_TAG} -t pepgmp-backend:latest .\"
+fi
+
+log_info "执行构建命令: ${BUILD_CMD}"
+if eval ${BUILD_CMD}; then
     log_success "后端API镜像构建完成"
     log_info "已创建以下标签:"
     docker images pepgmp-backend:${VERSION_TAG} --format "  {{.Repository}}:{{.Tag}} - {{.Size}}"
@@ -119,13 +165,15 @@ if [ "$BUILD_FRONTEND" = true ]; then
     log_info "Dockerfile: Dockerfile.frontend"
     log_info "镜像名称: pepgmp-frontend:${VERSION_TAG}"
 
-    if docker build -f Dockerfile.frontend \
-        --build-arg VITE_API_BASE=/api/v1 \
-        --build-arg BASE_URL=/ \
-        --build-arg SKIP_TYPE_CHECK=true \
-        -t pepgmp-frontend:${VERSION_TAG} \
-        -t pepgmp-frontend:latest \
-        .; then
+    # 根据架构选择构建命令
+    if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
+        FRONTEND_BUILD_CMD="docker buildx build --platform ${BUILD_PLATFORM} -f Dockerfile.frontend --build-arg VITE_API_BASE=/api/v1 --build-arg BASE_URL=/ --build-arg SKIP_TYPE_CHECK=true -t pepgmp-frontend:${VERSION_TAG} -t pepgmp-frontend:latest --load ."
+    else
+        FRONTEND_BUILD_CMD="docker build -f Dockerfile.frontend --build-arg VITE_API_BASE=/api/v1 --build-arg BASE_URL=/ --build-arg SKIP_TYPE_CHECK=true -t pepgmp-frontend:${VERSION_TAG} -t pepgmp-frontend:latest ."
+    fi
+
+    log_info "执行构建命令: ${FRONTEND_BUILD_CMD}"
+    if eval ${FRONTEND_BUILD_CMD}; then
         log_success "前端镜像构建完成"
         log_info "已创建以下标签:"
         docker images pepgmp-frontend:${VERSION_TAG} --format "  {{.Repository}}:{{.Tag}} - {{.Size}}"
@@ -159,17 +207,14 @@ if [ -f ".env.production" ]; then
 fi
 
 log_info "下一步操作:"
-echo "  1. 使用Docker Compose启动（已自动更新版本号）:"
-echo "     docker compose -f docker-compose.prod.yml up -d"
+echo "  1. 生产部署（仅保留两条主线）："
+echo "     - 混合部署（网络隔离：导出/传输镜像 tar）"
+echo "       bash scripts/deploy_mixed_registry.sh <生产IP> ubuntu /home/ubuntu/projects/PEPGMP ${VERSION_TAG}"
+echo "     - Registry 部署（同一网络：生产机可访问 Registry）"
+echo "       bash scripts/deploy_via_registry.sh <生产IP> ubuntu /home/ubuntu/projects/PEPGMP ${VERSION_TAG}"
 echo ""
-echo "  2. 或手动运行容器（推荐使用版本号）:"
-echo "     docker run -d --name pepgmp-api-prod -p 8000:8000 pepgmp-backend:${VERSION_TAG}"
-if [ "$BUILD_FRONTEND" = true ]; then
-    echo "     docker run -d --name pepgmp-frontend-prod -p 8080:80 pepgmp-frontend:${VERSION_TAG}"
-fi
-echo ""
-echo "  3. 推送到Registry（如需要）:"
-echo "     bash scripts/push_to_registry.sh ${VERSION_TAG}"
+echo "  2. 本机验证（可选）："
+echo "     docker compose -f docker-compose.prod.yml --env-file .env.production up -d"
 echo ""
 log_warning "注意: 生产环境建议使用版本号标签 (${VERSION_TAG})，而不是 :latest"
 echo ""

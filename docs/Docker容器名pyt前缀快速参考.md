@@ -63,15 +63,9 @@ scripts/rebuild_dev_environment.sh:
   - pyt-dev-network     (旧网络列表)
 ```
 
-### 🔵 工具脚本中的硬编码（建议修改）
+### 🔵 工具脚本中的硬编码
 
-```
-scripts/tools/check_video_stream_status.sh:
-  - pyt-redis-dev       (硬编码容器名)
-
-scripts/tests/test_deployment_service.py:
-  - pyt-postgres-dev    (测试用例)
-```
+本仓库已对 `scripts/` 做过收敛，工具/测试类脚本目录已移除；因此不再包含相关硬编码示例。
 
 ---
 

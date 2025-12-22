@@ -162,7 +162,11 @@ try:
 
     logger.info("依赖注入服务配置已加载")
 except Exception as e:
-    logger.warning(f"依赖注入服务配置加载失败（不影响启动）: {e}")
+    # 生产环境硬约束：依赖注入容器服务配置失败必须阻断启动，禁止隐性降级。
+    if os.getenv("ENVIRONMENT", "development") == "production":
+        logger.error(f"依赖注入服务配置加载失败(生产必需): {e}")
+        raise
+    logger.warning(f"依赖注入服务配置加载失败（非生产不影响启动）: {e}")
 
 
 @asynccontextmanager
@@ -198,10 +202,14 @@ async def lifespan(app: FastAPI):  # noqa: C901
         app.state.hairnet_pipeline = detection_service.hairnet_pipeline
         logger.info("检测服务已初始化")
     except Exception as e:
-        # 避免因模型缺失或环境问题导致 API 启动失败
+        # 生产环境硬约束：检测服务必须成功初始化，禁止“失败但继续运行”的隐性降级。
+        if os.getenv("ENVIRONMENT", "development") == "production":
+            logger.error(f"检测服务初始化失败(生产必需): {e}")
+            raise
+        # 非生产：避免因模型缺失或环境问题导致 API 启动失败
         app.state.optimized_pipeline = None
         app.state.hairnet_pipeline = None
-        logger.warning(f"检测服务初始化失败 (非关键): {e}")
+        logger.warning(f"检测服务初始化失败 (非生产非关键): {e}")
     # 初始化区域服务（数据库存储）
     # 如果有配置文件，自动导入到数据库
     try:
@@ -435,7 +443,7 @@ async def lifespan(app: FastAPI):  # noqa: C901
                                     logger.error(
                                         f"⚠️ 工作流任务 {workflow_id} 无法取消，训练线程可能仍在后台运行"
                                     )
-                                    logger.error(f"   这可能导致训练进程无法完全停止，需要手动终止")
+                                    logger.error("   这可能导致训练进程无法完全停止，需要手动终止")
                     except Exception as e:
                         logger.warning(f"强制取消工作流任务失败 {workflow_id}: {e}")
 

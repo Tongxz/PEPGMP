@@ -1,3 +1,5 @@
+from .region_repository import IRegionRepository
+
 """
 领域仓储接口
 包含领域仓储接口定义
@@ -13,4 +15,5 @@ __all__ = [
     "ICameraRepository",
     "IViolationRepository",
     "IHandwashSessionRepository",
+    "IRegionRepository",
 ]

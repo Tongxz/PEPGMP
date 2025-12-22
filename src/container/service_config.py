@@ -362,7 +362,9 @@ def _configure_handwash_services():
         container.register_instance(HandwashTrainingService, handwash_training_service)
         logger.info("洗手工作流服务已注册")
     except Exception as exc:
-        logger.error(f"注册洗手服务失败: {exc}")
+        # 生产要求：mediapipe 必须可用，洗手服务必须成功注册；禁止“失败但继续运行”的隐性降级
+        logger.error(f"注册洗手服务失败(生产必需): {exc}")
+        raise RuntimeError(f"洗手服务注册失败(生产必需): {exc}") from exc
 
 
 def _configure_multi_behavior_services():
@@ -412,9 +414,12 @@ def _configure_deployment_services():
         container.register_singleton(IDeploymentService, DockerDeploymentService)
         logger.info("部署服务已注册: DockerDeploymentService")
     except ImportError as exc:
-        logger.warning(f"部署服务导入失败（可能缺少 aiodocker 依赖）: {exc}")
+        # 生产要求：aiodocker 必须可用；禁止“导入失败但继续运行”的隐性降级
+        logger.error(f"部署服务导入失败(生产必需，可能缺少 aiodocker 依赖): {exc}")
+        raise RuntimeError(f"部署服务导入失败(生产必需，可能缺少 aiodocker 依赖): {exc}") from exc
     except Exception as exc:
-        logger.error(f"注册部署服务失败: {exc}")
+        logger.error(f"注册部署服务失败(生产必需): {exc}")
+        raise RuntimeError(f"部署服务注册失败(生产必需): {exc}") from exc
 
 
 def _log_registered_services():

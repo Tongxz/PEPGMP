@@ -1,0 +1,85 @@
+# rsync 排除规则文件
+# 用于定义不需要传输到生产服务器的文件和目录
+
+# ==================== 虚拟环境 ====================
+venv/
+.venv/
+env/
+ENV/
+
+# ==================== Node 模块和构建产物 ====================
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.cache/
+
+# ==================== Python 缓存 ====================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ==================== 日志和临时文件 ====================
+logs/
+*.log
+temp/
+tmp/
+output/
+debug/
+*.tmp
+
+# ==================== 数据文件（可选，如果很大可以排除）====================
+# 注意: 如果需要传输数据文件，请注释掉以下行
+# data/
+# datasets/
+
+# ==================== 敏感信息（需要单独传输）====================
+.env
+.env.*
+secrets/
+*.backup
+*.bak
+
+# ==================== IDE 配置 ====================
+.idea/
+.vscode/
+*.swp
+*.swo
+*.sublime-*
+
+# ==================== 系统文件 ====================
+.DS_Store
+Thumbs.db
+*.orig
+
+# ==================== 构建产物 ====================
+build/
+dist/
+*.tar
+*.tar.gz
+*.zip
+*.7z
+*.rar
+
+# ==================== 测试和开发文件 ====================
+htmlcov/
+.coverage
+.pytest_cache/
+.mypy_cache/
+.wandb/
+
+# ==================== 其他 ====================
+*.backup
+*.bak
+mlruns/
+wandb/
+runs/
+experiments/

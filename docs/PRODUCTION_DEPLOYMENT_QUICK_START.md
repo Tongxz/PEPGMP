@@ -27,21 +27,15 @@ bash scripts/check_deployment_readiness.sh
 - ✅ Registry是否可访问
 - ✅ 部署脚本是否可执行
 
-### 步骤3: 一键部署
+### 步骤3: 生产部署（仅保留两条主线）
 
 ```bash
-# 一键部署（构建 -> 推送 -> 部署）
-bash scripts/quick_deploy.sh <生产服务器IP> [SSH用户名]
+# 方式1：混合部署（网络隔离：导出/传输镜像 tar，现状推荐）
+bash scripts/deploy_mixed_registry.sh <生产IP> ubuntu /home/ubuntu/projects/PEPGMP
 
-# 示例
-bash scripts/quick_deploy.sh 192.168.1.100 ubuntu
+# 方式2：Registry 部署（同一网络：生产机可访问 Registry）
+bash scripts/deploy_via_registry.sh <生产IP> ubuntu /home/ubuntu/projects/PEPGMP
 ```
-
-**执行流程**：
-1. ✅ 构建Docker镜像
-2. ✅ 推送到Registry (192.168.30.83:5433)
-3. ✅ 部署到生产服务器
-4. ✅ 健康检查
 
 ---
 
@@ -51,7 +45,7 @@ bash scripts/quick_deploy.sh 192.168.1.100 ubuntu
 
 #### 开发环境 (macOS)
 - ✅ Docker Desktop已安装并运行
-- ✅ 可访问私有Registry (192.168.30.83:5433)
+- ✅ 可访问私有 Registry (11.25.125.115:5433)
 - ✅ 可SSH连接到生产服务器
 - ✅ SSH密钥已配置（推荐）
 
@@ -75,7 +69,7 @@ bash scripts/quick_deploy.sh 192.168.1.100 ubuntu
 3. 添加配置：
 ```json
 {
-  "insecure-registries": ["192.168.30.83:5433"]
+  "insecure-registries": ["11.25.125.115:5433"]
 }
 ```
 4. 点击 **Apply & Restart**
@@ -86,28 +80,28 @@ bash scripts/quick_deploy.sh 192.168.1.100 ubuntu
 # SSH到生产服务器
 ssh ubuntu@<SERVER_IP>
 
-# 创建部署目录
-sudo mkdir -p /opt/pyt
-sudo chown $USER:$USER /opt/pyt
-cd /opt/pyt
+# 部署目录（主线脚本会自动创建）
+mkdir -p /home/ubuntu/projects/PEPGMP
+cd /home/ubuntu/projects/PEPGMP
 ```
 
 ---
 
 ## 🚀 部署执行
 
-### 方式1: 一键部署（推荐）✨
+### 方式1: 混合部署（推荐）✨
 
 ```bash
 # 在开发机器上执行
-bash scripts/quick_deploy.sh <SERVER_IP> ubuntu
+bash scripts/deploy_mixed_registry.sh <SERVER_IP> ubuntu /home/ubuntu/projects/PEPGMP
 ```
 
-**自动完成**：
-- 构建镜像
-- 推送到Registry
-- 部署到生产服务器
-- 健康检查
+### 方式2: Registry 部署（同一网络）
+
+```bash
+# 在开发机器上执行
+bash scripts/deploy_via_registry.sh <SERVER_IP> ubuntu /home/ubuntu/projects/PEPGMP
+```
 
 ### 方式2: 分步部署
 
@@ -118,41 +112,24 @@ bash scripts/quick_deploy.sh <SERVER_IP> ubuntu
 docker build -f Dockerfile.prod -t pepgmp-backend:latest .
 ```
 
-#### 步骤2: 推送镜像
+#### 步骤2: 准备生产服务器
 
 ```bash
-# 推送到Registry
-bash scripts/push_to_registry.sh latest v1.0.0
-```
-
-#### 步骤3: 准备生产服务器
-
-```bash
-# 在开发机器上打包配置
-tar czf deploy_config.tar.gz \
-    docker-compose.prod.yml \
-    Dockerfile.prod \
-    config/ \
-    scripts/
-
-# 传输到生产服务器
-scp deploy_config.tar.gz ubuntu@<SERVER_IP>:/opt/pyt/
-scp .env.production ubuntu@<SERVER_IP>:/opt/pyt/
+# 传输最小部署包（推荐使用 prepare_minimal_deploy.sh 生成）
+scp -r ./config ubuntu@<SERVER_IP>:/home/ubuntu/projects/PEPGMP/
+scp docker-compose.prod.yml ubuntu@<SERVER_IP>:/home/ubuntu/projects/PEPGMP/
+scp .env.production ubuntu@<SERVER_IP>:/home/ubuntu/projects/PEPGMP/.env.production
 ```
 
 #### 步骤4: 部署服务
 
 ```bash
 # 在生产服务器上
-cd /opt/pyt
+cd /home/ubuntu/projects/PEPGMP
 
 # 解压配置
 tar xzf deploy_config.tar.gz
 chmod 600 .env.production
-
-# 从Registry拉取镜像
-docker pull 192.168.30.83:5433/pepgmp-backend:latest
-docker tag 192.168.30.83:5433/pepgmp-backend:latest pepgmp-backend:latest
 
 # 启动服务
 docker compose -f docker-compose.prod.yml up -d
@@ -227,8 +204,11 @@ curl http://localhost:8000/api/v1/detection/records?limit=10
 ### 快速更新
 
 ```bash
-# 一键更新（构建 -> 推送 -> 部署）
-bash scripts/quick_deploy.sh <SERVER_IP> ubuntu
+# 混合部署更新（现状推荐）
+bash scripts/deploy_mixed_registry.sh <SERVER_IP> ubuntu /home/ubuntu/projects/PEPGMP
+
+# 同网 Registry 更新
+bash scripts/deploy_via_registry.sh <SERVER_IP> ubuntu /home/ubuntu/projects/PEPGMP
 ```
 
 ### 仅更新镜像
@@ -237,14 +217,9 @@ bash scripts/quick_deploy.sh <SERVER_IP> ubuntu
 # 1. 构建新镜像
 docker build -f Dockerfile.prod -t pepgmp-backend:latest .
 
-# 2. 推送到Registry
-bash scripts/push_to_registry.sh latest v1.0.0
-
-# 3. 在生产服务器上拉取并重启
+# 2. 在生产服务器上重启（假设镜像已在目标机可用）
 ssh ubuntu@<SERVER_IP> << 'EOF'
-cd /opt/pyt
-docker pull 192.168.30.83:5433/pepgmp-backend:latest
-docker tag 192.168.30.83:5433/pepgmp-backend:latest pepgmp-backend:latest
+cd /home/ubuntu/projects/PEPGMP
 docker compose -f docker-compose.prod.yml up -d --no-deps api
 EOF
 ```
@@ -257,7 +232,7 @@ EOF
 
 **症状**：
 ```
-Error: Get "http://192.168.30.83:5433/v2/": dial tcp: connect: connection refused
+Error: Get "http://11.25.125.115:5433/v2/": dial tcp: connect: connection refused
 ```
 
 **解决方案**：

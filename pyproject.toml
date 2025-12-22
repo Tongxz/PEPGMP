@@ -28,7 +28,7 @@ dependencies = [
     # 深度学习框架
     # 注意：PyTorch 默认从 PyPI 安装 CPU 版本
     # 如果需要 CUDA 支持，请手动安装 CUDA 版本：
-    # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+    # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
     # 或者使用可选依赖组：pip install -e ".[gpu-cuda]"
     "torch>=2.2.0",
     "torchvision>=0.17.0",
@@ -101,7 +101,7 @@ gpu-nvidia = [
 # 安装方法：
 # 1. 先安装基础依赖：pip install -e .
 # 2. 卸载 CPU 版本：pip uninstall -y torch torchvision torchaudio
-# 3. 安装 CUDA 版本：pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+# 3. 安装 CUDA 版本：pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 # 详细说明请参考: docs/PYTORCH_CUDA_INSTALLATION.md
 gpu-cuda = [
     # 此依赖组仅作为标记，实际安装需要手动执行上述命令

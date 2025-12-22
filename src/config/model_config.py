@@ -184,7 +184,7 @@ class ModelConfig:
 
         return status
 
-    def select_device(self, requested: Optional[str] = None) -> str:
+    def select_device(self, requested: Optional[str] = None) -> str:  # noqa: C901
         """统一选择设备，支持环境变量与优先级回退。
 
         优先级：传入 requested > 环境变量 HBD_DEVICE > auto（mps→cuda→cpu）。
@@ -211,6 +211,16 @@ class ModelConfig:
         device_req = (
             (requested or env_req or self.yolo.device or "auto").strip().lower()
         )
+
+        # 生产环境硬约束：必须使用 GPU（CUDA）。
+        # 说明：生产环境不允许出现“自动回退到 CPU”的隐性降级。
+        try:
+            from src.config.env_config import config as env_config
+
+            is_production = env_config.environment == "production"
+        except Exception:
+            # 配置模块不可用时按非生产处理（避免工具脚本场景的循环依赖风险）
+            is_production = False
 
         def _mps_available() -> bool:
             return bool(getattr(torch.backends, "mps", None)) and bool(
@@ -246,7 +256,7 @@ class ModelConfig:
                 if hasattr(torch_obj.version, "cuda") and torch_obj.version.cuda:
                     logger.info(f"[CUDA检查] CUDA编译版本: {torch_obj.version.cuda}")
                 else:
-                    logger.warning(f"[CUDA检查] PyTorch是CPU版本，不支持CUDA")
+                    logger.warning("[CUDA检查] PyTorch是CPU版本，不支持CUDA")
 
                 if not available:
                     # 输出详细的诊断信息（使用 INFO 级别，确保可见）
@@ -266,16 +276,16 @@ class ModelConfig:
                         logger.warning(
                             f"[CUDA诊断] PyTorch支持CUDA (编译版本: {cuda_version})，但运行时检测不到GPU"
                         )
-                        logger.warning(f"[CUDA诊断] 可能原因:")
-                        logger.warning(f"  1. GPU驱动未安装或版本不匹配")
-                        logger.warning(f"  2. CUDA运行时库未正确安装")
-                        logger.warning(f"  3. GPU被其他进程占用")
-                        logger.warning(f"  4. 环境变量配置问题")
+                        logger.warning("[CUDA诊断] 可能原因:")
+                        logger.warning("  1. GPU驱动未安装或版本不匹配")
+                        logger.warning("  2. CUDA运行时库未正确安装")
+                        logger.warning("  3. GPU被其他进程占用")
+                        logger.warning("  4. 环境变量配置问题")
                     else:
-                        logger.warning(f"[CUDA诊断] PyTorch是CPU版本，不支持CUDA")
-                        logger.warning(f"[CUDA诊断] 解决方案: 安装CUDA版本的PyTorch")
+                        logger.warning("[CUDA诊断] PyTorch是CPU版本，不支持CUDA")
+                        logger.warning("[CUDA诊断] 解决方案: 安装CUDA版本的PyTorch")
                         logger.warning(
-                            f"[CUDA诊断] 例如: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121"
+                            "[CUDA诊断] 例如: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124"
                         )
 
                     # 检查环境变量
@@ -285,7 +295,7 @@ class ModelConfig:
                     if cuda_path:
                         logger.info(f"[CUDA诊断] 环境变量 CUDA_PATH/CUDA_HOME: {cuda_path}")
                     else:
-                        logger.warning(f"[CUDA诊断] 未设置 CUDA_PATH 或 CUDA_HOME 环境变量")
+                        logger.warning("[CUDA诊断] 未设置 CUDA_PATH 或 CUDA_HOME 环境变量")
 
                     # 尝试运行 nvidia-smi（如果可用）
                     try:
@@ -295,13 +305,13 @@ class ModelConfig:
                             ["nvidia-smi"], capture_output=True, text=True, timeout=5
                         )
                         if result.returncode == 0:
-                            logger.info(f"[CUDA诊断] nvidia-smi 可用，GPU驱动正常")
+                            logger.info("[CUDA诊断] nvidia-smi 可用，GPU驱动正常")
                             # 提取驱动版本
                             for line in result.stdout.split("\n"):
                                 if "Driver Version" in line:
                                     logger.info(f"[CUDA诊断] {line.strip()}")
                         else:
-                            logger.warning(f"[CUDA诊断] nvidia-smi 不可用或返回错误")
+                            logger.warning("[CUDA诊断] nvidia-smi 不可用或返回错误")
                     except Exception as nv_error:
                         logger.warning(f"[CUDA诊断] 无法运行 nvidia-smi: {nv_error}")
 
@@ -309,6 +319,23 @@ class ModelConfig:
             except Exception as e:
                 logger.error(f"[CUDA诊断] 检查CUDA可用性时出错: {e}", exc_info=True)
                 return False
+
+        def _ensure_cuda_arch_compatible() -> None:
+            """生产环境额外校验：GPU 架构必须被当前 PyTorch wheel 支持（例如 sm_120）。"""
+            major, minor = torch.cuda.get_device_capability(0)
+            expected = f"sm_{major}{minor}"
+            arch_list: List[str] = []
+            if hasattr(torch.cuda, "get_arch_list"):
+                try:
+                    arch_list = list(torch.cuda.get_arch_list() or [])
+                except Exception:
+                    arch_list = []
+            if arch_list and expected not in arch_list:
+                raise RuntimeError(
+                    f"GPU 架构不兼容：当前 GPU={torch.cuda.get_device_name(0)} ({expected})，"
+                    f"但 PyTorch 仅支持: {', '.join(arch_list)}。"
+                    "请升级到支持该架构的 CUDA 版 PyTorch wheel。"
+                )
 
         # 标准化请求
         if device_req not in {"cpu", "cuda", "mps", "auto"}:
@@ -327,9 +354,16 @@ class ModelConfig:
                     device_req = "auto"
             if device_req == "cuda":
                 if _cuda_available():
+                    if is_production:
+                        _ensure_cuda_arch_compatible()
                     logger.info("Device selected: cuda (explicit)")
                     return "cuda"
                 else:
+                    if is_production:
+                        raise RuntimeError(
+                            "生产环境必须使用 CUDA，但当前未检测到可用 CUDA。"
+                            "请检查 NVIDIA 驱动 / nvidia-container-toolkit / CUDA 运行时 / PyTorch CUDA wheel。"
+                        )
                     logger.warning("CUDA 请求但不可用：未检测到 CUDA GPU 或 CUDA 未正确安装，回退策略将生效")
                     device_req = "auto"
             if device_req == "cpu":
@@ -344,12 +378,19 @@ class ModelConfig:
         # 检查 CUDA 可用性（带详细诊断）
         cuda_available = _cuda_available()
         if cuda_available:
+            if is_production:
+                _ensure_cuda_arch_compatible()
             logger.info("Device selected: cuda (auto)")
             return "cuda"
         else:
             # CUDA 不可用时，输出详细诊断信息
             # 注意：这里不应该输出警告，因为 _cuda_available() 已经输出了详细的诊断信息
             # 只有在确实检测不到 CUDA 时才输出这个警告
+            if is_production:
+                raise RuntimeError(
+                    "生产环境必须使用 CUDA，但当前未检测到可用 CUDA。"
+                    "请检查 NVIDIA 驱动 / nvidia-container-toolkit / CUDA 运行时 / PyTorch CUDA wheel。"
+                )
             logger.warning("MPS/CUDA 不可用，使用 CPU")
             logger.warning("请检查 [CUDA检查] 和 [CUDA诊断] 日志以获取详细信息")
             # 诊断信息已在 _cuda_available() 中输出

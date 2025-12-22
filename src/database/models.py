@@ -334,3 +334,306 @@ class ModelRegistry(Base):
             "created_at": format_datetime(self.created_at),
             "updated_at": format_datetime(self.updated_at),
         }
+
+
+# ============================================
+# 核心业务表（从 SQL 脚本迁移到 SQLAlchemy）
+# ============================================
+
+
+class Camera(Base):
+    """摄像头配置模型"""
+
+    __tablename__ = "cameras"
+
+    id = Column(String(50), primary_key=True)
+    name = Column(String(100), nullable=False)
+    location = Column(String(200), nullable=True)
+    stream_url = Column(String(500), nullable=False)
+    camera_type = Column(String(50), nullable=True, default="ip_camera")
+    resolution = Column(String(20), nullable=True, default="1920x1080")
+    fps = Column(Integer, nullable=True, default=30)
+    is_active = Column(Boolean, nullable=True, default=True)
+    config = Column(JSON, nullable=True)
+    created_at = Column(DateTime, nullable=True, default=lambda: datetime.utcnow())
+    updated_at = Column(
+        DateTime,
+        nullable=True,
+        default=lambda: datetime.utcnow(),
+        onupdate=lambda: datetime.utcnow(),
+    )
+    status = Column(String(20), nullable=True, default="inactive")
+    region_id = Column(String(100), nullable=True)
+    meta_data = Column("metadata", JSON, nullable=True, default={})
+
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典格式"""
+
+        def format_datetime(dt: Optional[datetime]) -> Optional[str]:
+            if dt is None:
+                return None
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.isoformat()
+
+        return {
+            "id": self.id,
+            "name": self.name,
+            "location": self.location,
+            "stream_url": self.stream_url,
+            "camera_type": self.camera_type,
+            "resolution": self.resolution,
+            "fps": self.fps,
+            "is_active": self.is_active,
+            "config": self.config,
+            "created_at": format_datetime(self.created_at),
+            "updated_at": format_datetime(self.updated_at),
+            "status": self.status,
+            "region_id": self.region_id,
+            "metadata": self.meta_data,
+        }
+
+
+class Region(Base):
+    """区域配置模型"""
+
+    __tablename__ = "regions"
+
+    region_id = Column(String(100), primary_key=True)
+    region_type = Column(String(50), nullable=False)
+    name = Column(String(100), nullable=False)
+    polygon = Column(JSON, nullable=False)
+    is_active = Column(Boolean, nullable=True, default=True)
+    rules = Column(JSON, nullable=True, default={})
+    camera_id = Column(String(100), nullable=True)
+    meta_data = Column("metadata", JSON, nullable=True, default={})
+    created_at = Column(DateTime, nullable=True, default=lambda: datetime.utcnow())
+    updated_at = Column(
+        DateTime,
+        nullable=True,
+        default=lambda: datetime.utcnow(),
+        onupdate=lambda: datetime.utcnow(),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典格式"""
+
+        def format_datetime(dt: Optional[datetime]) -> Optional[str]:
+            if dt is None:
+                return None
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.isoformat()
+
+        return {
+            "region_id": self.region_id,
+            "region_type": self.region_type,
+            "name": self.name,
+            "polygon": self.polygon,
+            "is_active": self.is_active,
+            "rules": self.rules,
+            "camera_id": self.camera_id,
+            "metadata": self.meta_data,
+            "created_at": format_datetime(self.created_at),
+            "updated_at": format_datetime(self.updated_at),
+        }
+
+
+class DetectionRecord(Base):
+    """检测记录模型"""
+
+    __tablename__ = "detection_records"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    camera_id = Column(String(50), nullable=False, index=True)
+    timestamp = Column(
+        DateTime, nullable=False, default=lambda: datetime.utcnow(), index=True
+    )
+    frame_number = Column(Integer, nullable=True)
+    person_count = Column(Integer, nullable=True, default=0)
+    hairnet_violations = Column(Integer, nullable=True, default=0)
+    handwash_events = Column(Integer, nullable=True, default=0)
+    sanitize_events = Column(Integer, nullable=True, default=0)
+    person_detections = Column(JSON, nullable=True)
+    hairnet_results = Column(JSON, nullable=True)
+    handwash_results = Column(JSON, nullable=True)
+    sanitize_results = Column(JSON, nullable=True)
+    processing_time = Column(Float, nullable=True)
+    fps = Column(Float, nullable=True)
+    created_at = Column(DateTime, nullable=True, default=lambda: datetime.utcnow())
+    confidence = Column(Float, nullable=True)
+    objects = Column(JSON, nullable=True)
+    frame_id = Column(String(100), nullable=True)
+    region_id = Column(String(50), nullable=True)
+    meta_data = Column("metadata", JSON, nullable=True)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典格式"""
+
+        def format_datetime(dt: Optional[datetime]) -> Optional[str]:
+            if dt is None:
+                return None
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.isoformat()
+
+        return {
+            "id": self.id,
+            "camera_id": self.camera_id,
+            "timestamp": format_datetime(self.timestamp),
+            "frame_number": self.frame_number,
+            "person_count": self.person_count,
+            "hairnet_violations": self.hairnet_violations,
+            "handwash_events": self.handwash_events,
+            "sanitize_events": self.sanitize_events,
+            "person_detections": self.person_detections,
+            "hairnet_results": self.hairnet_results,
+            "handwash_results": self.handwash_results,
+            "sanitize_results": self.sanitize_results,
+            "processing_time": self.processing_time,
+            "fps": self.fps,
+            "created_at": format_datetime(self.created_at),
+            "confidence": self.confidence,
+            "objects": self.objects,
+            "frame_id": self.frame_id,
+            "region_id": self.region_id,
+            "metadata": self.meta_data,
+        }
+
+
+class ViolationEvent(Base):
+    """违规事件模型"""
+
+    __tablename__ = "violation_events"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    detection_id = Column(BigInteger, nullable=True)
+    camera_id = Column(String(50), nullable=False, index=True)
+    timestamp = Column(
+        DateTime, nullable=False, default=lambda: datetime.utcnow(), index=True
+    )
+    violation_type = Column(String(50), nullable=False, index=True)
+    track_id = Column(Integer, nullable=True)
+    confidence = Column(Float, nullable=True)
+    snapshot_path = Column(String(500), nullable=True)
+    bbox = Column(JSON, nullable=True)
+    status = Column(String(20), nullable=True, default="pending", index=True)
+    handled_at = Column(DateTime, nullable=True)
+    handled_by = Column(String(100), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=True, default=lambda: datetime.utcnow())
+    updated_at = Column(
+        DateTime,
+        nullable=True,
+        default=lambda: datetime.utcnow(),
+        onupdate=lambda: datetime.utcnow(),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典格式"""
+
+        def format_datetime(dt: Optional[datetime]) -> Optional[str]:
+            if dt is None:
+                return None
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.isoformat()
+
+        return {
+            "id": self.id,
+            "detection_id": self.detection_id,
+            "camera_id": self.camera_id,
+            "timestamp": format_datetime(self.timestamp),
+            "violation_type": self.violation_type,
+            "track_id": self.track_id,
+            "confidence": self.confidence,
+            "snapshot_path": self.snapshot_path,
+            "bbox": self.bbox,
+            "status": self.status,
+            "handled_at": format_datetime(self.handled_at),
+            "handled_by": self.handled_by,
+            "notes": self.notes,
+            "created_at": format_datetime(self.created_at),
+            "updated_at": format_datetime(self.updated_at),
+        }
+
+
+class AlertRule(Base):
+    """告警规则模型"""
+
+    __tablename__ = "alert_rules"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False)
+    alert_type = Column(String(50), nullable=False, index=True)
+    conditions = Column(JSON, nullable=False)
+    notification_channels = Column(JSON, nullable=True)
+    is_active = Column(Boolean, nullable=True, default=True, index=True)
+    created_at = Column(DateTime, nullable=True, default=lambda: datetime.utcnow())
+    updated_at = Column(
+        DateTime,
+        nullable=True,
+        default=lambda: datetime.utcnow(),
+        onupdate=lambda: datetime.utcnow(),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典格式"""
+
+        def format_datetime(dt: Optional[datetime]) -> Optional[str]:
+            if dt is None:
+                return None
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.isoformat()
+
+        return {
+            "id": self.id,
+            "name": self.name,
+            "alert_type": self.alert_type,
+            "conditions": self.conditions,
+            "notification_channels": self.notification_channels,
+            "is_active": self.is_active,
+            "created_at": format_datetime(self.created_at),
+            "updated_at": format_datetime(self.updated_at),
+        }
+
+
+class AlertHistory(Base):
+    """告警历史模型"""
+
+    __tablename__ = "alert_history"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    rule_id = Column(BigInteger, nullable=True)
+    camera_id = Column(String(50), nullable=True, index=True)
+    alert_type = Column(String(50), nullable=False, index=True)
+    message = Column(Text, nullable=False)
+    details = Column(JSON, nullable=True)
+    notification_sent = Column(Boolean, nullable=True, default=False)
+    notification_channels_used = Column(JSON, nullable=True)
+    timestamp = Column(
+        DateTime, nullable=False, default=lambda: datetime.utcnow(), index=True
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典格式"""
+
+        def format_datetime(dt: Optional[datetime]) -> Optional[str]:
+            if dt is None:
+                return None
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.isoformat()
+
+        return {
+            "id": self.id,
+            "rule_id": self.rule_id,
+            "camera_id": self.camera_id,
+            "alert_type": self.alert_type,
+            "message": self.message,
+            "details": self.details,
+            "notification_sent": self.notification_sent,
+            "notification_channels_used": self.notification_channels_used,
+            "timestamp": format_datetime(self.timestamp),
+        }

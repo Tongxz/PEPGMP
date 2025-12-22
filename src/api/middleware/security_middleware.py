@@ -28,7 +28,9 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         # 开发环境临时禁用速率限制
         import os
 
-        self.is_development = os.getenv("ENVIRONMENT", "development") == "development"
+        # 支持 "dev" 和 "development"
+        env = os.getenv("ENVIRONMENT", "development").lower()
+        self.is_development = env in ("dev", "development")
 
         # 安全统计
         self.security_stats = {
@@ -382,7 +384,9 @@ def setup_security_middleware(app):
     import os
 
     # 检查环境
-    is_development = os.getenv("ENVIRONMENT", "development") == "development"
+    # 支持 "dev" 和 "development"
+    env = os.getenv("ENVIRONMENT", "development").lower()
+    is_development = env in ("dev", "development")
 
     # 添加安全中间件
     app.add_middleware(SecurityMiddleware, enable_threat_detection=not is_development)

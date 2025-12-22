@@ -1,0 +1,25 @@
+{
+  "dataset_dir": "datasets/exports/vid1-dataset-train_20251112_035334_20251112_035334",
+  "annotations_file": "datasets/exports/vid1-dataset-train_20251112_035334_20251112_035334/annotations.csv",
+  "samples": 108,
+  "class_distribution": {
+    "normal": 53,
+    "violation": 55
+  },
+  "training_params": {
+    "model": "yolov8n-cls.pt",
+    "epochs": 30,
+    "image_size": 224,
+    "batch_size": 32,
+    "device": "cpu",
+    "patience": 10,
+    "learning_rate": "0.001"
+  },
+  "metrics": {
+    "metrics/accuracy_top1": 1.0,
+    "metrics/accuracy_top5": 1.0
+  },
+  "generated_at": "2025-11-12T03:54:11.858388",
+  "model_path": "models/mlops/hairnet_yolo_20251112_035335.pt",
+  "yolo_run_directory": "/Users/zhou/Code/Pyt/models/mlops/runs/hairnet_20251112_035335"
+}

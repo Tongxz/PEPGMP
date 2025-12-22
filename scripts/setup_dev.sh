@@ -181,30 +181,53 @@ EOF
 
     # 创建环境变量文件
     if [ ! -f ".env" ]; then
-        cat > .env << EOF
+  cat > .env << EOF
 # 环境变量配置
 # Environment Variables Configuration
 
-ENVIRONMENT=development
+ENVIRONMENT=dev
 DEBUG=true
 LOG_LEVEL=DEBUG
 
-# 数据库配置
-DATABASE_URL=sqlite:///data/local.db
+# 数据库配置（开发环境 - 与 docker-compose.dev-db.yml 对齐）
+# 注意：添加 sslmode=disable 避免本地开发时 SSL 握手失败
+DATABASE_URL=postgresql://pepgmp_dev:pepgmp_dev_password@localhost:5432/pepgmp_development?sslmode=disable
+DATABASE_HOST=localhost
+DATABASE_PORT=5432
+DATABASE_NAME=pepgmp_development
+DATABASE_USER=pepgmp_dev
+DATABASE_PASSWORD=pepgmp_dev_password
 
-# Redis配置
-REDIS_URL=redis://localhost:6379/0
+# Redis配置（开发环境 - 与 docker-compose.dev-db.yml 对齐）
+# 注意：密码必须与 docker-compose.dev-db.yml 的 requirepass 一致
+REDIS_URL=redis://:pepgmp_dev_redis@localhost:6379/0
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_DB=0
+REDIS_PASSWORD=pepgmp_dev_redis
 
 # API配置
 API_HOST=0.0.0.0
 API_PORT=8000
+API_RELOAD=true
 
 # 模型配置
-MODEL_PATH=models/yolo/yolov8n.pt
+MODEL_PATH=models
+AUTO_CONVERT_TENSORRT=false
+
+# 摄像头配置
+CAMERAS_YAML_PATH=config/cameras.yaml
+
+# 领域服务配置
+USE_DOMAIN_SERVICE=true
+REPOSITORY_TYPE=postgresql
 
 # 安全配置
 SECRET_KEY=your-secret-key-here
 JWT_SECRET=your-jwt-secret-here
+
+# 其他配置
+WATCHFILES_FORCE_POLLING=false
 EOF
         log_success "环境变量文件创建完成"
     else
@@ -221,7 +244,7 @@ download_models() {
         python -c "
 import urllib.request
 import os
-os.makedirs('models', exist_ok=True)
+os.makedirs('models/yolo', exist_ok=True)
 urllib.request.urlretrieve(
     'https://github.com/ultralytics/assets/releases/download/v0.0.0/models/yolo/yolov8n.pt',
     'models/yolo/yolov8n.pt'

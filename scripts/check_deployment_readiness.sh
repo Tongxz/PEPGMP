@@ -167,7 +167,7 @@ echo ""
 echo -e "${GREEN}[4/5]${NC} 检查Registry配置..."
 echo ""
 
-REGISTRY_URL="192.168.30.83:5433"
+REGISTRY_URL="11.25.125.115:5433"
 
 # 测试Registry连接
 if curl -sf "http://${REGISTRY_URL}/v2/_catalog" &> /dev/null; then
@@ -201,9 +201,10 @@ echo ""
 
 SCRIPTS=(
     "scripts/generate_production_config.sh"
-    "scripts/quick_deploy.sh"
-    "scripts/push_to_registry.sh"
-    "scripts/deploy_from_registry.sh"
+    "scripts/build_prod_only.sh"
+    "scripts/prepare_minimal_deploy.sh"
+    "scripts/deploy_mixed_registry.sh"
+    "scripts/deploy_via_registry.sh"
 )
 
 for script in "${SCRIPTS[@]}"; do
@@ -232,7 +233,9 @@ if [ $ERRORS -eq 0 ] && [ $WARNINGS -eq 0 ]; then
     echo -e "${GREEN}✅ 所有检查通过！可以开始部署！${NC}"
     echo ""
     echo "下一步:"
-    echo "  bash scripts/quick_deploy.sh <服务器IP> ubuntu"
+    echo "  bash scripts/deploy_mixed_registry.sh <生产IP> ubuntu /home/ubuntu/projects/PEPGMP"
+    echo "  # 或（同网 Registry）"
+    echo "  bash scripts/deploy_via_registry.sh <生产IP> ubuntu /home/ubuntu/projects/PEPGMP"
     echo ""
     exit 0
 elif [ $ERRORS -eq 0 ]; then
@@ -241,7 +244,9 @@ elif [ $ERRORS -eq 0 ]; then
     echo "可以继续部署，但建议先解决警告"
     echo ""
     echo "下一步:"
-    echo "  bash scripts/quick_deploy.sh <服务器IP> ubuntu"
+    echo "  bash scripts/deploy_mixed_registry.sh <生产IP> ubuntu /home/ubuntu/projects/PEPGMP"
+    echo "  # 或（同网 Registry）"
+    echo "  bash scripts/deploy_via_registry.sh <生产IP> ubuntu /home/ubuntu/projects/PEPGMP"
     echo ""
     exit 0
 else

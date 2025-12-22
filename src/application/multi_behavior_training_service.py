@@ -104,7 +104,7 @@ class MultiBehaviorTrainingService:
 
         return result
 
-    def _run_training(
+    def _run_training(  # noqa: C901
         self,
         dataset_dir: Path,
         data_config: Path,
@@ -130,7 +130,7 @@ class MultiBehaviorTrainingService:
             if hasattr(torch.version, "cuda") and torch.version.cuda:
                 logger.info(f"[训练前检查] PyTorch CUDA编译版本: {torch.version.cuda}")
             else:
-                logger.warning(f"[训练前检查] PyTorch是CPU版本，不支持CUDA")
+                logger.warning("[训练前检查] PyTorch是CPU版本，不支持CUDA")
         except Exception as e:
             logger.warning(f"[训练前检查] 检查PyTorch状态失败: {e}")
 
@@ -216,7 +216,7 @@ class MultiBehaviorTrainingService:
         import torch as training_torch
 
         if device == "cpu" and training_torch.cuda.is_available():
-            logger.warning(f"[设备强制] 检测到 CUDA 可用但选择了 CPU，强制使用 CUDA")
+            logger.warning("[设备强制] 检测到 CUDA 可用但选择了 CPU，强制使用 CUDA")
             logger.warning(f"[设备强制] PyTorch版本: {training_torch.__version__}")
             logger.warning(f"[设备强制] CUDA设备: {training_torch.cuda.get_device_name(0)}")
             device = "cuda"
@@ -490,14 +490,14 @@ class MultiBehaviorTrainingService:
                             )
                             # 抛出异常，因为训练没有真正开始
                             raise ValueError(
-                                f"训练在验证阶段就失败了（epoch=0）。"
-                                f"验证已启用（val=True）以获取验证集指标（mAP50, mAP50-95等），"
-                                f"但验证阶段计算指标时出现问题。"
-                                f"这可能是由于：1) 验证集中某些类别样本不足；2) 数据集格式问题；"
-                                f"3) 图像文件损坏；4) 标注文件格式不正确。"
-                                f"建议：1) 增加验证集样本数量；2) 检查数据集中各类别是否平衡；"
-                                f"3) 检查数据集完整性；4) 验证所有图像和标注文件；"
-                                f"5) 尝试使用更小的批次大小或调整其他训练参数。"
+                                "训练在验证阶段就失败了（epoch=0）。"
+                                "验证已启用（val=True）以获取验证集指标（mAP50, mAP50-95等），"
+                                "但验证阶段计算指标时出现问题。"
+                                "这可能是由于：1) 验证集中某些类别样本不足；2) 数据集格式问题；"
+                                "3) 图像文件损坏；4) 标注文件格式不正确。"
+                                "建议：1) 增加验证集样本数量；2) 检查数据集中各类别是否平衡；"
+                                "3) 检查数据集完整性；4) 验证所有图像和标注文件；"
+                                "5) 尝试使用更小的批次大小或调整其他训练参数。"
                             ) from exc
                         elif current_epoch <= 1:
                             logger.warning(
@@ -690,7 +690,7 @@ class MultiBehaviorTrainingService:
                             logger.warning("  解决方案: 安装 CUDA 版本的 PyTorch")
                             logger.warning("    pip uninstall torch torchvision")
                             logger.warning(
-                                "    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121"
+                                "    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124"
                             )
                         else:
                             logger.warning(
@@ -751,7 +751,9 @@ class MultiBehaviorTrainingService:
             logger.warning(f"设备选择失败，使用 CPU: {e}", exc_info=True)
             return "cpu"
 
-    def _extract_metrics(self, trainer: Any, save_dir: Path) -> Dict[str, Any]:
+    def _extract_metrics(  # noqa: C901
+        self, trainer: Any, save_dir: Path
+    ) -> Dict[str, Any]:
         """提取训练指标，包括验证集指标（mAP50, mAP50-95等）"""
         metrics: Dict[str, Any] = {}
 

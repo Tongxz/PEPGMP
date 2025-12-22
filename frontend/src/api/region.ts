@@ -113,11 +113,10 @@ export const regionApi = {
    * @param cameraId 可选的摄像头ID过滤
    */
   async getRegions(cameraId?: string): Promise<Region[]> {
-    const params = new URLSearchParams()
-    if (cameraId) params.append('camera_id', cameraId)
-
     // 与后端路由前缀 /api/v1/management 对齐
-    const response = await http.get<RegionResponse[]>(`/management/regions?camera_id=${cameraId}`);
+    // 注意：cameraId 未选择时禁止发送 `camera_id=undefined`
+    const qs = cameraId ? `?camera_id=${encodeURIComponent(cameraId)}` : ''
+    const response = await http.get<RegionResponse[]>(`/management/regions${qs}`)
     const data = response.data as any
     // 兼容两种返回：数组 或 { regions: [...] }
     const list: BackendRegionAny[] = Array.isArray(data)
@@ -131,13 +130,21 @@ export const regionApi = {
   async createRegion(regionData: Omit<Region, 'id'>): Promise<Region> {
     const payload = toBackendRegionPayload(regionData)
     // 与后端路由前缀 /api/v1/management 对齐
-    const response = await http.post<RegionResponse>(`/management/regions`, toBackendRegionPayload(regionData)); return normalizeRegion(response.data);
+    const response = await http.post<RegionResponse>(
+      `/management/regions`,
+      payload
+    )
+    return normalizeRegion(response.data)
   },
 
   async updateRegion(id: string, regionData: Partial<Region>): Promise<Region> {
     const payload = toBackendRegionPayload(regionData)
     // 与后端路由前缀 /api/v1/management 对齐
-    const response = await http.put<RegionResponse>(`/management/regions/${id}`, toBackendRegionPayload(regionData)); return normalizeRegion(response.data);
+    const response = await http.put<RegionResponse>(
+      `/management/regions/${encodeURIComponent(id)}`,
+      payload
+    )
+    return normalizeRegion(response.data)
   },
 
   async deleteRegion(id: string): Promise<void> {

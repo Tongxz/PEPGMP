@@ -2,8 +2,12 @@
 # 支持.env文件配置管理
 # 多阶段构建，优化镜像大小
 
-# ==================== 阶段1: 基础环境 ====================
-FROM python:3.10-slim-bookworm AS base
+# ==================== 阶段1: 基础环境（CUDA Runtime，GPU） ====================
+# 注意：base 镜像通过 build-arg 可配置，避免在 Dockerfile 中硬编码私有 Registry。
+# 默认使用本地/可直连的 nvidia/cuda；如需使用私有 Registry：
+#   docker build ... --build-arg BASE_IMAGE=11.25.125.115:5433/nvidia/cuda:12.4.0-runtime-ubuntu22.04
+ARG BASE_IMAGE="nvidia/cuda:12.4.0-runtime-ubuntu22.04"
+FROM ${BASE_IMAGE} AS base
 
 # 设置环境变量
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -11,29 +15,26 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+    PIP_DEFAULT_TIMEOUT=120 \
     PYTHONPATH=/app
 
-# 配置 Debian 镜像源（使用国内镜像以提高下载速度和稳定性）
-# 优先使用清华镜像，如果失败可以手动切换到其他镜像源
-RUN sed -i 's|http://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources && \
-    sed -i 's|http://security.debian.org|https://mirrors.tuna.tsinghua.edu.cn/debian-security|g' /etc/apt/sources.list.d/debian.sources
+# 替换 Ubuntu 源为国内镜像以加速依赖下载
+RUN sed -i 's|http://archive.ubuntu.com|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list && \
+    sed -i 's|http://security.ubuntu.com|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list
 
-# 安装系统依赖（添加重试机制）
-# OpenCV GUI 功能所需的图形库依赖
+# 安装系统依赖（OpenCV 运行必需 + 构建工具 + pip）
 RUN apt-get update && \
     apt-get install -y --no-install-recommends --fix-missing \
-    # 基础库
     libgomp1 \
-    # OpenCV GUI 依赖
     libgl1 \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
     libxrender-dev \
-    # 网络工具
     curl \
     wget \
-    # 构建工具
+    python3-pip \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
@@ -43,20 +44,34 @@ FROM base AS builder
 # 设置工作目录
 WORKDIR /app
 
-# 升级pip
-RUN pip install --upgrade pip setuptools wheel
+# 升级pip（使用 python3 -m 确保在 minimal 镜像可用）
+RUN python3 -m pip install --upgrade pip setuptools wheel
 
 # 复制依赖文件（使用生产环境依赖）
 COPY requirements.prod.txt /tmp/requirements.txt
 
-# 安装Python依赖到临时目录
-RUN pip install --user --no-cache-dir -r /tmp/requirements.txt
-
-# 安装Gunicorn（生产环境）
-RUN pip install --user --no-cache-dir \
-    gunicorn \
-    uvicorn[standard] \
-    python-dotenv
+# 安装 CUDA 版 PyTorch（三件套）以及生产依赖
+# 说明：
+# - 生产环境必须使用 GPU（RTX 50 系列/Blackwell: sm_120），稳定版 wheel 可能仍未覆盖该架构
+# - 默认使用 nightly CUDA wheel（更可能包含最新架构支持）；如需稳定版可通过 build-arg 切换
+ARG TORCH_INSTALL_MODE="nightly"   # stable | nightly
+ARG TORCH_INDEX_URL="https://download.pytorch.org/whl/nightly/cu126"
+ARG TORCH_VERSION="2.6.0"
+ARG TORCHVISION_VERSION="0.21.0"
+ARG TORCHAUDIO_VERSION="2.6.0"
+RUN if [ "${TORCH_INSTALL_MODE}" = "nightly" ]; then \
+      python3 -m pip install --user --no-cache-dir --pre \
+        torch torchvision torchaudio --index-url "${TORCH_INDEX_URL}" ; \
+    else \
+      python3 -m pip install --user --no-cache-dir \
+        "torch==${TORCH_VERSION}" "torchvision==${TORCHVISION_VERSION}" "torchaudio==${TORCHAUDIO_VERSION}" \
+        --index-url "${TORCH_INDEX_URL}" ; \
+    fi && \
+    python3 -m pip install --user --no-cache-dir -r /tmp/requirements.txt && \
+    python3 -m pip install --user --no-cache-dir \
+        gunicorn \
+        uvicorn[standard] \
+        python-dotenv
 
 # ==================== 阶段3: 生产镜像 ====================
 FROM base

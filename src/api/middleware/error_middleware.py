@@ -278,10 +278,11 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         self.rate_limit_threshold = 100  # 每分钟100个请求
         self.rate_limit_window = 60  # 1分钟
 
-        # 检查是否为开发环境
+        # 检查是否为开发环境（支持 "dev" 和 "development"）
         import os
 
-        self.is_development = os.getenv("ENVIRONMENT", "development") == "development"
+        env = os.getenv("ENVIRONMENT", "development").lower()
+        self.is_development = env in ("dev", "development")
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """处理请求"""

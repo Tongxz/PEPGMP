@@ -1,0 +1,131 @@
+behavior_recognition:
+  confidence_threshold: 0.65
+  hairnet_min_duration: 1.0
+  hairnet_stability_frames: 5
+  handwashing_max_duration: 60.0
+  handwashing_min_duration: 0.0
+  handwashing_stability_frames: 3
+  history_maxlen: 30
+  max_num_hands: 2
+  min_detection_confidence: 0.5
+  min_tracking_confidence: 0.5
+  ml_fusion_alpha: 0.5
+  ml_model_path: models/handwash_xgb.joblib.real
+  ml_window: 30
+  sanitizing_max_duration: 30.0
+  sanitizing_min_duration: 0.0
+  sanitizing_stability_frames: 3
+  use_advanced_detection: true
+  use_mediapipe: true
+  use_ml_classifier: true
+capture:
+  anonymize_head: true
+  anonymize_ratio: 0.4
+  blur_kernel: 31
+  region_ref_size: 640x480
+cascade:
+  enable: false
+  heavy_weights: null
+  trigger_confidence_range: null
+  trigger_roi: null
+detection_rules:
+  consecutive_frames: 30
+  horizontal_move_std: 8.0
+  iou_threshold: 0.5
+  ioua_threshold: 0.5
+  min_move_frequency_hz: 2.0
+hairnet_detection:
+  confidence_boost_factor: 1.2
+  confidence_threshold: 0.2
+  contour_area_threshold: 50
+  device: auto
+  edge_density_threshold: 0.006
+  input_size:
+  - 224
+  - 224
+  light_blue_ratio_threshold: 0.001
+  light_color_ratio_threshold: 0.003
+  min_contour_count: 2
+  model_path: models/multi_behavior/multi_behavior_20251118_070707.pt
+  roi_detection_confidence: 0.1
+  roi_expansion_attempts: 1
+  roi_expansion_conf_scale: 0.8
+  roi_expansion_pixels: 50
+  roi_head_ratio: 0.3
+  roi_min_positive_confidence: 0.1
+  roi_min_size: 200
+  roi_padding_height_ratio: 0.15
+  roi_padding_width_ratio: 0.1
+  roi_postprocess_threshold_cap: 0.2
+  sensitive_edge_threshold: 0.008
+  total_score_threshold: 0.65
+  upper_edge_density_threshold: 0.008
+  upper_region_ratio: 0.4
+  white_ratio_threshold: 0.002
+human_detection:
+  confidence_threshold: 0.5
+  device: auto
+  iou_threshold: 0.6
+  max_box_ratio: 6.0
+  max_detections: 15
+  min_box_area: 1500
+  min_height: 80
+  min_width: 50
+  model_path: models/yolo/yolov8s.pt
+  nms_threshold: 0.4
+inference:
+  profile: fast
+pose_detection:
+  backend: yolov8
+  confidence_threshold: 0.5
+  device: auto
+  iou_threshold: 0.7
+  model_path: models/yolo/yolov8n-pose.pt
+process:
+  cooldown_seconds: 10
+  enable: true
+  handwash_min_consecutive: 3
+  min_dwell_seconds:
+    dryer: 0.5
+    sink: 0.5
+    stand: 0.5
+  region_names:
+    dryer: 烘干区域
+    entrance: 入口线
+    sink: 洗手水池
+    stand: 洗手站立区域
+    work: 车间入口
+profiles:
+  accurate:
+    cascade:
+      enable: true
+      heavy_weights: models/yolo/yolov8l.pt
+      trigger_confidence_range:
+      - 0.4
+      - 0.6
+    human_detection:
+      max_detections: 20
+      model_path: models/yolo/yolov8m.pt
+    runtime:
+      osd_minimal: false
+  balanced:
+    human_detection:
+      confidence_threshold: 0.5
+      model_path: models/yolo/yolov8s.pt
+    runtime:
+      frame_skip: 0
+  fast: {}
+runtime:
+  frame_skip: 0
+  log_interval: 60
+  osd_minimal: false
+system:
+  api_timeout: 30.0
+  batch_size: 8
+  cache_size: 200
+  cache_ttl: 300
+  debug_mode: false
+  enable_cache: true
+  log_level: INFO
+  max_request_size: 10485760
+  max_workers: 8

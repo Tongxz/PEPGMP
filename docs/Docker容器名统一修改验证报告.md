@@ -63,15 +63,11 @@
 
 ---
 
-### 3. 脚本文件 (5个文件)
+### 3. 脚本文件（说明）
 
-#### ✅ `scripts/tools/check_video_stream_status.sh`
-- `pyt-redis-dev` → `pepgmp-redis-dev` (2处)
+本仓库已对 `scripts/` 做过收敛，工具/测试类脚本目录已移除；此处不再列出对应脚本的验证项。
 
-#### ✅ `scripts/tests/test_deployment_service.py`
-- 测试用例: `pyt-postgres-dev` → `pepgmp-postgres-dev`
-
-#### ✅ `scripts/deploy_prod.sh`
+#### ✅ `scripts/deploy_prod.sh`（历史脚本，已移除）
 - Kubernetes部署名: `deployment/pyt-api` → `deployment/pepgmp-api`
 - Kubernetes标签: `app=pyt-api` → `app=pepgmp-api`
 

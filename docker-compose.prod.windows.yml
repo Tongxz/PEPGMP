@@ -129,6 +129,8 @@ services:
       - .env.production
     environment:
       - ENVIRONMENT=production
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     volumes:
       # Windows 优化：使用命名 volumes 存储日志和输出
       - app_logs:/app/logs
@@ -137,6 +139,7 @@ services:
       # 注意：使用正斜杠或双反斜杠
       - ./config:/app/config:ro
       - ./models:/app/models:ro
+    runtime: nvidia
       # 如果需要访问 Windows 路径，使用以下格式：
       # - C:/docker-data/pyt/config:/app/config:ro
       # - C:/docker-data/pyt/models:/app/models:ro
@@ -160,11 +163,15 @@ services:
       replicas: 1
       resources:
         limits:
-          cpus: '4.0'
-          memory: 4G
+          cpus: '6.0'
+          memory: 10G
         reservations:
-          cpus: '2.0'
-          memory: 2G
+          cpus: '3.0'
+          memory: 6G
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     # 日志配置
     logging:
       driver: "json-file"

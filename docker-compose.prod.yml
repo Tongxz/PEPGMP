@@ -132,9 +132,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.prod
-    # 使用环境变量 IMAGE_TAG，如果未设置则使用 latest（向后兼容）
-    # 在 .env.production 中设置 IMAGE_TAG=20250118 来指定版本
-    image: pepgmp-backend:${IMAGE_TAG:-latest}
+    # 使用环境变量 IMAGE_REGISTRY 和 IMAGE_TAG
+    # 支持两种模式：
+    # 1. 本地镜像：IMAGE_REGISTRY="" 或未设置 → pepgmp-backend:20251215
+    # 2. Registry镜像：IMAGE_REGISTRY="11.25.125.115:5433/" → 11.25.125.115:5433/pepgmp-backend:20251215
+    # 在 .env.production 中设置 IMAGE_REGISTRY 和 IMAGE_TAG 来指定版本
+    image: ${IMAGE_REGISTRY:-}pepgmp-backend:${IMAGE_TAG:-latest}
     container_name: pepgmp-api-prod
     # 从.env.production加载环境变量
     env_file:
@@ -142,7 +145,10 @@ services:
     # 或使用environment明确指定
     environment:
       - ENVIRONMENT=production
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
       # 其他配置从.env.production自动加载
+    runtime: nvidia
     volumes:
       # 只挂载必要的目录（生产环境不挂载代码）
       - app_logs:/app/logs          # 日志目录（命名volume，持久化）
@@ -175,11 +181,15 @@ services:
       replicas: 1  # 可增加副本数
       resources:
         limits:
-          cpus: '4.0'
-          memory: 4G
+          cpus: '6.0'
+          memory: 10G
         reservations:
-          cpus: '2.0'
-          memory: 2G
+          cpus: '3.0'
+          memory: 6G
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     # 日志配置
     logging:
       driver: "json-file"
@@ -253,7 +263,9 @@ services:
         condition: service_completed_successfully  # 关键！必须等待 frontend-init 运行完成并成功退出
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      # nginx:alpine 内置 wget 可能是 BusyBox 版本，不一定支持 --spider
+      # 用更兼容的方式探测 /health 是否返回预期内容
+      test: ["CMD-SHELL", "wget -qO- http://localhost/health | grep -q 'healthy'"]
       interval: 30s
       timeout: 5s
       retries: 3

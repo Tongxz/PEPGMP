@@ -129,8 +129,11 @@ services:
       - .env.production
     environment:
       - ENVIRONMENT=production
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     ports:
       - "${API_PORT:-8000}:8000"
+    runtime: nvidia
     volumes:
       - app_logs:/app/logs
       - app_output:/app/output
@@ -155,11 +158,15 @@ services:
       replicas: 1
       resources:
         limits:
-          cpus: '4.0'
-          memory: 4G
+          cpus: '6.0'
+          memory: 10G
         reservations:
-          cpus: '2.0'
-          memory: 2G
+          cpus: '3.0'
+          memory: 6G
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     logging:
       driver: "json-file"
       options:

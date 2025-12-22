@@ -1,0 +1,237 @@
+# 生产环境 Docker Compose 配置（1Panel 专用版）
+# Production Environment Docker Compose Configuration (1Panel Edition)
+# 注意: 此版本移除了 build 部分，直接使用已导入的镜像
+# Note: This version removes build section and uses pre-imported images
+# 注意: 环境变量从 .env.production 文件加载，每个服务都需要配置 env_file
+# Note: Environment variables loaded from .env.production, each service needs env_file
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+    internal: true  # 内部网络，不暴露到外部
+
+volumes:
+  postgres_prod_data:
+    driver: local
+  redis_prod_data:
+    driver: local
+  app_logs:
+    driver: local
+  app_output:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+services:
+  # ==================== PostgreSQL 数据库（生产） ====================
+  database:
+    image: postgres:16-alpine
+    container_name: pepgmp-postgres-prod
+    env_file:
+      - .env.production
+    environment:
+      POSTGRES_DB: pepgmp_production
+      POSTGRES_USER: pepgmp_prod
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+      # 数据库初始化脚本（首次启动时执行）
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pepgmp_prod -d pepgmp_production"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==================== Redis 缓存（生产） ====================
+  redis:
+    image: redis:7-alpine
+    container_name: pepgmp-redis-prod
+    env_file:
+      - .env.production
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --tcp-backlog 511
+      --timeout 300
+      --tcp-keepalive 60
+    volumes:
+      - redis_prod_data:/data
+    networks:
+      - backend
+    healthcheck:
+      # 使用环境变量中的密码进行健康检查
+      test: ["CMD-SHELL", "redis-cli -a $${REDIS_PASSWORD} ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==================== API 服务（生产） ====================
+  api:
+    # 1Panel 专用：直接使用已导入的镜像，不进行构建
+    # 1Panel Edition: Use pre-imported image directly, no build
+    # 支持私有仓库：通过 IMAGE_REGISTRY 环境变量配置（默认为空，使用本地镜像）
+    # 镜像格式：${IMAGE_REGISTRY}pepgmp-backend:${IMAGE_TAG}
+    image: ${IMAGE_REGISTRY:-}pepgmp-backend:${IMAGE_TAG:-latest}
+    container_name: pepgmp-api-prod
+    # 从.env.production加载环境变量
+    env_file:
+      - .env.production
+    environment:
+      - ENVIRONMENT=production
+      # 其他配置从.env.production自动加载
+    volumes:
+      # 只挂载必要的目录（生产环境不挂载代码）
+      - app_logs:/app/logs          # 日志目录（命名volume，持久化）
+      - app_output:/app/output       # 输出目录（命名volume，持久化）
+      - ./config:/app/config:ro     # 只读配置（bind mount）
+      - ./models:/app/models:ro     # 只读模型（bind mount）
+      - ./data:/app/data            # 数据目录（bind mount，可读写，用于数据库和临时文件）
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/monitoring/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-8000}:8000"
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '2.0'
+          memory: 2G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ==================== Frontend Init 前端初始化容器（提取静态文件） ====================
+  # 前端初始化容器：启动时自动提取静态文件到主机目录 ./frontend/dist，完成后自动退出
+  # Nginx 直接挂载该目录，无需手动操作
+  # 支持私有仓库：通过 IMAGE_REGISTRY 环境变量配置（默认为空，使用本地镜像）
+  # 文件权限修复：自动设置正确的文件所有者和权限，避免 root 用户文件权限问题
+  frontend-init:
+    # 镜像格式：${IMAGE_REGISTRY}pepgmp-frontend:${IMAGE_TAG}
+    # 本地镜像：pepgmp-frontend:latest
+    # 私有仓库：registry.example.com/pepgmp-frontend:20251203
+    image: ${IMAGE_REGISTRY:-}pepgmp-frontend:${IMAGE_TAG:-latest}
+    container_name: pepgmp-frontend-init
+    env_file:
+      - .env.production
+    environment:
+      # 宿主机用户 UID/GID（用于设置文件权限）
+      # 默认值 1000 适用于大多数 Linux 系统
+      # 可以在 .env.production 中设置：HOST_UID=1000, HOST_GID=1000
+      - HOST_UID=${HOST_UID:-1000}
+      - HOST_GID=${HOST_GID:-1000}
+    volumes:
+      - ./frontend/dist:/target  # 挂载主机目录，用于自动提取静态文件
+    command: >
+      sh -c "
+        echo '=========================================================================' &&
+        echo 'Frontend Init Container - Extracting static files...' &&
+        echo '=========================================================================' &&
+        echo 'Image: ${IMAGE_REGISTRY:-}pepgmp-frontend:${IMAGE_TAG:-latest}' &&
+        echo 'Target: /target (mounted to ./frontend/dist)' &&
+        echo 'Host UID: $${HOST_UID:-1000}, GID: $${HOST_GID:-1000}' &&
+        echo '' &&
+        mkdir -p /target &&
+        cp -r /usr/share/nginx/html/* /target/ &&
+        chown -R $${HOST_UID:-1000}:$${HOST_GID:-1000} /target &&
+        chmod -R 755 /target &&
+        echo '' &&
+        echo '[OK] Static files extracted successfully with correct permissions' &&
+        ls -la /target/ | head -10 &&
+        echo '' &&
+        echo 'Total files:' && find /target -type f | wc -l &&
+        echo 'File ownership:' && ls -ld /target &&
+        echo '=========================================================================' &&
+        echo 'Frontend init completed - container will exit' &&
+        echo '========================================================================='
+      "
+    restart: "no"  # 完成任务后自动退出，不重启
+
+  # ==================== Nginx 统一服务（静态文件 + API 代理） ====================
+  nginx:
+    image: nginx:alpine
+    container_name: pepgmp-nginx-prod
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro  # SSL证书
+      - ./frontend/dist:/usr/share/nginx/html:ro  # 前端静态文件（直接挂载主机目录）
+    networks:
+      - frontend
+    depends_on:
+      api:
+        condition: service_healthy  # 等待 API 服务健康检查通过
+      frontend-init:
+        condition: service_completed_successfully  # 关键！必须等待 frontend-init 运行完成并成功退出
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

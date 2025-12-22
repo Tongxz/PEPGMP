@@ -315,7 +315,9 @@ class AccessControlManager:
         import os
 
         # 根据环境调整速率限制
-        is_development = os.getenv("ENVIRONMENT", "development") == "development"
+        # 支持 "dev" 和 "development"
+        env = os.getenv("ENVIRONMENT", "development").lower()
+        is_development = env in ("dev", "development")
         api_rate_limit = 1000 if is_development else 100
 
         default_rules = [

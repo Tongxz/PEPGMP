@@ -1,0 +1,26 @@
+{
+  "dataset_dir": "F:\\Code\\PythonCode\\Pyt\\data\\datasets\\hairnet.v15i.yolov8",
+  "data_config": "F:\\Code\\PythonCode\\Pyt\\data\\datasets\\hairnet.v15i.yolov8\\data.yaml",
+  "samples": 2658,
+  "training_params": {
+    "model": "yolov8m.pt",
+    "epochs": 100,
+    "image_size": 640,
+    "batch_size": 16,
+    "device": "cuda",
+    "patience": 15,
+    "lr0": 0.005,
+    "lrf": 0.01,
+    "momentum": 0.94,
+    "weight_decay": 0.0007,
+    "warmup_epochs": 5
+  },
+  "metrics": {
+    "metrics/precision(B)": 0.9574351176248282,
+    "metrics/recall(B)": 0.9738933980420048,
+    "metrics/mAP50(B)": 0.9816359743218386,
+    "metrics/mAP50-95(B)": 0.6413790764609268
+  },
+  "generated_at": "2025-11-18T02:41:40.446055",
+  "model_path": "models\\multi_behavior\\multi_behavior_20251118_024140.pt"
+}
