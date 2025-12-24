@@ -54,15 +54,14 @@ COPY requirements.prod.txt /tmp/requirements.txt
 # 安装 CUDA 版 PyTorch（三件套）以及生产依赖
 # 说明：
 # - 生产环境必须使用 GPU（RTX 50 系列/Blackwell: sm_120）
-# - NVIDIA Blackwell 架构需要 PyTorch 2.7.0.dev+ 或 2.8+ 且基于 CUDA 12.8 的构建版本
-# - 默认使用 nightly/cu128 wheel（自动获取最新开发版本，包含 sm_120 支持）
-# - 如需稳定版可通过 build-arg 切换，但不推荐（可能不支持 sm_120）
-ARG TORCH_INSTALL_MODE="nightly"   # stable | nightly
-# 注意: sm_120 架构需要 CUDA 12.8，因此使用 cu128 索引
-ARG TORCH_INDEX_URL="https://download.pytorch.org/whl/nightly/cu128"
-ARG TORCH_VERSION="2.6.0"
-ARG TORCHVISION_VERSION="0.21.0"
-ARG TORCHAUDIO_VERSION="2.6.0"
+# - PyTorch 2.9.1 稳定版已支持 CUDA 12.8 和 sm_120 (Blackwell 架构)
+# - 使用稳定版可以固定版本号，充分利用 Docker 缓存，大幅减少构建时间
+ARG TORCH_INSTALL_MODE="stable"   # stable | nightly
+# 注意: sm_120 架构需要 CUDA 12.8，使用稳定版的 cu128 索引
+ARG TORCH_INDEX_URL="https://download.pytorch.org/whl/cu128"
+ARG TORCH_VERSION="2.9.1"
+ARG TORCHVISION_VERSION="0.24.1"
+ARG TORCHAUDIO_VERSION="2.9.1"
 RUN if [ "${TORCH_INSTALL_MODE}" = "nightly" ]; then \
       python3 -m pip install --user --no-cache-dir --pre \
         torch torchvision torchaudio --index-url "${TORCH_INDEX_URL}" ; \
@@ -71,7 +70,9 @@ RUN if [ "${TORCH_INSTALL_MODE}" = "nightly" ]; then \
         "torch==${TORCH_VERSION}" "torchvision==${TORCHVISION_VERSION}" "torchaudio==${TORCHAUDIO_VERSION}" \
         --index-url "${TORCH_INDEX_URL}" ; \
     fi && \
-    python3 -m pip install --user --no-cache-dir -r /tmp/requirements.txt && \
+    python3 -m pip install --user --no-cache-dir \
+        --extra-index-url https://pypi.nvidia.com \
+        -r /tmp/requirements.txt && \
     python3 -m pip install --user --no-cache-dir \
         gunicorn \
         uvicorn[standard] \

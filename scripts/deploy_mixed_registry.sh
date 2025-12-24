@@ -12,7 +12,17 @@ IMAGE_NAME_FRONTEND="pepgmp-frontend"
 PRODUCTION_IP="${1}"
 PRODUCTION_USER="${2:-ubuntu}"
 DEPLOY_DIR="${3:-/home/ubuntu/projects/PEPGMP}"
-TAG="${4:-$(date +%Y%m%d-%H%M)}"
+
+# ==================== 版本号配置 ====================
+# 版本号优先级：命令行参数 > 环境变量 > 默认值（当前时间）
+# 支持格式：
+#   - 日期时间格式: 20251224-1430（默认）
+#   - 语义化版本: v1.0.0, 1.0.0
+#   - 日期格式: 20251224
+# 使用示例:
+#   bash scripts/deploy_mixed_registry.sh 192.168.1.100 ubuntu /path v1.0.0
+#   或: VERSION_TAG=v1.0.0 bash scripts/deploy_mixed_registry.sh 192.168.1.100
+TAG="${4:-${VERSION_TAG:-$(date +%Y%m%d-%H%M)}}"
 FULL_BACKEND_IMAGE="$REGISTRY/$IMAGE_NAME_BACKEND:$TAG"
 FULL_FRONTEND_IMAGE="$REGISTRY/$IMAGE_NAME_FRONTEND:$TAG"
 
@@ -148,6 +158,7 @@ echo "               混合部署方案（网络隔离适配版）"
 echo "========================================================================="
 log_info "Registry: $REGISTRY"
 log_info "版本标签: $TAG"
+log_info "提示: 可通过命令行参数或 VERSION_TAG 环境变量自定义版本号"
 echo ""
 
 # 检查tar文件是否已存在（支持从中间步骤继续）
@@ -193,8 +204,9 @@ if [ "$SKIP_BUILD" = "false" ]; then
 # 生产构建依赖需要外网下载（PyTorch CUDA wheel / PyPI 依赖）。
 # 由于你当前没有内部镜像源、私有 Registry 也不可用，这里必须在“可上网”的网络环境下完成构建，
 # 构建完成后再切换到生产网络进行 scp 传输（混合部署的设计就是为此服务）。
-TORCH_INSTALL_MODE_DEFAULT="nightly"
-TORCH_INDEX_URL_DEFAULT="https://download.pytorch.org/whl/nightly/cu128"
+# 使用 PyTorch 2.9.1 稳定版（支持 CUDA 12.8 和 sm_120），固定版本号以充分利用 Docker 缓存
+TORCH_INSTALL_MODE_DEFAULT="stable"
+TORCH_INDEX_URL_DEFAULT="https://download.pytorch.org/whl/cu128"
 PIP_MIRROR_DEFAULT="https://pypi.tuna.tsinghua.edu.cn/simple/"
 log_info "检查构建依赖下载源连通性..."
 if ! curl -sf --connect-timeout 5 "$TORCH_INDEX_URL_DEFAULT" > /dev/null 2>&1; then
@@ -393,7 +405,7 @@ fi
 
 # 预先确保远端目录存在（否则 scp 无法落到目标路径）
 log_info "准备远端目录（用于同步 compose/nginx 配置）..."
-ssh -o ControlPath="$SSH_CONTROL_PATH" $PRODUCTION_USER@$PRODUCTION_IP << EOF
+ssh -t -o ControlPath="$SSH_CONTROL_PATH" $PRODUCTION_USER@$PRODUCTION_IP << EOF
     set -e
     if [ ! -d "$DEPLOY_DIR" ]; then
         sudo mkdir -p $DEPLOY_DIR
@@ -476,7 +488,7 @@ echo ""
 # ==================== 步骤6: 远程部署 ====================
 log_info "[6/7] 远程执行部署..."
 
-ssh -o ControlPath="$SSH_CONTROL_PATH" $PRODUCTION_USER@$PRODUCTION_IP << EOF
+ssh -t -o ControlPath="$SSH_CONTROL_PATH" $PRODUCTION_USER@$PRODUCTION_IP << EOF
     set -e
 
     # 检查并创建部署目录

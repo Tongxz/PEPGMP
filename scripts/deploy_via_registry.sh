@@ -13,7 +13,17 @@ IMAGE_NAME_FRONTEND="pepgmp-frontend"
 PRODUCTION_IP="${1}"
 PRODUCTION_USER="${2:-ubuntu}"
 DEPLOY_DIR="${3:-/home/ubuntu/projects/PEPGMP}"
-TAG="${4:-$(date +%Y%m%d-%H%M)}"
+
+# ==================== 版本号配置 ====================
+# 版本号优先级：命令行参数 > 环境变量 > 默认值（当前时间）
+# 支持格式：
+#   - 日期时间格式: 20251224-1430（默认）
+#   - 语义化版本: v1.0.0, 1.0.0
+#   - 日期格式: 20251224
+# 使用示例:
+#   bash scripts/deploy_via_registry.sh 192.168.1.100 ubuntu /path v1.0.0
+#   或: VERSION_TAG=v1.0.0 bash scripts/deploy_via_registry.sh 192.168.1.100
+TAG="${4:-${VERSION_TAG:-$(date +%Y%m%d-%H%M)}}"
 FULL_BACKEND_IMAGE="$REGISTRY/$IMAGE_NAME_BACKEND:$TAG"
 FULL_FRONTEND_IMAGE="$REGISTRY/$IMAGE_NAME_FRONTEND:$TAG"
 
@@ -122,10 +132,11 @@ if [ ! -f "Dockerfile.prod" ]; then
     exit 1
 fi
 
-# 生产 GPU（RTX 50 / sm_120）需要较新的 PyTorch wheel。
-# 与 deploy_mixed_registry.sh 保持一致：默认使用 nightly/cu126，可按需在 Dockerfile.prod 里切换 stable。
-TORCH_INSTALL_MODE_DEFAULT="nightly"
-TORCH_INDEX_URL_DEFAULT="https://download.pytorch.org/whl/nightly/cu128"
+# 生产 GPU（RTX 50 / sm_120）需要 CUDA 12.8 和 sm_120 支持。
+# 使用 PyTorch 2.9.1 稳定版（支持 CUDA 12.8 和 sm_120），固定版本号以充分利用 Docker 缓存。
+# 使用 PyTorch 2.9.1 稳定版（支持 CUDA 12.8 和 sm_120），固定版本号以充分利用 Docker 缓存
+TORCH_INSTALL_MODE_DEFAULT="stable"
+TORCH_INDEX_URL_DEFAULT="https://download.pytorch.org/whl/cu128"
 
 ARCH=$(uname -m)
 if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then

@@ -9,10 +9,15 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
 
 # ==================== 版本号配置 ====================
-# 支持通过参数指定版本号，否则使用日期版本号
-VERSION_TAG="${1:-$(date +%Y%m%d)}"
-# 也可以使用语义化版本号，例如: v1.0.0, v1.2.3
-# VERSION_TAG="${1:-v1.0.0}"
+# 版本号优先级：命令行参数 > 环境变量 > 默认值（当前日期）
+# 支持格式：
+#   - 日期格式: 20251224（默认）
+#   - 语义化版本: v1.0.0, 1.0.0
+#   - 日期时间格式: 20251224-1430
+# 使用示例:
+#   bash scripts/build_prod_only.sh v1.0.0
+#   或: VERSION_TAG=v1.0.0 bash scripts/build_prod_only.sh
+VERSION_TAG="${1:-${VERSION_TAG:-$(date +%Y%m%d)}}"
 
 # 颜色定义
 RED='\033[0;31m'
@@ -95,10 +100,11 @@ log_info "开始构建后端API镜像..."
 log_info "Dockerfile: Dockerfile.prod"
 log_info "镜像名称: pepgmp-backend:${VERSION_TAG}"
 
-# 生产 GPU（RTX 50 / sm_120）需要较新的 PyTorch wheel。
-# 与 deploy_mixed_registry.sh 保持一致：默认使用 nightly/cu126，可按需在 Dockerfile.prod 里切换 stable。
-TORCH_INSTALL_MODE_DEFAULT="nightly"
-TORCH_INDEX_URL_DEFAULT="https://download.pytorch.org/whl/nightly/cu128"
+# 生产 GPU（RTX 50 / sm_120）需要 CUDA 12.8 和 sm_120 支持。
+# 使用 PyTorch 2.9.1 稳定版（支持 CUDA 12.8 和 sm_120），固定版本号以充分利用 Docker 缓存。
+# 使用 PyTorch 2.9.1 稳定版（支持 CUDA 12.8 和 sm_120），固定版本号以充分利用 Docker 缓存
+TORCH_INSTALL_MODE_DEFAULT="stable"
+TORCH_INDEX_URL_DEFAULT="https://download.pytorch.org/whl/cu128"
 
 # 检测架构并设置构建平台
 ARCH=$(uname -m)
