@@ -28,6 +28,98 @@ log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+# SSH 连接复用配置（ControlMaster）
+SSH_CONTROL_PATH="$HOME/.ssh/control-%r@%h:%p"
+setup_ssh_control() {
+    # 创建 SSH 控制目录
+    mkdir -p "$HOME/.ssh"
+
+    # 建立 SSH ControlMaster 连接（如果尚未建立）
+    if ! ssh -O check -o ControlPath="$SSH_CONTROL_PATH" "$PRODUCTION_USER@$PRODUCTION_IP" > /dev/null 2>&1; then
+        log_info "建立 SSH 连接复用（ControlMaster）..."
+        ssh -fN -o ControlMaster=yes \
+            -o ControlPath="$SSH_CONTROL_PATH" \
+            -o ControlPersist=300 \
+            -o ServerAliveInterval=60 \
+            -o ServerAliveCountMax=3 \
+            "$PRODUCTION_USER@$PRODUCTION_IP" 2>/dev/null || {
+            log_warning "SSH ControlMaster 建立失败，将使用普通 SSH 连接"
+            log_info "提示：配置 SSH Key 可避免多次输入密码"
+        }
+    else
+        log_info "SSH 连接复用已存在"
+    fi
+}
+
+cleanup_ssh_control() {
+    # 关闭 SSH ControlMaster 连接
+    if ssh -O check -o ControlPath="$SSH_CONTROL_PATH" "$PRODUCTION_USER@$PRODUCTION_IP" > /dev/null 2>&1; then
+        ssh -O exit -o ControlPath="$SSH_CONTROL_PATH" "$PRODUCTION_USER@$PRODUCTION_IP" > /dev/null 2>&1 || true
+    fi
+}
+
+# 使用 rsync 传输文件（支持断点续传）
+transfer_file_rsync() {
+    local src_file="$1"
+    local dest_path="$2"
+    local max_retries="${3:-3}"
+    local retry_count=0
+
+    # 检查 rsync 是否可用
+    if ! command -v rsync > /dev/null 2>&1; then
+        log_warning "rsync 不可用，回退到 scp"
+        return 1
+    fi
+
+    while [ $retry_count -lt $max_retries ]; do
+        if rsync -avP --progress \
+            -e "ssh -o ControlPath=$SSH_CONTROL_PATH" \
+            "$src_file" "$PRODUCTION_USER@$PRODUCTION_IP:$dest_path" 2>&1; then
+            return 0
+        else
+            retry_count=$((retry_count + 1))
+            if [ $retry_count -lt $max_retries ]; then
+                log_warning "传输失败，正在重试 ($retry_count/$max_retries)..."
+                sleep 2
+            fi
+        fi
+    done
+
+    return 1
+}
+
+# 清理远程旧镜像（保留最近 N 个版本）
+cleanup_old_images() {
+    local keep_versions="${1:-3}"  # 默认保留最近 3 个版本
+    local image_name="$2"
+
+    log_info "清理旧镜像（保留最近 $keep_versions 个版本）..."
+
+    ssh -o ControlPath="$SSH_CONTROL_PATH" "$PRODUCTION_USER@$PRODUCTION_IP" << EOF
+        set -e
+        # 获取所有标签（按时间排序，最新的在前）
+        OLD_IMAGES=\$(docker images --format "{{.Repository}}:{{.Tag}}" --filter "reference=$image_name:*" | \
+            grep -v "latest" | \
+            sort -r | \
+            tail -n +$((keep_versions + 1)))
+
+        if [ -n "\$OLD_IMAGES" ]; then
+            echo "删除旧镜像:"
+            echo "\$OLD_IMAGES" | while read img; do
+                if [ -n "\$img" ]; then
+                    echo "  - \$img"
+                    docker rmi "\$img" 2>/dev/null || true
+                fi
+            done
+        else
+            echo "没有需要清理的旧镜像"
+        fi
+
+        # 清理 dangling images
+        docker image prune -f > /dev/null 2>&1 || true
+EOF
+}
+
 # 交互式确认函数
 wait_for_network_switch() {
     echo ""
@@ -46,6 +138,10 @@ if [ -z "$PRODUCTION_IP" ]; then
     log_error "请提供生产服务器IP"
     exit 1
 fi
+
+# 设置 SSH 连接复用（在脚本开始时）
+trap cleanup_ssh_control EXIT INT TERM
+setup_ssh_control
 
 echo "========================================================================="
 echo "               混合部署方案（网络隔离适配版）"
@@ -85,7 +181,7 @@ if [ "$SKIP_BUILD" = "false" ]; then
     fi
 
     # 检查本地是否有基础镜像
-    BASE_IMAGE="nvidia/cuda:12.4.0-runtime-ubuntu22.04"
+    BASE_IMAGE="nvidia/cuda:12.8.0-runtime-ubuntu22.04"
     if ! docker images $BASE_IMAGE --format "{{.Repository}}:{{.Tag}}" | grep -q "$BASE_IMAGE"; then
         log_error "本地没有基础镜像: $BASE_IMAGE"
         log_info "请先拉取镜像: docker pull $BASE_IMAGE"
@@ -98,7 +194,7 @@ if [ "$SKIP_BUILD" = "false" ]; then
 # 由于你当前没有内部镜像源、私有 Registry 也不可用，这里必须在“可上网”的网络环境下完成构建，
 # 构建完成后再切换到生产网络进行 scp 传输（混合部署的设计就是为此服务）。
 TORCH_INSTALL_MODE_DEFAULT="nightly"
-TORCH_INDEX_URL_DEFAULT="https://download.pytorch.org/whl/nightly/cu126"
+TORCH_INDEX_URL_DEFAULT="https://download.pytorch.org/whl/nightly/cu128"
 PIP_MIRROR_DEFAULT="https://pypi.tuna.tsinghua.edu.cn/simple/"
 log_info "检查构建依赖下载源连通性..."
 if ! curl -sf --connect-timeout 5 "$TORCH_INDEX_URL_DEFAULT" > /dev/null 2>&1; then
@@ -152,7 +248,7 @@ log_success "依赖下载源可达，继续构建。"
           --platform linux/amd64 \
           --pull=false \
           -f Dockerfile.prod \
-          --build-arg BASE_IMAGE="nvidia/cuda:12.4.0-runtime-ubuntu22.04" \
+          --build-arg BASE_IMAGE="nvidia/cuda:12.8.0-runtime-ubuntu22.04" \
           --build-arg TORCH_INSTALL_MODE="$TORCH_INSTALL_MODE_DEFAULT" \
           --build-arg TORCH_INDEX_URL="$TORCH_INDEX_URL_DEFAULT" \
           -t $FULL_BACKEND_IMAGE \
@@ -163,16 +259,33 @@ log_success "依赖下载源可达，继续构建。"
             log_error "Dockerfile.frontend 不存在，但生产需要 pepgmp-frontend 镜像"
             exit 1
         fi
+        # 检查本地是否有前端基础镜像
+        log_info "检查前端基础镜像..."
+        if ! docker images | grep -qE "node.*20.*alpine|^node "; then
+            log_warning "本地未找到 node:20-alpine 镜像"
+            log_info "buildx 在离线环境可能无法构建，尝试继续..."
+        fi
+
         docker buildx build \
           --builder "${BUILDER_NAME}" \
           --platform linux/amd64 \
           --pull=false \
           -f Dockerfile.frontend \
+          --build-arg NODE_IMAGE="node:20-alpine" \
+          --build-arg NGINX_IMAGE="nginx:1.27-alpine" \
           --build-arg VITE_API_BASE=/api/v1 \
           --build-arg BASE_URL=/ \
           --build-arg SKIP_TYPE_CHECK=true \
           -t $FULL_FRONTEND_IMAGE \
-          --load .
+          --load . || {
+            log_error "前端镜像构建失败"
+            log_info "原因: buildx 需要基础镜像的元数据，但在离线环境下无法获取"
+            log_info "解决方案:"
+            log_info "  1. 在可联网环境先拉取: docker pull node:20-alpine nginx:1.27-alpine"
+            log_info "  2. 或使用私有 Registry 的镜像: --build-arg NODE_IMAGE=\$REGISTRY/node:20-alpine"
+            log_info "  3. 或暂时跳过前端构建（如果前端代码未变化）"
+            exit 1
+          }
     else
         docker build -f Dockerfile.prod -t $FULL_BACKEND_IMAGE .
         if [ ! -f "Dockerfile.frontend" ]; then
@@ -180,6 +293,8 @@ log_success "依赖下载源可达，继续构建。"
             exit 1
         fi
         docker build -f Dockerfile.frontend \
+          --build-arg NODE_IMAGE="node:20-alpine" \
+          --build-arg NGINX_IMAGE="nginx:1.27-alpine" \
           --build-arg VITE_API_BASE=/api/v1 \
           --build-arg BASE_URL=/ \
           --build-arg SKIP_TYPE_CHECK=true \
@@ -278,7 +393,7 @@ fi
 
 # 预先确保远端目录存在（否则 scp 无法落到目标路径）
 log_info "准备远端目录（用于同步 compose/nginx 配置）..."
-ssh $PRODUCTION_USER@$PRODUCTION_IP << EOF
+ssh -o ControlPath="$SSH_CONTROL_PATH" $PRODUCTION_USER@$PRODUCTION_IP << EOF
     set -e
     if [ ! -d "$DEPLOY_DIR" ]; then
         sudo mkdir -p $DEPLOY_DIR
@@ -287,39 +402,81 @@ ssh $PRODUCTION_USER@$PRODUCTION_IP << EOF
     mkdir -p $DEPLOY_DIR/nginx $DEPLOY_DIR/scripts
 EOF
 
-# 支持重试机制
-RETRY_COUNT=0
-MAX_RETRIES=3
-while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    if scp $TAR_FILE_BACKEND $PRODUCTION_USER@$PRODUCTION_IP:/tmp/ \
-        && scp $TAR_FILE_FRONTEND $PRODUCTION_USER@$PRODUCTION_IP:/tmp/ \
-        && scp docker-compose.prod.yml $PRODUCTION_USER@$PRODUCTION_IP:$DEPLOY_DIR/docker-compose.prod.yml \
-        && scp nginx/nginx.conf $PRODUCTION_USER@$PRODUCTION_IP:$DEPLOY_DIR/nginx/nginx.conf \
-        && ( [ -f "scripts/init_db.sql" ] && scp scripts/init_db.sql $PRODUCTION_USER@$PRODUCTION_IP:$DEPLOY_DIR/scripts/init_db.sql || true ); then
-        log_success "传输成功"
-        break
-    else
-        RETRY_COUNT=$((RETRY_COUNT + 1))
-        if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-            log_warning "传输失败，正在重试 ($RETRY_COUNT/$MAX_RETRIES)..."
-            sleep 2
-        else
-            log_error "传输失败（已重试 $MAX_RETRIES 次），请检查 SSH 连接"
-            log_info "提示："
-            echo "  1. 检查SSH连接: ssh $PRODUCTION_USER@$PRODUCTION_IP"
-            echo "  2. 检查网络连接: ping $PRODUCTION_IP"
-            echo "  3. 可以手动传输: scp $TAR_FILE $PRODUCTION_USER@$PRODUCTION_IP:/tmp/"
-            echo "  4. tar文件位置: $TAR_FILE"
-            exit 1
-        fi
+# 使用 rsync 传输文件（支持断点续传）
+log_info "使用 rsync 传输文件（支持断点续传）..."
+
+# 检查 rsync 是否可用
+if ! command -v rsync > /dev/null 2>&1; then
+    log_warning "rsync 不可用，回退到 scp"
+    USE_RSYNC=false
+else
+    USE_RSYNC=true
+    log_info "rsync 可用，将使用断点续传功能"
+fi
+
+# 传输后端镜像
+if [ "$USE_RSYNC" = "true" ]; then
+    if ! transfer_file_rsync "$TAR_FILE_BACKEND" "/tmp/" 3; then
+        log_error "后端镜像传输失败"
+        exit 1
     fi
-done
+    log_success "后端镜像传输完成"
+
+    # 传输前端镜像
+    if ! transfer_file_rsync "$TAR_FILE_FRONTEND" "/tmp/" 3; then
+        log_error "前端镜像传输失败"
+        exit 1
+    fi
+    log_success "前端镜像传输完成"
+
+    # 传输配置文件
+    if ! transfer_file_rsync "docker-compose.prod.yml" "$DEPLOY_DIR/docker-compose.prod.yml" 3; then
+        log_error "docker-compose.prod.yml 传输失败"
+        exit 1
+    fi
+
+    if ! transfer_file_rsync "nginx/nginx.conf" "$DEPLOY_DIR/nginx/nginx.conf" 3; then
+        log_error "nginx.conf 传输失败"
+        exit 1
+    fi
+
+    if [ -f "scripts/init_db.sql" ]; then
+        transfer_file_rsync "scripts/init_db.sql" "$DEPLOY_DIR/scripts/init_db.sql" 3 || true
+    fi
+else
+    # 回退到 scp（原有逻辑）
+    RETRY_COUNT=0
+    MAX_RETRIES=3
+    while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+        if scp -o ControlPath="$SSH_CONTROL_PATH" $TAR_FILE_BACKEND $PRODUCTION_USER@$PRODUCTION_IP:/tmp/ \
+            && scp -o ControlPath="$SSH_CONTROL_PATH" $TAR_FILE_FRONTEND $PRODUCTION_USER@$PRODUCTION_IP:/tmp/ \
+            && scp -o ControlPath="$SSH_CONTROL_PATH" docker-compose.prod.yml $PRODUCTION_USER@$PRODUCTION_IP:$DEPLOY_DIR/docker-compose.prod.yml \
+            && scp -o ControlPath="$SSH_CONTROL_PATH" nginx/nginx.conf $PRODUCTION_USER@$PRODUCTION_IP:$DEPLOY_DIR/nginx/nginx.conf \
+            && ( [ -f "scripts/init_db.sql" ] && scp -o ControlPath="$SSH_CONTROL_PATH" scripts/init_db.sql $PRODUCTION_USER@$PRODUCTION_IP:$DEPLOY_DIR/scripts/init_db.sql || true ); then
+            log_success "传输成功"
+            break
+        else
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                log_warning "传输失败，正在重试 ($RETRY_COUNT/$MAX_RETRIES)..."
+                sleep 2
+            else
+                log_error "传输失败（已重试 $MAX_RETRIES 次），请检查 SSH 连接"
+                log_info "提示："
+                echo "  1. 检查SSH连接: ssh $PRODUCTION_USER@$PRODUCTION_IP"
+                echo "  2. 检查网络连接: ping $PRODUCTION_IP"
+                echo "  3. 可以手动传输: scp $TAR_FILE_BACKEND $PRODUCTION_USER@$PRODUCTION_IP:/tmp/"
+                exit 1
+            fi
+        fi
+    done
+fi
 echo ""
 
 # ==================== 步骤6: 远程部署 ====================
 log_info "[6/7] 远程执行部署..."
 
-ssh $PRODUCTION_USER@$PRODUCTION_IP << EOF
+ssh -o ControlPath="$SSH_CONTROL_PATH" $PRODUCTION_USER@$PRODUCTION_IP << EOF
     set -e
 
     # 检查并创建部署目录
@@ -369,9 +526,41 @@ ssh $PRODUCTION_USER@$PRODUCTION_IP << EOF
     docker compose -f docker-compose.prod.yml --env-file .env.production up --abort-on-container-exit frontend-init
     docker compose -f docker-compose.prod.yml --env-file .env.production up -d --no-deps nginx
 
-    echo "4. 清理..."
+    echo "4. 清理临时文件..."
     rm -f /tmp/pepgmp-backend-$TAG.tar.gz /tmp/pepgmp-frontend-$TAG.tar.gz
-    docker image prune -f > /dev/null 2>&1
+
+    echo "5. 清理旧镜像（保留最近 3 个版本）..."
+    # 清理后端旧镜像
+    OLD_BACKEND_IMAGES=\$(docker images --format "{{.Repository}}:{{.Tag}}" --filter "reference=pepgmp-backend:*" | \
+        grep -v "latest" | grep -v "$TAG" | \
+        sort -r | tail -n +4)
+    if [ -n "\$OLD_BACKEND_IMAGES" ]; then
+        echo "删除旧后端镜像:"
+        echo "\$OLD_BACKEND_IMAGES" | while read img; do
+            if [ -n "\$img" ]; then
+                echo "  - \$img"
+                docker rmi "\$img" 2>/dev/null || true
+            fi
+        done
+    fi
+
+    # 清理前端旧镜像
+    OLD_FRONTEND_IMAGES=\$(docker images --format "{{.Repository}}:{{.Tag}}" --filter "reference=pepgmp-frontend:*" | \
+        grep -v "latest" | grep -v "$TAG" | \
+        sort -r | tail -n +4)
+    if [ -n "\$OLD_FRONTEND_IMAGES" ]; then
+        echo "删除旧前端镜像:"
+        echo "\$OLD_FRONTEND_IMAGES" | while read img; do
+            if [ -n "\$img" ]; then
+                echo "  - \$img"
+                docker rmi "\$img" 2>/dev/null || true
+            fi
+        done
+    fi
+
+    # 清理 dangling images
+    docker image prune -f > /dev/null 2>&1 || true
+    echo "清理完成"
 EOF
 
 if [ $? -eq 0 ]; then
@@ -391,7 +580,7 @@ sleep 5
 MAX_HEALTH_RETRIES=15
 HEALTH_OK=false
 for i in $(seq 1 $MAX_HEALTH_RETRIES); do
-    if ssh $PRODUCTION_USER@$PRODUCTION_IP \
+    if ssh -o ControlPath="$SSH_CONTROL_PATH" $PRODUCTION_USER@$PRODUCTION_IP \
         "docker exec pepgmp-api-prod curl -sf --max-time 5 http://localhost:8000/api/v1/monitoring/health > /dev/null" \
         > /dev/null 2>&1; then
         HEALTH_OK=true

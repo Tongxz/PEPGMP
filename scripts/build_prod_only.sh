@@ -98,7 +98,7 @@ log_info "镜像名称: pepgmp-backend:${VERSION_TAG}"
 # 生产 GPU（RTX 50 / sm_120）需要较新的 PyTorch wheel。
 # 与 deploy_mixed_registry.sh 保持一致：默认使用 nightly/cu126，可按需在 Dockerfile.prod 里切换 stable。
 TORCH_INSTALL_MODE_DEFAULT="nightly"
-TORCH_INDEX_URL_DEFAULT="https://download.pytorch.org/whl/nightly/cu126"
+TORCH_INDEX_URL_DEFAULT="https://download.pytorch.org/whl/nightly/cu128"
 
 # 检测架构并设置构建平台
 ARCH=$(uname -m)
@@ -140,10 +140,10 @@ export DOCKER_BUILDKIT=1
 # 根据架构选择构建命令
 if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
     # 使用 buildx 构建 Linux amd64 镜像
-    BUILD_CMD=\"docker buildx build --builder ${BUILDER_NAME} --platform ${BUILD_PLATFORM} --pull=false -f Dockerfile.prod --build-arg BASE_IMAGE=nvidia/cuda:12.4.0-runtime-ubuntu22.04 --build-arg TORCH_INSTALL_MODE=${TORCH_INSTALL_MODE_DEFAULT} --build-arg TORCH_INDEX_URL=${TORCH_INDEX_URL_DEFAULT} -t pepgmp-backend:${VERSION_TAG} -t pepgmp-backend:latest --load .\"
+    BUILD_CMD=\"docker buildx build --builder ${BUILDER_NAME} --platform ${BUILD_PLATFORM} --pull=false -f Dockerfile.prod --build-arg BASE_IMAGE=nvidia/cuda:12.8.0-runtime-ubuntu22.04 --build-arg TORCH_INSTALL_MODE=${TORCH_INSTALL_MODE_DEFAULT} --build-arg TORCH_INDEX_URL=${TORCH_INDEX_URL_DEFAULT} -t pepgmp-backend:${VERSION_TAG} -t pepgmp-backend:latest --load .\"
 else
     # 直接构建
-    BUILD_CMD=\"docker build -f Dockerfile.prod --build-arg BASE_IMAGE=nvidia/cuda:12.4.0-runtime-ubuntu22.04 --build-arg TORCH_INSTALL_MODE=${TORCH_INSTALL_MODE_DEFAULT} --build-arg TORCH_INDEX_URL=${TORCH_INDEX_URL_DEFAULT} -t pepgmp-backend:${VERSION_TAG} -t pepgmp-backend:latest .\"
+    BUILD_CMD=\"docker build -f Dockerfile.prod --build-arg BASE_IMAGE=nvidia/cuda:12.8.0-runtime-ubuntu22.04 --build-arg TORCH_INSTALL_MODE=${TORCH_INSTALL_MODE_DEFAULT} --build-arg TORCH_INDEX_URL=${TORCH_INDEX_URL_DEFAULT} -t pepgmp-backend:${VERSION_TAG} -t pepgmp-backend:latest .\"
 fi
 
 log_info "执行构建命令: ${BUILD_CMD}"

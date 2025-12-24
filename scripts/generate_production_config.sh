@@ -184,6 +184,9 @@ ROLLOUT_PERCENT=100
 WATCHFILES_FORCE_POLLING=1
 
 # ==================== TensorRT Configuration ====================
+# 是否自动转换模型为 TensorRT 格式（需要 TensorRT 库和 CUDA GPU）
+# 生产环境如有 GPU 和 TensorRT，建议设置为 true 以提升性能
+# 首次转换可能需要几分钟时间，转换后的引擎文件会被缓存
 AUTO_CONVERT_TENSORRT=false
 
 # ==================== Gunicorn Configuration ====================

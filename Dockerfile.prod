@@ -5,8 +5,9 @@
 # ==================== 阶段1: 基础环境（CUDA Runtime，GPU） ====================
 # 注意：base 镜像通过 build-arg 可配置，避免在 Dockerfile 中硬编码私有 Registry。
 # 默认使用本地/可直连的 nvidia/cuda；如需使用私有 Registry：
-#   docker build ... --build-arg BASE_IMAGE=11.25.125.115:5433/nvidia/cuda:12.4.0-runtime-ubuntu22.04
-ARG BASE_IMAGE="nvidia/cuda:12.4.0-runtime-ubuntu22.04"
+#   docker build ... --build-arg BASE_IMAGE=11.25.125.115:5433/nvidia/cuda:12.8.0-runtime-ubuntu22.04
+# 注意：sm_120 架构（RTX 5070）需要 CUDA 12.8+，因此使用 12.8.0 基础镜像
+ARG BASE_IMAGE="nvidia/cuda:12.8.0-runtime-ubuntu22.04"
 FROM ${BASE_IMAGE} AS base
 
 # 设置环境变量
@@ -52,10 +53,13 @@ COPY requirements.prod.txt /tmp/requirements.txt
 
 # 安装 CUDA 版 PyTorch（三件套）以及生产依赖
 # 说明：
-# - 生产环境必须使用 GPU（RTX 50 系列/Blackwell: sm_120），稳定版 wheel 可能仍未覆盖该架构
-# - 默认使用 nightly CUDA wheel（更可能包含最新架构支持）；如需稳定版可通过 build-arg 切换
+# - 生产环境必须使用 GPU（RTX 50 系列/Blackwell: sm_120）
+# - NVIDIA Blackwell 架构需要 PyTorch 2.7.0.dev+ 或 2.8+ 且基于 CUDA 12.8 的构建版本
+# - 默认使用 nightly/cu128 wheel（自动获取最新开发版本，包含 sm_120 支持）
+# - 如需稳定版可通过 build-arg 切换，但不推荐（可能不支持 sm_120）
 ARG TORCH_INSTALL_MODE="nightly"   # stable | nightly
-ARG TORCH_INDEX_URL="https://download.pytorch.org/whl/nightly/cu126"
+# 注意: sm_120 架构需要 CUDA 12.8，因此使用 cu128 索引
+ARG TORCH_INDEX_URL="https://download.pytorch.org/whl/nightly/cu128"
 ARG TORCH_VERSION="2.6.0"
 ARG TORCHVISION_VERSION="0.21.0"
 ARG TORCHAUDIO_VERSION="2.6.0"
@@ -105,6 +109,10 @@ RUN apt-get update && \
 COPY --chown=appuser:appuser config/ /app/config/
 COPY --chown=appuser:appuser main.py /app/
 COPY --chown=appuser:appuser pyproject.toml /app/
+
+# 2.1. 复制 Alembic 迁移配置（数据库迁移需要）
+COPY --chown=appuser:appuser alembic.ini /app/alembic.ini
+COPY --chown=appuser:appuser alembic/ /app/alembic/
 
 # 3. 复制启动脚本（用于数据库迁移和启动前检查）
 COPY --chown=appuser:appuser scripts/docker-entrypoint.sh /app/docker-entrypoint.sh

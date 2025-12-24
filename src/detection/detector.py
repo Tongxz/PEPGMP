@@ -1,4 +1,5 @@
 import logging
+import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -94,7 +95,7 @@ class HumanDetector(BaseDetector):
         self,
         model_path: Optional[str] = None,
         device: str = "auto",
-        auto_convert_tensorrt: bool = True,
+        auto_convert_tensorrt: Optional[bool] = None,
     ):
         """
         初始化人体检测器
@@ -103,6 +104,8 @@ class HumanDetector(BaseDetector):
             model_path: YOLO模型路径，如果为None则使用统一配置
             device: 计算设备 ('cpu', 'cuda', 'auto')
             auto_convert_tensorrt: 是否自动转换为TensorRT（如果可用）
+                                 如果为None，则从环境变量AUTO_CONVERT_TENSORRT读取
+                                 环境变量未设置时默认为True（保持向后兼容）
         """
         # 获取统一参数配置
         self.params = get_unified_params().human_detection
@@ -111,9 +114,27 @@ class HumanDetector(BaseDetector):
         model_path = model_path if model_path is not None else self.params.model_path
         device = device if device != "auto" else self.params.device
 
+        # 确定是否启用TensorRT自动转换
+        # 优先级：显式参数 > 环境变量 > 默认值True（向后兼容）
+        if auto_convert_tensorrt is None:
+            env_value = os.getenv("AUTO_CONVERT_TENSORRT", "").strip().lower()
+            if env_value:
+                # 环境变量已设置，解析值
+                auto_convert_tensorrt = env_value in ("true", "1", "yes")
+            else:
+                # 环境变量未设置，使用默认值True（向后兼容）
+                auto_convert_tensorrt = True
+            # 使用 INFO 级别，确保在生产环境可见
+            logger.info(
+                f"TensorRT自动转换配置: 环境变量={env_value if env_value else '(未设置)'}, "
+                f"启用状态={auto_convert_tensorrt}"
+            )
+
         # 自动检测并转换TensorRT引擎
         if auto_convert_tensorrt:
             model_path = self._auto_convert_to_tensorrt(model_path, device)
+        else:
+            logger.info("TensorRT自动转换已禁用，使用PyTorch模型")
 
         super().__init__(model_path, device)
 

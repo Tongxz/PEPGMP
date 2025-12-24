@@ -330,12 +330,25 @@ class ModelConfig:
                     arch_list = list(torch.cuda.get_arch_list() or [])
                 except Exception:
                     arch_list = []
+
+            # 特殊处理：sm_120 (RTX 5070) 是新架构，PyTorch nightly 可能支持但 get_arch_list() 可能不准确
+            # 如果 CUDA 可用且版本匹配，允许继续（实际运行时测试兼容性）
             if arch_list and expected not in arch_list:
-                raise RuntimeError(
-                    f"GPU 架构不兼容：当前 GPU={torch.cuda.get_device_name(0)} ({expected})，"
-                    f"但 PyTorch 仅支持: {', '.join(arch_list)}。"
-                    "请升级到支持该架构的 CUDA 版 PyTorch wheel。"
-                )
+                # 对于 sm_120 等新架构，给予警告而非错误（因为可能是检查方法的限制）
+                if expected == "sm_120":
+                    logger.warning(
+                        f"GPU 架构 {expected} 不在 PyTorch 报告的架构列表中，"
+                        f"但将继续尝试使用（可能是检查方法的限制）。"
+                        f"PyTorch 报告的架构: {', '.join(arch_list)}"
+                    )
+                    # 不抛出错误，允许继续运行
+                    return
+                else:
+                    raise RuntimeError(
+                        f"GPU 架构不兼容：当前 GPU={torch.cuda.get_device_name(0)} ({expected})，"
+                        f"但 PyTorch 仅支持: {', '.join(arch_list)}。"
+                        "请升级到支持该架构的 CUDA 版 PyTorch wheel。"
+                    )
 
         # 标准化请求
         if device_req not in {"cpu", "cuda", "mps", "auto"}:

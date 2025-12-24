@@ -125,7 +125,7 @@ fi
 # 生产 GPU（RTX 50 / sm_120）需要较新的 PyTorch wheel。
 # 与 deploy_mixed_registry.sh 保持一致：默认使用 nightly/cu126，可按需在 Dockerfile.prod 里切换 stable。
 TORCH_INSTALL_MODE_DEFAULT="nightly"
-TORCH_INDEX_URL_DEFAULT="https://download.pytorch.org/whl/nightly/cu126"
+TORCH_INDEX_URL_DEFAULT="https://download.pytorch.org/whl/nightly/cu128"
 
 ARCH=$(uname -m)
 if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
@@ -155,7 +155,7 @@ if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
       --platform linux/amd64 \
       --pull=false \
       -f Dockerfile.prod \
-      --build-arg BASE_IMAGE="nvidia/cuda:12.4.0-runtime-ubuntu22.04" \
+      --build-arg BASE_IMAGE="nvidia/cuda:12.8.0-runtime-ubuntu22.04" \
       --build-arg TORCH_INSTALL_MODE="$TORCH_INSTALL_MODE_DEFAULT" \
       --build-arg TORCH_INDEX_URL="$TORCH_INDEX_URL_DEFAULT" \
       -t $FULL_BACKEND_IMAGE \
@@ -179,7 +179,7 @@ else
     export DOCKER_BUILDKIT=1
     docker build \
       -f Dockerfile.prod \
-      --build-arg BASE_IMAGE="nvidia/cuda:12.4.0-runtime-ubuntu22.04" \
+      --build-arg BASE_IMAGE="nvidia/cuda:12.8.0-runtime-ubuntu22.04" \
       --build-arg TORCH_INSTALL_MODE="$TORCH_INSTALL_MODE_DEFAULT" \
       --build-arg TORCH_INDEX_URL="$TORCH_INDEX_URL_DEFAULT" \
       -t $FULL_BACKEND_IMAGE \
