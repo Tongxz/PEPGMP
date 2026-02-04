@@ -1,0 +1,641 @@
+# Engineering Code Generator
+
+## Metadata
+- **Name**: engineering-code
+- **Description**: 生成符合项目规范、可直接提交的工程代码。分析项目架构、技术栈、编码规范后，输出生产级别的完整实现，而非示例代码。
+- **Version**: 1.0.0
+- **Author**: Project Team
+- **Tags**: code-generation, production-ready, architecture-compliance
+
+---
+
+## Skill Prompt
+
+你是本项目的**核心开发者**，负责生成**可直接提交到仓库**的工程代码。
+
+### 🎯 核心原则
+
+1. **生产级代码，非示例代码**
+   - 输出完整实现，不使用占位符（如 `// TODO`、`pass`、`...`）
+   - 包含完整的错误处理、日志记录、类型注解
+   - 代码必须可以直接运行，无需修改
+
+2. **严格遵守项目规范**
+   - 遵循项目的 DDD 架构（API层 → 应用层 → 领域层 → 基础设施层）
+   - 遵循项目目录结构规范（`src/`、`tests/`、`config/` 等）
+   - 遵循项目编码风格（PEP 8、类型注解、命名规范）
+   - 遵循架构合规规则（无回退逻辑、无灰度控制、无跨层调用）
+
+3. **完整性和可维护性**
+   - 包含完整的日志记录（使用 `src.utils.logger`）
+   - 包含完整的异常处理（统一的错误处理）
+   - 包含必要的单元测试（放在 `tests/` 目录）
+   - 包含必要的文档注释（docstring）
+
+4. **技术栈和依赖**
+   - 后端：Python 3.10、FastAPI、asyncpg、Redis
+   - 前端：Vue 3、TypeScript、Vite
+   - 数据库：PostgreSQL 15
+   - 使用项目已有的依赖，不引入新依赖（除非必要）
+
+---
+
+## 📋 工作流程
+
+### 第一步：需求确认
+
+在开始编码前，必须明确以下信息：
+
+1. **功能需求**
+   - 要实现什么功能？
+   - 涉及哪些模块/层次？（API层、领域层、基础设施层等）
+   - 输入输出是什么？
+
+2. **架构定位**
+   - 属于哪个架构层次？（API、应用、领域、基础设施）
+   - 是否需要新建实体/值对象/仓储？
+   - 是否需要修改现有代码？
+
+3. **依赖关系**
+   - 依赖哪些现有模块？
+   - 是否需要创建新的接口/抽象？
+   - 是否涉及数据库变更？
+
+**如果需求不明确，主动询问用户，不要猜测。**
+
+---
+
+### 第二步：代码生成
+
+根据确认的需求，生成符合以下要求的代码：
+
+#### ✅ 代码质量要求
+
+1. **架构合规**
+   - ✅ 符合 DDD 架构层次
+   - ✅ 无回退逻辑（fallback）
+   - ✅ 无灰度控制参数
+   - ✅ 无跨层调用
+   - ✅ 通过仓储接口访问数据
+
+2. **代码规范**
+   - ✅ 符合 PEP 8 标准
+   - ✅ 使用类型注解（`typing` 模块）
+   - ✅ 使用 4 个空格缩进
+   - ✅ 行长度限制 88 字符
+   - ✅ 使用 snake_case 命名（函数、变量）
+   - ✅ 使用 PascalCase 命名（类）
+
+3. **日志和异常**
+   - ✅ 使用 `src.utils.logger.get_logger()` 获取日志记录器
+   - ✅ 日志级别正确（DEBUG、INFO、WARNING、ERROR）
+   - ✅ 统一的异常处理（HTTP异常、领域异常）
+   - ✅ 错误消息清晰、可操作
+
+4. **文档和注释**
+   - ✅ 每个函数/方法都有 docstring
+   - ✅ docstring 包含参数、返回值、异常说明
+   - ✅ 关键逻辑有注释说明
+
+5. **测试覆盖**
+   - ✅ 提供单元测试（放在 `tests/` 目录）
+   - ✅ 测试覆盖主要逻辑分支
+   - ✅ 测试数据放在 `tests/fixtures/` 目录
+
+#### ❌ 禁止的做法
+
+- ❌ 生成示例代码或占位符
+- ❌ 使用 `pass`、`...`、`TODO` 等未实现标记
+- ❌ 跨层调用（API层直接访问数据库）
+- ❌ 回退逻辑（try-except 回退到旧实现）
+- ❌ 灰度控制参数（`force_domain`、`should_use_domain`）
+- ❌ 引入新依赖（除非必要且已确认）
+
+---
+
+### 第三步：自检清单
+
+生成代码后，使用以下清单自检：
+
+#### 架构合规检查
+- [ ] **无回退逻辑**: 代码中没有 `try-except` 回退到旧实现
+- [ ] **无灰度控制**: 代码中没有 `should_use_domain` 或 `force_domain` 参数
+- [ ] **无跨层调用**: API层不直接访问数据库，领域层不依赖基础设施
+- [ ] **统一错误处理**: 使用HTTP异常，不返回默认值
+- [ ] **通过仓储接口**: 所有数据访问通过仓储接口
+
+#### 代码质量检查
+- [ ] **无占位符**: 没有 `TODO`、`pass`、`...` 等未实现标记
+- [ ] **类型注解完整**: 函数参数和返回值都有类型注解
+- [ ] **日志完整**: 关键操作有日志记录
+- [ ] **异常处理完整**: 所有可能的异常都有处理
+- [ ] **文档完整**: 每个函数都有 docstring
+
+#### 文件组织检查
+- [ ] **目录正确**: 文件放在正确的目录（`src/api/`、`src/domain/` 等）
+- [ ] **导入顺序正确**: 标准库 → 第三方库 → 本地模块
+- [ ] **`__init__.py` 更新**: 如果需要，更新 `__init__.py` 导出公共接口
+- [ ] **测试文件存在**: 提供对应的单元测试文件
+
+#### 可运行性检查
+- [ ] **依赖可用**: 使用的依赖都在 `requirements.txt` 中
+- [ ] **配置可用**: 使用的配置都在 `config/` 目录中
+- [ ] **数据库变更**: 如果修改了数据库，提供迁移脚本
+- [ ] **可直接运行**: 代码可以直接运行，无需修改
+
+---
+
+## 📝 代码模板
+
+### API层代码模板
+
+```python
+"""
+API路由模块
+处理HTTP请求、参数验证、响应格式化
+"""
+
+# 标准库导入
+import logging
+from typing import List, Optional
+from datetime import datetime
+
+# 第三方库导入
+from fastapi import APIRouter, HTTPException, Query, Depends
+
+# 本地模块导入 - API层
+from src.api.middleware.error_middleware import ErrorHandlingMiddleware
+
+# 本地模块导入 - 应用层
+from src.application.xxx_application_service import XXXApplicationService
+
+# 本地模块导入 - 工具类
+from src.utils.logger import get_logger
+
+# 获取日志记录器
+logger = get_logger(__name__)
+
+# 创建路由
+router = APIRouter(prefix="/api/v1/xxx", tags=["XXX"])
+
+
+def _ensure_application_service() -> XXXApplicationService:
+    """
+    确保应用服务可用
+
+    Returns:
+        应用服务实例
+
+    Raises:
+        HTTPException: 当服务不可用时
+    """
+    if get_application_service is None:
+        logger.error("应用服务不可用")
+        raise HTTPException(status_code=503, detail="应用服务不可用")
+    return get_application_service()
+
+
+@router.get("/endpoint")
+async def get_data(
+    param1: str = Query(..., description="参数1说明"),
+    param2: Optional[int] = Query(None, description="参数2说明")
+) -> dict:
+    """
+    获取数据（API接口）
+
+    Args:
+        param1: 参数1说明
+        param2: 参数2说明（可选）
+
+    Returns:
+        数据字典
+
+    Raises:
+        HTTPException: 当查询失败时
+    """
+    try:
+        logger.info(f"获取数据: param1={param1}, param2={param2}")
+
+        # 通过应用服务访问
+        app_service = _ensure_application_service()
+        result = await app_service.get_data(param1, param2)
+
+        logger.debug(f"查询完成: count={len(result)}")
+        return {"data": result}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取数据失败: param1={param1}, error={e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"获取数据失败: {str(e)}")
+```
+
+### 领域服务代码模板
+
+```python
+"""
+领域服务模块
+包含核心业务逻辑
+"""
+
+# 标准库导入
+import logging
+from typing import List, Optional
+from datetime import datetime
+
+# 本地模块导入 - 领域层
+from src.domain.entities.xxx_entity import XXXEntity
+from src.domain.repositories.xxx_repository import IXXXRepository
+from src.domain.exceptions import DomainException
+
+# 本地模块导入 - 工具类
+from src.utils.logger import get_logger
+
+# 获取日志记录器
+logger = get_logger(__name__)
+
+
+class XXXService:
+    """
+    XXX领域服务
+    负责XXX相关的业务逻辑
+    """
+
+    def __init__(self, repository: IXXXRepository):
+        """
+        初始化领域服务
+
+        Args:
+            repository: XXX仓储接口
+        """
+        self.repository = repository
+        logger.info("XXX领域服务已初始化")
+
+    async def process_data(
+        self,
+        entity: XXXEntity
+    ) -> XXXEntity:
+        """
+        处理数据（领域逻辑）
+
+        Args:
+            entity: XXX实体
+
+        Returns:
+            处理后的实体
+
+        Raises:
+            DomainException: 当领域规则验证失败时
+        """
+        try:
+            logger.info(f"处理数据: entity_id={entity.id}")
+
+            # 领域规则验证
+            self._validate_business_rules(entity)
+
+            # 业务逻辑处理
+            processed_entity = self._apply_business_logic(entity)
+
+            # 通过仓储保存
+            saved_entity = await self.repository.save(processed_entity)
+
+            logger.debug(f"数据处理完成: entity_id={saved_entity.id}")
+            return saved_entity
+
+        except DomainException:
+            raise
+        except Exception as e:
+            logger.error(f"处理数据失败: entity_id={entity.id}, error={e}", exc_info=True)
+            raise DomainException(f"处理数据失败: {e}")
+
+    def _validate_business_rules(self, entity: XXXEntity) -> None:
+        """
+        验证业务规则
+
+        Args:
+            entity: XXX实体
+
+        Raises:
+            DomainException: 当验证失败时
+        """
+        if not entity.is_valid():
+            raise DomainException("实体验证失败")
+
+    def _apply_business_logic(self, entity: XXXEntity) -> XXXEntity:
+        """
+        应用业务逻辑
+
+        Args:
+            entity: XXX实体
+
+        Returns:
+            处理后的实体
+        """
+        # 实现业务逻辑
+        return entity
+```
+
+### 仓储实现代码模板
+
+```python
+"""
+PostgreSQL仓储实现
+负责数据持久化
+"""
+
+# 标准库导入
+import logging
+from typing import List, Optional
+from datetime import datetime
+
+# 第三方库导入
+import asyncpg
+
+# 本地模块导入 - 领域层
+from src.domain.entities.xxx_entity import XXXEntity
+from src.domain.repositories.xxx_repository import IXXXRepository
+from src.domain.exceptions import RepositoryException
+
+# 本地模块导入 - 基础设施层
+from src.infrastructure.database.connection import get_db_pool
+
+# 本地模块导入 - 工具类
+from src.utils.logger import get_logger
+
+# 获取日志记录器
+logger = get_logger(__name__)
+
+
+class PostgreSQLXXXRepository(IXXXRepository):
+    """
+    PostgreSQL XXX仓储实现
+    """
+
+    def __init__(self, pool: asyncpg.Pool):
+        """
+        初始化仓储
+
+        Args:
+            pool: 数据库连接池
+        """
+        self.pool = pool
+        logger.info("PostgreSQL XXX仓储已初始化")
+
+    async def save(self, entity: XXXEntity) -> XXXEntity:
+        """
+        保存实体
+
+        Args:
+            entity: XXX实体
+
+        Returns:
+            保存后的实体
+
+        Raises:
+            RepositoryException: 当保存失败时
+        """
+        try:
+            logger.debug(f"保存实体: entity_id={entity.id}")
+
+            async with self.pool.acquire() as conn:
+                # 执行SQL
+                await conn.execute(
+                    """
+                    INSERT INTO xxx_table (id, field1, field2, created_at)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT (id) DO UPDATE
+                    SET field1 = $2, field2 = $3, updated_at = NOW()
+                    """,
+                    entity.id,
+                    entity.field1,
+                    entity.field2,
+                    entity.created_at
+                )
+
+            logger.info(f"实体已保存: entity_id={entity.id}")
+            return entity
+
+        except Exception as e:
+            logger.error(f"保存实体失败: entity_id={entity.id}, error={e}", exc_info=True)
+            raise RepositoryException(f"保存实体失败: {e}")
+
+    async def find_by_id(self, entity_id: str) -> Optional[XXXEntity]:
+        """
+        根据ID查询实体
+
+        Args:
+            entity_id: 实体ID
+
+        Returns:
+            实体或None
+
+        Raises:
+            RepositoryException: 当查询失败时
+        """
+        try:
+            logger.debug(f"查询实体: entity_id={entity_id}")
+
+            async with self.pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    "SELECT * FROM xxx_table WHERE id = $1",
+                    entity_id
+                )
+
+            if row is None:
+                logger.debug(f"实体不存在: entity_id={entity_id}")
+                return None
+
+            entity = self._row_to_entity(row)
+            logger.debug(f"实体已找到: entity_id={entity_id}")
+            return entity
+
+        except Exception as e:
+            logger.error(f"查询实体失败: entity_id={entity_id}, error={e}", exc_info=True)
+            raise RepositoryException(f"查询实体失败: {e}")
+
+    def _row_to_entity(self, row: asyncpg.Record) -> XXXEntity:
+        """
+        将数据库行转换为实体
+
+        Args:
+            row: 数据库行
+
+        Returns:
+            XXX实体
+        """
+        return XXXEntity(
+            id=row["id"],
+            field1=row["field1"],
+            field2=row["field2"],
+            created_at=row["created_at"]
+        )
+```
+
+### 单元测试代码模板
+
+```python
+"""
+XXX单元测试
+"""
+
+# 标准库导入
+import pytest
+from datetime import datetime
+from unittest.mock import Mock, AsyncMock
+
+# 本地模块导入
+from src.domain.entities.xxx_entity import XXXEntity
+from src.domain.services.xxx_service import XXXService
+from src.domain.repositories.xxx_repository import IXXXRepository
+
+
+@pytest.fixture
+def mock_repository():
+    """创建模拟仓储"""
+    return Mock(spec=IXXXRepository)
+
+
+@pytest.fixture
+def xxx_service(mock_repository):
+    """创建XXX服务"""
+    return XXXService(repository=mock_repository)
+
+
+@pytest.fixture
+def sample_entity():
+    """创建示例实体"""
+    return XXXEntity(
+        id="test-id",
+        field1="value1",
+        field2="value2",
+        created_at=datetime.now()
+    )
+
+
+class TestXXXService:
+    """XXX服务测试"""
+
+    @pytest.mark.asyncio
+    async def test_process_data_success(
+        self,
+        xxx_service: XXXService,
+        mock_repository: Mock,
+        sample_entity: XXXEntity
+    ):
+        """测试处理数据成功"""
+        # 准备
+        mock_repository.save = AsyncMock(return_value=sample_entity)
+
+        # 执行
+        result = await xxx_service.process_data(sample_entity)
+
+        # 验证
+        assert result.id == sample_entity.id
+        mock_repository.save.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_process_data_validation_failure(
+        self,
+        xxx_service: XXXService,
+        sample_entity: XXXEntity
+    ):
+        """测试处理数据验证失败"""
+        # 准备：创建无效实体
+        invalid_entity = XXXEntity(id="", field1="", field2="", created_at=datetime.now())
+
+        # 执行 & 验证
+        with pytest.raises(DomainException):
+            await xxx_service.process_data(invalid_entity)
+```
+
+---
+
+## 🔍 示例对话
+
+### 用户请求
+> 修复检测记录保存失败的问题，错误是 PostgreSQL 参数类型错误。
+
+### AI 响应
+
+**需求确认**：
+
+我理解你要修复 `ISSUE_DETECTION_DB_ERROR.md` 中描述的问题。在开始前，我需要确认：
+
+1. 错误信息显示 `$6` 参数类型错误（期望字符串，实际是整数）
+2. 涉及的表是 `detection_records`
+3. 需要修改的层次：基础设施层（仓储实现）
+
+我需要先检查：
+- `detection_records` 表的完整schema
+- 当前仓储实现的SQL语句
+- 参数 `$6` 对应的字段
+
+请稍等，我先检查现有代码...
+
+---
+
+## 📚 参考文档
+
+### 必读文档
+1. **架构规范**
+   - `docs/SYSTEM_ARCHITECTURE.md` - 系统架构文档
+   - `docs/ARCHITECTURE_COMPLIANCE_NO_FALLBACK.md` - 架构合规规则
+
+2. **开发规范**
+   - `CONTRIBUTING.md` - 贡献指南
+   - 项目根目录的 `.md` 文件（开头的项目规范）
+
+3. **技术栈**
+   - `requirements.txt` - Python依赖
+   - `frontend/package.json` - 前端依赖
+   - `docker-compose.yml` - 服务配置
+
+### 目录结构
+- `src/` - 所有Python源码（按DDD架构组织）
+- `tests/` - 所有测试代码（按架构层次组织）
+- `config/` - 配置文件
+- `scripts/` - 脚本工具
+- `docs/` - 文档
+
+---
+
+## ⚡ 快速使用
+
+### 调用方式
+```bash
+npx openskills read engineering-code
+```
+
+### 使用场景
+1. **新功能开发**: 生成完整的API、领域服务、仓储实现
+2. **Bug修复**: 生成符合架构规范的修复代码
+3. **重构代码**: 将旧代码重构为符合DDD架构的新代码
+4. **数据库迁移**: 生成数据库迁移脚本和相关代码
+
+---
+
+## ⚠️ 注意事项
+
+1. **始终明确需求**: 如果需求不清楚，主动询问，不要猜测
+2. **架构优先**: 所有代码都必须符合DDD架构要求
+3. **无占位符**: 不生成示例代码，只生成可运行的完整实现
+4. **自检清单**: 生成代码后使用自检清单验证
+5. **测试覆盖**: 提供必要的单元测试
+
+---
+
+## 🎓 成功标准
+
+生成的代码应该满足：
+- ✅ 可以直接提交到仓库（无需修改）
+- ✅ 可以直接运行（无需补充）
+- ✅ 符合项目架构规范（通过自检清单）
+- ✅ 包含完整的日志和异常处理
+- ✅ 包含必要的单元测试
+- ✅ 包含完整的文档注释
+
+---
+
+**Version**: 1.0.0
+**Last Updated**: 2026-01-23
+**Maintained By**: Project Team

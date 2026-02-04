@@ -1,0 +1,471 @@
+/**
+ * PEPGMP 设计系统 - Future Industrialism
+ *
+ * 设计理念：
+ * - 科技感与工业精密的完美结合
+ * - 数据可视化美学
+ * - 动态、生动、充满活力
+ *
+ * 灵感来源：
+ * - 航空航天控制台
+ * - 科幻电影监控中心
+ * - 高端工业设备界面
+ */
+
+// ===== 字体系统 =====
+// 避免 Inter、Roboto、Arial 等通用字体
+// 选择具有科技感和个性的字体
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&display=swap'); // 标题字体 - 未来科技感
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap'); // 代码/数据字体 - 工程师风格
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap'); // 正文字体 - 现代简洁
+
+:root {
+    // 字体家族
+    --font-display: 'Orbitron', 'Microsoft YaHei', sans-serif; // 标题、导航
+    --font-mono: 'JetBrains Mono', 'Consolas', monospace; // 数据、代码
+    --font-body: 'IBM Plex Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif; // 正文
+
+    // 字体大小 - 流畅尺度系统
+    --font-size-tiny: 0.75rem; // 12px
+    --font-size-small: 0.875rem; // 14px
+    --font-size-base: 1rem; // 16px
+    --font-size-medium: 1.125rem; // 18px
+    --font-size-large: 1.25rem; // 20px
+    --font-size-xl: 1.5rem; // 24px
+    --font-size-xxl: 2rem; // 32px
+    --font-size-xxxl: 3rem; // 48px
+
+    // 字重
+    --font-weight-light: 300;
+    --font-weight-normal: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+    --font-weight-extrabold: 800;
+
+    // 行高
+    --line-height-tight: 1.2;
+    --line-height-normal: 1.5;
+    --line-height-relaxed: 1.8;
+}
+
+// ===== 色彩系统 - Future Industrialism Palette =====
+// 避免常见的蓝色和紫色渐变
+// 采用"电子蓝+霓虹青+工业橙"的独特配色
+
+:root {
+    // 主色调 - 电子蓝（科技感）
+    --color-primary-50: #E0F2FE;
+    --color-primary-100: #BAE6FD;
+    --color-primary-200: #7DD3FC;
+    --color-primary-300: #38BDF8;
+    --color-primary-400: #0EA5E9;
+    --color-primary-500: #0284C7; // 主色
+    --color-primary-600: #0369A1;
+    --color-primary-700: #075985;
+    --color-primary-800: #0C4A6E;
+    --color-primary-900: #082F49;
+
+    // 次要色 - 霓虹青（活力）
+    --color-accent-50: #ECFEFF;
+    --color-accent-100: #CFFAFE;
+    --color-accent-200: #A5F3FC;
+    --color-accent-300: #67E8F9;
+    --color-accent-400: #22D3EE;
+    --color-accent-500: #06B6D4; // 强调色
+    --color-accent-600: #0891B2;
+    --color-accent-700: #0E7490;
+    --color-accent-800: #155E75;
+    --color-accent-900: #164E63;
+
+    // 警示色 - 工业橙（警报）
+    --color-warning-50: #FFF7ED;
+    --color-warning-100: #FFEDD5;
+    --color-warning-200: #FED7AA;
+    --color-warning-300: #FDBA74;
+    --color-warning-400: #FB923C;
+    --color-warning-500: #F97316; // 警告色
+    --color-warning-600: #EA580C;
+    --color-warning-700: #C2410C;
+    --color-warning-800: #9A3412;
+    --color-warning-900: #7C2D12;
+
+    // 错误色 - 激光红
+    --color-error-500: #EF4444;
+    --color-error-600: #DC2626;
+
+    // 成功色 - 终端绿
+    --color-success-500: #10B981;
+    --color-success-600: #059669;
+
+    // 中性色 - 深空灰（增强对比度版本）
+    --color-neutral-50: #FFFFFF;
+    --color-neutral-100: #F8FAFC;
+    --color-neutral-200: #E2E8F0;
+    --color-neutral-300: #CBD5E1;
+    --color-neutral-400: #94A3B8;
+    --color-neutral-500: #64748B;
+    --color-neutral-600: #475569;
+    --color-neutral-700: #2D3748;
+    --color-neutral-800: #1A202C;
+    --color-neutral-900: #0A0E1A; // 更深的背景色，提升对比度
+
+    // 语义化颜色（增强对比度）
+    --color-bg-primary: var(--color-neutral-900);
+    --color-bg-secondary: #111827; // 略浅于主背景
+    --color-bg-tertiary: #1F2937;
+    --color-text-primary: var(--color-neutral-50); // 纯白文字
+    --color-text-secondary: #D1D5DB; // 更亮的次要文字
+    --color-text-tertiary: #9CA3AF; // 更亮的第三级文字
+    --color-border: rgba(255, 255, 255, 0.1); // 半透明边框更柔和
+}
+
+// 亮色主题覆盖
+[data-theme='light'] {
+    --color-bg-primary: var(--color-neutral-50);
+    --color-bg-secondary: #FFFFFF;
+    --color-bg-tertiary: var(--color-neutral-100);
+    --color-text-primary: var(--color-neutral-900);
+    --color-text-secondary: var(--color-neutral-600);
+    --color-text-tertiary: var(--color-neutral-500);
+    --color-border: var(--color-neutral-200);
+}
+
+// ===== 间距系统 - 8pt 网格 =====
+:root {
+    --space-tiny: 0.25rem; // 4px
+    --space-small: 0.5rem; // 8px
+    --space-medium: 1rem; // 16px
+    --space-large: 1.5rem; // 24px
+    --space-xl: 2rem; // 32px
+    --space-xxl: 3rem; // 48px
+    --space-xxxl: 4rem; // 64px
+}
+
+// ===== 圆角系统 =====
+:root {
+    --radius-none: 0;
+    --radius-small: 0.25rem; // 4px
+    --radius-medium: 0.5rem; // 8px
+    --radius-large: 1rem; // 16px
+    --radius-full: 9999px;
+}
+
+// ===== 阴影系统 - 科技感分层 =====
+:root {
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+        0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+        0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1),
+        0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+    // 霓虹发光效果
+    --shadow-glow-cyan: 0 0 10px rgba(6, 182, 212, 0.5),
+        0 0 20px rgba(6, 182, 212, 0.3),
+        0 0 30px rgba(6, 182, 212, 0.1);
+    --shadow-glow-blue: 0 0 10px rgba(2, 132, 199, 0.5),
+        0 0 20px rgba(2, 132, 199, 0.3),
+        0 0 30px rgba(2, 132, 199, 0.1);
+    --shadow-glow-orange: 0 0 10px rgba(249, 115, 22, 0.5),
+        0 0 20px rgba(249, 115, 22, 0.3),
+        0 0 30px rgba(249, 115, 22, 0.1);
+}
+
+// ===== 动画系统 =====
+:root {
+    // 时长
+    --duration-instant: 100ms;
+    --duration-fast: 200ms;
+    --duration-normal: 300ms;
+    --duration-slow: 500ms;
+    --duration-slower: 800ms;
+
+    // 缓动函数
+    --ease-linear: linear;
+    --ease-in: cubic-bezier(0.4, 0, 1, 1);
+    --ease-out: cubic-bezier(0, 0, 0.2, 1);
+    --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    --ease-elastic: cubic-bezier(0.68, -0.6, 0.32, 1.6);
+}
+
+// ===== 布局系统 =====
+:root {
+    --header-height: 64px;
+    --footer-height: 48px;
+    --sidebar-width: 260px;
+    --sidebar-width-collapsed: 64px;
+
+    --container-max-width: 1400px;
+    --content-max-width: 1200px;
+}
+
+// ===== 实用工具类 =====
+
+// 发光文本效果 - 优化版（减弱发光，增强清晰度）
+.text-glow-cyan {
+    color: var(--color-accent-300); // 使用更亮的颜色提升对比度
+    text-shadow: 0 0 5px rgba(34, 211, 238, 0.5),
+        0 0 10px rgba(34, 211, 238, 0.2);
+    font-weight: var(--font-weight-bold); // 增加字重提升清晰度
+}
+
+.text-glow-blue {
+    color: var(--color-primary-300); // 使用更亮的颜色提升对比度
+    text-shadow: 0 0 5px rgba(14, 165, 233, 0.5),
+        0 0 10px rgba(14, 165, 233, 0.2);
+    font-weight: var(--font-weight-bold);
+}
+
+// 扫描线效果（复古科技）
+.scanline-effect {
+    position: relative;
+    overflow: hidden;
+
+    &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 2px;
+        background: linear-gradient(to bottom,
+                rgba(255, 255, 255, 0) 0%,
+                rgba(255, 255, 255, 0.8) 50%,
+                rgba(255, 255, 255, 0) 100%);
+        animation: scanline 4s linear infinite;
+        z-index: 10;
+        pointer-events: none;
+    }
+}
+
+@keyframes scanline {
+    0% {
+        transform: translateY(-100%);
+    }
+
+    100% {
+        transform: translateY(100vh);
+    }
+}
+
+// 数据流动画
+.data-flow {
+    position: relative;
+    overflow: hidden;
+
+    &::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg,
+                transparent,
+                rgba(6, 182, 212, 0.3),
+                transparent);
+        animation: data-flow 2s ease-in-out infinite;
+    }
+}
+
+@keyframes data-flow {
+    0% {
+        left: -100%;
+    }
+
+    100% {
+        left: 100%;
+    }
+}
+
+// 脉冲效果
+.pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+}
+
+// 浮动效果
+.float {
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+// 渐入动画
+.fade-in {
+    animation: fade-in var(--duration-normal) var(--ease-out);
+}
+
+@keyframes fade-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+// 滑入动画
+.slide-in-up {
+    animation: slide-in-up var(--duration-normal) var(--ease-out);
+}
+
+@keyframes slide-in-up {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+// 缩放入场
+.scale-in {
+    animation: scale-in var(--duration-normal) var(--ease-bounce);
+}
+
+@keyframes scale-in {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+// ===== 卡片组件样式 =====
+.future-card {
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-large);
+    padding: var(--space-large);
+    box-shadow: var(--shadow-md);
+    transition: all var(--duration-normal) var(--ease-out);
+
+    &:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-xl), var(--shadow-glow-cyan);
+        border-color: var(--color-accent-500);
+    }
+
+    // 顶部装饰线
+    &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 2px;
+        background: linear-gradient(90deg,
+                transparent,
+                var(--color-accent-500),
+                transparent);
+    }
+}
+
+// ===== 数据显示样式 =====
+.mono-text {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+}
+
+// ===== 按钮样式增强 =====
+.future-button {
+    position: relative;
+    font-family: var(--font-display);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    transition: all var(--duration-fast) var(--ease-out);
+    overflow: hidden;
+
+    &::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 0;
+        height: 0;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.3);
+        transform: translate(-50%, -50%);
+        transition: width var(--duration-normal) var(--ease-out),
+            height var(--duration-normal) var(--ease-out);
+    }
+
+    &:hover::before {
+        width: 300px;
+        height: 300px;
+    }
+
+    &:active {
+        transform: scale(0.95);
+    }
+}
+
+// ===== 响应式工具 =====
+@media (max-width: 768px) {
+    :root {
+        --font-size-tiny: 0.7rem;
+        --font-size-small: 0.8rem;
+        --font-size-base: 0.9rem;
+        --space-large: 1rem;
+        --space-xl: 1.5rem;
+    }
+}
+
+// ===== 打印样式 =====
+@media print {
+
+    .scanline-effect::before,
+    .data-flow::after,
+    [class*="glow"],
+    [class*="shadow"] {
+        display: none !important;
+    }
+}
+
+// ===== 减少动画偏好 =====
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
