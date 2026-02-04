@@ -1,11 +1,16 @@
+import asyncio
 import base64
 import logging
 import os
+import threading
 import time
+from contextlib import asynccontextmanager
 from typing import Optional
 
 import cv2
 import numpy as np
+from fastapi import Request
+from starlette.concurrency import run_in_threadpool
 
 from src.core.optimized_detection_pipeline import (
     DetectionResult,
@@ -22,9 +27,52 @@ except Exception:  # pragma: no cover
 
 logger = logging.getLogger(__name__)
 
-# Global instances, initialized at startup
-optimized_pipeline: Optional[OptimizedDetectionPipeline] = None
-hairnet_pipeline: Optional[YOLOHairnetDetector] = None
+def get_pipeline(request: Request) -> OptimizedDetectionPipeline:
+    pipeline = getattr(request.app.state, "optimized_pipeline", None)
+    if pipeline is None:
+        raise RuntimeError("Detection service not initialized")
+    return pipeline
+
+
+def get_hairnet_pipeline(request: Request) -> Optional[YOLOHairnetDetector]:
+    return getattr(request.app.state, "hairnet_pipeline", None)
+
+
+def get_detection_lock(request: Request) -> Optional[threading.Lock]:
+    return getattr(request.app.state, "detection_lock", None)
+
+
+def get_detection_semaphore(request: Request) -> Optional[asyncio.Semaphore]:
+    return getattr(request.app.state, "detection_semaphore", None)
+
+
+@asynccontextmanager
+async def _optional_semaphore(semaphore: Optional[asyncio.Semaphore]):
+    if semaphore is None:
+        yield
+        return
+    await semaphore.acquire()
+    try:
+        yield
+    finally:
+        semaphore.release()
+
+
+async def run_detection_with_controls(
+    pipeline: OptimizedDetectionPipeline,
+    image: np.ndarray,
+    *,
+    inference_lock: Optional[threading.Lock] = None,
+    inference_semaphore: Optional[asyncio.Semaphore] = None,
+) -> DetectionResult:
+    async with _optional_semaphore(inference_semaphore):
+        def _infer():
+            if inference_lock is not None:
+                with inference_lock:
+                    return pipeline.detect_comprehensive(image)
+            return pipeline.detect_comprehensive(image)
+
+        return await run_in_threadpool(_infer)
 
 
 def comprehensive_detection_logic(
@@ -113,7 +161,6 @@ def comprehensive_detection_logic(
 
 
 def initialize_detection_services():
-    global optimized_pipeline, hairnet_pipeline
     logger.info("Initializing detection services...")
     try:
         from src.core.behavior import BehaviorRecognizer
@@ -163,12 +210,10 @@ def initialize_detection_services():
             behavior_recognizer=behavior_recognizer,
             pose_detector=pose_detector,
         )
-        hairnet_pipeline = hairnet_detector
         logger.info("Detection services initialized.")
+        return optimized_pipeline, hairnet_detector
     except Exception as e:
         logger.exception(f"Failed to initialize detection services: {e}")
-        optimized_pipeline = None
-        hairnet_pipeline = None
         raise
 
 

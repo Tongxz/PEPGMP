@@ -8,6 +8,7 @@ import logging
 import logging.handlers
 import os
 import sys
+import threading
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -214,10 +215,24 @@ async def lifespan(app: FastAPI):  # noqa: C901
 
     # Initialize services (non-fatal on failure)
     try:
-        detection_service.initialize_detection_services()
-        app.state.optimized_pipeline = detection_service.optimized_pipeline
-        app.state.hairnet_pipeline = detection_service.hairnet_pipeline
-        logger.info("检测服务已初始化")
+        max_concurrency_raw = os.getenv("DETECTION_MAX_CONCURRENCY", "1")
+        try:
+            max_concurrency = max(1, int(max_concurrency_raw))
+        except ValueError:
+            logger.warning(
+                f"DETECTION_MAX_CONCURRENCY 无效: {max_concurrency_raw}, 使用默认值 1"
+            )
+            max_concurrency = 1
+
+        app.state.detection_lock = threading.Lock()
+        app.state.detection_semaphore = asyncio.Semaphore(max_concurrency)
+
+        optimized_pipeline, hairnet_pipeline = (
+            detection_service.initialize_detection_services()
+        )
+        app.state.optimized_pipeline = optimized_pipeline
+        app.state.hairnet_pipeline = hairnet_pipeline
+        logger.info(f"检测服务已初始化，最大并发推理数: {max_concurrency}")
     except Exception as e:
         # 生产环境硬约束：检测服务必须成功初始化，禁止“失败但继续运行”的隐性降级。
         if os.getenv("ENVIRONMENT", "development") == "production":
@@ -226,6 +241,8 @@ async def lifespan(app: FastAPI):  # noqa: C901
         # 非生产：避免因模型缺失或环境问题导致 API 启动失败
         app.state.optimized_pipeline = None
         app.state.hairnet_pipeline = None
+        app.state.detection_lock = None
+        app.state.detection_semaphore = None
         logger.warning(f"检测服务初始化失败 (非生产非关键): {e}")
     # 初始化区域服务（数据库存储）
     # 如果有配置文件，自动导入到数据库

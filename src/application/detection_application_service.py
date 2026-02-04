@@ -5,8 +5,10 @@
 实现完整的检测流程，包括智能保存策略。
 """
 
+import asyncio
 import logging
 import os
+import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -15,6 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
+from starlette.concurrency import run_in_threadpool
 
 from src.core.optimized_detection_pipeline import (
     DetectionResult,
@@ -72,6 +75,8 @@ class DetectionApplicationService:
         detection_domain_service: DetectionServiceDomain,
         snapshot_storage: Optional[SnapshotStorageProtocol] = None,
         save_policy: Optional[SavePolicy] = None,
+        inference_lock: Optional[threading.Lock] = None,
+        inference_semaphore: Optional[asyncio.Semaphore] = None,
     ):
         """
         初始化检测应用服务
@@ -80,11 +85,15 @@ class DetectionApplicationService:
             detection_pipeline: 检测管道（基础设施层）
             detection_domain_service: 检测领域服务（领域层）
             save_policy: 保存策略配置
+            inference_lock: 推理锁（用于保护共享模型调用）
+            inference_semaphore: 推理并发信号量（用于限制最大并发）
         """
         self.detection_pipeline = detection_pipeline
         self.detection_domain_service = detection_domain_service
         self.snapshot_storage = snapshot_storage
         self.save_policy = save_policy or SavePolicy()  # 默认SMART策略
+        self.inference_lock = inference_lock
+        self.inference_semaphore = inference_semaphore
         self.logger = logging.getLogger(__name__)
 
         # 统计缓冲（用于生成周期性摘要）
@@ -425,6 +434,26 @@ class DetectionApplicationService:
             raise ValueError("无法解码图像")
         return image
 
+    async def _run_detection(self, image: np.ndarray) -> DetectionResult:
+        """在受控并发下执行同步推理，避免阻塞事件循环。"""
+        if self.inference_semaphore is None:
+            return await self._run_detection_locked(image)
+
+        await self.inference_semaphore.acquire()
+        try:
+            return await self._run_detection_locked(image)
+        finally:
+            self.inference_semaphore.release()
+
+    async def _run_detection_locked(self, image: np.ndarray) -> DetectionResult:
+        def _infer():
+            if self.inference_lock is not None:
+                with self.inference_lock:
+                    return self.detection_pipeline.detect_comprehensive(image)
+            return self.detection_pipeline.detect_comprehensive(image)
+
+        return await run_in_threadpool(_infer)
+
     def _convert_to_domain_format(
         self, detection_result: DetectionResult
     ) -> List[Dict[str, Any]]:
@@ -615,7 +644,7 @@ class DetectionApplicationService:
 
         # 2. 执行检测（基础设施层）
         start_time = time.time()
-        detection_result = self.detection_pipeline.detect_comprehensive(image)
+        detection_result = await self._run_detection(image)
         processing_time = time.time() - start_time
 
         # 3. 分析违规
@@ -704,7 +733,7 @@ class DetectionApplicationService:
         """
         # 1. 执行检测（基础设施层）
         start_time = time.time()
-        detection_result = self.detection_pipeline.detect_comprehensive(frame)
+        detection_result = await self._run_detection(frame)
         processing_time = time.time() - start_time
 
         # 2. 分析违规

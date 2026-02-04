@@ -10,6 +10,7 @@
 """
 
 import asyncio
+import hashlib
 import logging
 import time
 from collections import OrderedDict
@@ -62,6 +63,7 @@ class DetectionResult:
     handwash_results: List[Dict]
     sanitize_results: List[Dict]
     processing_times: Dict[str, float]
+    hand_regions: Optional[List[Dict]] = None
     annotated_image: Optional[np.ndarray] = None
     frame_cache_key: Optional[str] = None
 
@@ -86,10 +88,23 @@ class FrameCache:
 
     def _generate_frame_hash(self, frame: np.ndarray) -> str:
         """生成帧的哈希值用于缓存键"""
-        # 使用帧的形状和部分像素值生成简单哈希
+        # 使用帧的形状和固定步长采样生成稳定哈希
         h, w = frame.shape[:2]
-        sample_pixels = frame[:: h // 10, :: w // 10].flatten()[:100]
-        return f"{h}x{w}_{hash(sample_pixels.tobytes())}"
+        if h == 0 or w == 0:
+            return f"{h}x{w}_empty"
+
+        if h < 10 or w < 10:
+            sampled = frame
+        else:
+            sampled = frame[::10, ::10]
+
+        if sampled.size == 0:
+            sampled = frame
+
+        hasher = hashlib.md5()
+        hasher.update(f"{h}x{w}_{frame.dtype}".encode("utf-8"))
+        hasher.update(sampled.tobytes())
+        return f"{h}x{w}_{hasher.hexdigest()}"
 
     def get(self, frame: np.ndarray) -> Optional[DetectionResult]:
         """从缓存获取检测结果"""
@@ -458,6 +473,7 @@ class OptimizedDetectionPipeline:
                     frame_meta.hairnet_results,
                     frame_meta.handwash_results,
                     frame_meta.sanitize_results,
+                    hand_regions=None,
                     min_confidence=min_confidence,  # 传递可视化置信度阈值
                 )
             except Exception as e:
@@ -469,6 +485,7 @@ class OptimizedDetectionPipeline:
             handwash_results=frame_meta.handwash_results,
             sanitize_results=frame_meta.sanitize_results,
             processing_times=processing_times,
+            hand_regions=None,
             annotated_image=annotated_image,
             frame_cache_key=frame_meta.frame_hash,
         )
@@ -510,14 +527,14 @@ class OptimizedDetectionPipeline:
         hairnet_results = []
         if enable_hairnet and len(person_detections) > 0:
             hairnet_start = time.time()
-            logger.warning(
+            logger.debug(
                 f"🔵 开始发网检测: 人数={len(person_detections)}, "
                 f"hairnet_detector={'存在' if self.hairnet_detector else '不存在'}, "
                 f"类型={type(self.hairnet_detector).__name__ if self.hairnet_detector else 'None'}"
             )
             hairnet_results = self._detect_hairnet_for_persons(image, person_detections)
             processing_times["hairnet_detection"] = time.time() - hairnet_start
-            logger.warning(
+            logger.debug(
                 f"🔵 发网检测完成: 处理了 {len(hairnet_results)} 个人, "
                 f"耗时={processing_times['hairnet_detection']:.3f}s"
             )
@@ -535,18 +552,31 @@ class OptimizedDetectionPipeline:
         # 阶段3: 行为检测（基于人体检测结果）
         handwash_results = []
         sanitize_results = []
+        hand_regions_map: Dict[int, List[Dict]] = {}
+        hand_regions_flat: List[Dict] = []
 
         if (enable_handwash or enable_sanitize) and len(person_detections) > 0:
             behavior_start = time.time()
 
+            # 预计算手部区域，避免重复推理
+            for i, detection in enumerate(person_detections):
+                person_id = i + 1
+                bbox = detection.get("bbox", [0, 0, 0, 0])
+                regions = self._get_actual_hand_regions(image, bbox)
+                hand_regions_map[person_id] = regions
+                for region in regions:
+                    region_with_id = region.copy()
+                    region_with_id["person_id"] = person_id
+                    hand_regions_flat.append(region_with_id)
+
             if enable_handwash:
                 handwash_results = self._detect_handwash_for_persons(
-                    image, person_detections
+                    image, person_detections, hand_regions_map=hand_regions_map
                 )
 
             if enable_sanitize:
                 sanitize_results = self._detect_sanitize_for_persons(
-                    image, person_detections
+                    image, person_detections, hand_regions_map=hand_regions_map
                 )
 
             processing_times["behavior_detection"] = time.time() - behavior_start
@@ -572,6 +602,7 @@ class OptimizedDetectionPipeline:
             hairnet_results,
             handwash_results,
             sanitize_results,
+            hand_regions=hand_regions_flat,
             min_confidence=min_confidence,  # 传递可视化置信度阈值
         )
         processing_times["visualization"] = time.time() - viz_start
@@ -585,6 +616,7 @@ class OptimizedDetectionPipeline:
             handwash_results=handwash_results,
             sanitize_results=sanitize_results,
             processing_times=processing_times,
+            hand_regions=hand_regions_flat,
             annotated_image=annotated_image,
         )
 
@@ -849,7 +881,7 @@ class OptimizedDetectionPipeline:
         try:
             # 对于YOLOHairnetDetector，直接传递完整图像进行检测
             if hasattr(self.hairnet_detector, "detect_hairnet_compliance"):
-                logger.warning(
+                logger.debug(
                     f"🔵 调用YOLOHairnetDetector.detect_hairnet_compliance: "
                     f"人数={len(person_detections)}, 图像大小={image.shape}"
                 )
@@ -857,7 +889,7 @@ class OptimizedDetectionPipeline:
                 compliance_result = self.hairnet_detector.detect_hairnet_compliance(
                     image, person_detections
                 )
-                logger.warning(
+                logger.debug(
                     f"🔵 YOLOHairnetDetector返回结果: "
                     f"total_persons={compliance_result.get('total_persons', 0)}, "
                     f"persons_with_hairnet={compliance_result.get('persons_with_hairnet', 0)}, "
@@ -962,7 +994,10 @@ class OptimizedDetectionPipeline:
         return hairnet_results
 
     def _detect_handwash_for_persons(
-        self, image: np.ndarray, person_detections: List[Dict]
+        self,
+        image: np.ndarray,
+        person_detections: List[Dict],
+        hand_regions_map: Optional[Dict[int, List[Dict]]] = None,
     ) -> List[Dict]:
         """为检测到的人员进行洗手行为检测"""
         if self.behavior_recognizer is None:
@@ -993,7 +1028,10 @@ class OptimizedDetectionPipeline:
                 if person_region.size > 0:
                     # 使用行为识别器检测洗手行为
                     # 获取实际的手部区域信息
-                    hand_regions = self._get_actual_hand_regions(image, bbox)
+                    if hand_regions_map is not None:
+                        hand_regions = hand_regions_map.get(i + 1, [])
+                    else:
+                        hand_regions = self._get_actual_hand_regions(image, bbox)
 
                     # 传递完整图像帧给行为识别器以支持MediaPipe检测
                     confidence = self.behavior_recognizer.detect_handwashing(
@@ -1036,7 +1074,10 @@ class OptimizedDetectionPipeline:
         return handwash_results
 
     def _detect_sanitize_for_persons(
-        self, image: np.ndarray, person_detections: List[Dict]
+        self,
+        image: np.ndarray,
+        person_detections: List[Dict],
+        hand_regions_map: Optional[Dict[int, List[Dict]]] = None,
     ) -> List[Dict]:
         """为检测到的人员进行消毒行为检测"""
         if self.behavior_recognizer is None:
@@ -1067,7 +1108,10 @@ class OptimizedDetectionPipeline:
                 if person_region.size > 0:
                     # 使用行为识别器检测消毒行为
                     # 获取实际的手部区域信息
-                    hand_regions = self._get_actual_hand_regions(image, bbox)
+                    if hand_regions_map is not None:
+                        hand_regions = hand_regions_map.get(i + 1, [])
+                    else:
+                        hand_regions = self._get_actual_hand_regions(image, bbox)
 
                     # 传递完整图像帧给行为识别器以支持MediaPipe检测
                     confidence = self.behavior_recognizer.detect_sanitizing(
@@ -1472,6 +1516,7 @@ class OptimizedDetectionPipeline:
         hairnet_results: List[Dict],
         handwash_results: List[Dict],
         sanitize_results: List[Dict],
+        hand_regions: Optional[List[Dict]] = None,
         min_confidence: float = 0.5,  # 可视化最小置信度阈值
     ) -> np.ndarray:
         """创建带注释的结果图像
@@ -1482,6 +1527,7 @@ class OptimizedDetectionPipeline:
             hairnet_results: 发网检测结果列表
             handwash_results: 洗手检测结果列表
             sanitize_results: 消毒检测结果列表
+            hand_regions: 预计算的手部区域列表（避免重复推理）
             min_confidence: 可视化最小置信度阈值（默认0.5，过滤低置信度检测）
 
         Returns:
@@ -1627,14 +1673,14 @@ class OptimizedDetectionPipeline:
                 result
                 for result in handwash_results
                 if result.get("is_handwashing", False)
-                and result.get("confidence", 0.0) >= min_confidence
+                and result.get("handwash_confidence", 0.0) >= min_confidence
             ]
 
             # 绘制洗手检测结果
             for result in filtered_handwash_results:
                 person_bbox = result.get("person_bbox", [0, 0, 0, 0])
                 x1, y1, x2, y2 = map(int, person_bbox)
-                confidence = result.get("confidence", 0.0)
+                confidence = result.get("handwash_confidence", 0.0)
 
                 # 在人体框上方绘制洗手标签（黄色）
                 label = f"洗手中 {confidence:.2f}"
@@ -1653,14 +1699,14 @@ class OptimizedDetectionPipeline:
                 result
                 for result in sanitize_results
                 if result.get("is_sanitizing", False)
-                and result.get("confidence", 0.0) >= min_confidence
+                and result.get("sanitize_confidence", 0.0) >= min_confidence
             ]
 
             # 绘制消毒检测结果
             for result in filtered_sanitize_results:
                 person_bbox = result.get("person_bbox", [0, 0, 0, 0])
                 x1, y1, x2, y2 = map(int, person_bbox)
-                confidence = result.get("confidence", 0.0)
+                confidence = result.get("sanitize_confidence", 0.0)
 
                 # 在人体框上方绘制消毒标签（青色）
                 label = f"消毒中 {confidence:.2f}"
@@ -1675,10 +1721,8 @@ class OptimizedDetectionPipeline:
                 )
 
             # 手部可视化：无论是否检测到人体，都尝试绘制手部（便于手部近景视频调试）
-            if self.pose_detector is not None:
-                hands_results = []
-                if hasattr(self.pose_detector, "detect_hands"):
-                    hands_results = self.pose_detector.detect_hands(image)
+            if hand_regions:
+                hands_results = hand_regions
 
                 # 绘制手部：优先绘制bbox与来源标签；如有关键点则再绘制骨架
                 for hand_result in hands_results:
