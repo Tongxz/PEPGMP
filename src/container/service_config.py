@@ -45,10 +45,85 @@ from src.interfaces.tracking.tracker_interface import ITracker
 
 logger = logging.getLogger(__name__)
 
+_STRICT_DI = False
+_REQUIRED_SERVICES = set()
+_SERVICE_METADATA = {}
+
+
+def _normalize_service_name(service_name: str) -> str:
+    return service_name.strip().lower()
+
+
+def _parse_bool_env(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _parse_required_services_env() -> set:
+    raw = os.getenv("REQUIRED_SERVICES", "")
+    if not raw:
+        return set()
+    return {
+        _normalize_service_name(item)
+        for item in raw.replace(";", ",").split(",")
+        if item.strip()
+    }
+
+
+def _load_di_config() -> None:
+    global _STRICT_DI, _REQUIRED_SERVICES
+    _STRICT_DI = _parse_bool_env("STRICT_DI", False)
+    _REQUIRED_SERVICES = _parse_required_services_env()
+    logger.info("STRICT_DI=%s", _STRICT_DI)
+    if _REQUIRED_SERVICES:
+        logger.info("REQUIRED_SERVICES=%s", ", ".join(sorted(_REQUIRED_SERVICES)))
+    else:
+        logger.info("REQUIRED_SERVICES=[]")
+
+
+def _is_required_service(interface) -> bool:
+    return _normalize_service_name(interface.__name__) in _REQUIRED_SERVICES
+
+
+def _mark_service(interface, *, degraded: bool) -> None:
+    _SERVICE_METADATA[interface.__name__] = {"degraded": degraded}
+
+
+def _register_singleton(interface, implementation, *, degraded: bool = False) -> None:
+    container.register_singleton(interface, implementation)
+    _mark_service(interface, degraded=degraded)
+
+
+def _register_instance(interface, instance, *, degraded: bool = False) -> None:
+    container.register_instance(interface, instance)
+    _mark_service(interface, degraded=degraded)
+
+
+def _register_factory(interface, factory, *, degraded: bool = False) -> None:
+    container.register_factory(interface, factory)
+    _mark_service(interface, degraded=degraded)
+
+
+def _register_transient(interface, implementation, *, degraded: bool = False) -> None:
+    container.register_transient(interface, implementation)
+    _mark_service(interface, degraded=degraded)
+
+
+def _handle_fallback_or_raise(interface, error: Exception, fallback_register_fn) -> None:
+    if _STRICT_DI and _is_required_service(interface):
+        raise RuntimeError(
+            f"服务 {interface.__name__} 为 REQUIRED_SERVICES，且 STRICT_DI=true，"
+            "禁止降级注册。"
+        ) from error
+    fallback_register_fn()
+
 
 def configure_services():
     """配置所有服务"""
     logger.info("开始配置服务...")
+    _load_di_config()
     use_domain_service = os.getenv("USE_DOMAIN_SERVICE", "false").lower() == "true"
     logger.info(f"USE_DOMAIN_SERVICE={use_domain_service}")
 
@@ -80,7 +155,7 @@ def _configure_detector_services():
         from src.detection.detector import HumanDetector
 
         # 注册人体检测器
-        container.register_singleton(IDetector, HumanDetector)
+        _register_singleton(IDetector, HumanDetector)
         logger.info("人体检测器服务已注册")
 
     except ImportError as e:
@@ -111,7 +186,11 @@ def _configure_detector_services():
             def get_confidence_threshold(self):
                 return self._confidence_threshold
 
-        container.register_singleton(IDetector, DefaultDetector)
+        _handle_fallback_or_raise(
+            IDetector,
+            e,
+            lambda: _register_singleton(IDetector, DefaultDetector, degraded=True),
+        )
         logger.warning("使用默认检测器实现")
 
 
@@ -121,7 +200,7 @@ def _configure_tracker_services():
         from src.core.tracker import MultiObjectTracker
 
         # 注册多目标跟踪器
-        container.register_singleton(ITracker, MultiObjectTracker)
+        _register_singleton(ITracker, MultiObjectTracker)
         logger.info("多目标跟踪器服务已注册")
 
     except ImportError as e:
@@ -152,7 +231,11 @@ def _configure_tracker_services():
             def set_min_hits(self, min_hits: int):
                 pass
 
-        container.register_singleton(ITracker, DefaultTracker)
+        _handle_fallback_or_raise(
+            ITracker,
+            e,
+            lambda: _register_singleton(ITracker, DefaultTracker, degraded=True),
+        )
         logger.warning("使用默认跟踪器实现")
 
 
@@ -161,7 +244,7 @@ def _configure_repository_services():  # noqa: C901
     try:
         # 通过工厂按配置创建仓储实现（postgresql|redis|hybrid）
         repo = RepositoryFactory.create_repository_from_env()
-        container.register_instance(IDetectionRepository, repo)
+        _register_instance(IDetectionRepository, repo)
         logger.info(f"检测记录仓储服务已注册: {repo.__class__.__name__}")
 
     except ImportError as e:
@@ -250,7 +333,13 @@ def _configure_repository_services():  # noqa: C901
                     else 0,
                 }
 
-        container.register_singleton(IDetectionRepository, DefaultRepository)
+        _handle_fallback_or_raise(
+            IDetectionRepository,
+            e,
+            lambda: _register_singleton(
+                IDetectionRepository, DefaultRepository, degraded=True
+            ),
+        )
         logger.warning("使用默认仓储实现")
 
 
@@ -275,7 +364,7 @@ def _configure_other_services():
 
             domain_service = get_detection_service_domain()
             # 以类型为key注册实例，供API注入获取
-            container.register_instance(DetectionServiceDomain, domain_service)
+            _register_instance(DetectionServiceDomain, domain_service)
             logger.info("领域检测服务已启用并注册")
         except Exception as e:
             logger.error(f"注册领域检测服务失败: {e}")
@@ -289,7 +378,7 @@ def _configure_storage_services():
         from src.config.storage_config import build_snapshot_storage
 
         snapshot_storage = build_snapshot_storage()
-        container.register_instance(SnapshotStorageProtocol, snapshot_storage)
+        _register_instance(SnapshotStorageProtocol, snapshot_storage)
         logger.info(
             "快照存储服务已注册: %s",
             snapshot_storage.__class__.__name__,
@@ -307,7 +396,7 @@ def _configure_dataset_services():
             detection_repository=detection_repository,
             config=dataset_config,
         )
-        container.register_instance(DatasetGenerationService, dataset_service)
+        _register_instance(DatasetGenerationService, dataset_service)
         logger.info("数据集生成服务已注册")
     except Exception as exc:
         logger.error(f"注册数据集生成服务失败: {exc}")
@@ -323,7 +412,7 @@ def _configure_training_services():
         training_service = ModelTrainingService(
             training_config, model_registry_service=model_registry_service
         )
-        container.register_instance(ModelTrainingService, training_service)
+        _register_instance(ModelTrainingService, training_service)
         logger.info("模型训练服务已注册")
     except Exception as exc:
         logger.error(f"注册模型训练服务失败: {exc}")
@@ -334,21 +423,21 @@ def _configure_handwash_services():
     try:
         dataset_config = get_handwash_dataset_config()
         session_repo = FileHandwashSessionRepository(dataset_config.session_base_dir)
-        container.register_instance(IHandwashSessionRepository, session_repo)
+        _register_instance(IHandwashSessionRepository, session_repo)
 
         pose_extractor = MediapipePoseExtractor(
             MediapipePoseExtractorConfig(
                 frame_interval=dataset_config.default_frame_interval
             )
         )
-        container.register_instance(PoseExtractorProtocol, pose_extractor)
+        _register_instance(PoseExtractorProtocol, pose_extractor)
 
         handwash_dataset_service = HandwashDatasetGenerationService(
             session_repository=session_repo,
             pose_extractor=pose_extractor,
             config=dataset_config,
         )
-        container.register_instance(
+        _register_instance(
             HandwashDatasetGenerationService, handwash_dataset_service
         )
 
@@ -359,7 +448,7 @@ def _configure_handwash_services():
         handwash_training_service = HandwashTrainingService(
             handwash_training_config, model_registry_service=model_registry_service
         )
-        container.register_instance(HandwashTrainingService, handwash_training_service)
+        _register_instance(HandwashTrainingService, handwash_training_service)
         logger.info("洗手工作流服务已注册")
     except Exception as exc:
         # 生产要求：mediapipe 必须可用，洗手服务必须成功注册；禁止“失败但继续运行”的隐性降级
@@ -376,7 +465,7 @@ def _configure_multi_behavior_services():
             detection_repository=detection_repository,
             config=dataset_config,
         )
-        container.register_instance(
+        _register_instance(
             MultiBehaviorDatasetGenerationService, multi_dataset_service
         )
 
@@ -387,7 +476,7 @@ def _configure_multi_behavior_services():
         multi_training_service = MultiBehaviorTrainingService(
             multi_training_config, model_registry_service=model_registry_service
         )
-        container.register_instance(
+        _register_instance(
             MultiBehaviorTrainingService, multi_training_service
         )
         logger.info("多行为工作流服务已注册")
@@ -399,7 +488,7 @@ def _configure_model_registry_services():
     """配置模型注册服务"""
     try:
         model_registry_service = ModelRegistryService()
-        container.register_instance(ModelRegistryService, model_registry_service)
+        _register_instance(ModelRegistryService, model_registry_service)
         logger.info("模型注册服务已注册")
     except Exception as exc:
         logger.error(f"注册模型注册服务失败: {exc}")
@@ -411,7 +500,7 @@ def _configure_deployment_services():
         from src.domain.interfaces.deployment_interface import IDeploymentService
         from src.infrastructure.deployment.docker_service import DockerDeploymentService
 
-        container.register_singleton(IDeploymentService, DockerDeploymentService)
+        _register_singleton(IDeploymentService, DockerDeploymentService)
         logger.info("部署服务已注册: DockerDeploymentService")
     except ImportError as exc:
         # 生产要求：aiodocker 必须可用；禁止“导入失败但继续运行”的隐性降级
@@ -427,7 +516,9 @@ def _log_registered_services():
     services = container.get_registered_services()
     logger.info("已注册的服务:")
     for service_name, service_type in services.items():
-        logger.info(f"  - {service_name}: {service_type}")
+        degraded = _SERVICE_METADATA.get(service_name, {}).get("degraded", False)
+        status = "degraded" if degraded else "available"
+        logger.info(f"  - {service_name}: {service_type} ({status})")
 
 
 def get_configured_container():
