@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { getHealth, getSystemInfo } from '@/api/system'
+import { getSystemInfo as getSystemInfoAPI, getSystemHealth } from '@/api/modules/system'
 
 export const useSystemStore = defineStore('system', () => {
   // 状态
@@ -56,8 +56,8 @@ export const useSystemStore = defineStore('system', () => {
     loading.value = true
     error.value = ''
     try {
-      const data = await getHealth()
-      health.value = typeof data === 'string' ? data : 'OK'
+      const data = await getSystemHealth()
+      health.value = data.healthy ? 'OK' : 'UNHEALTHY'
       return data
     } catch (e: any) {
       error.value = e.message || '健康检查失败'
@@ -71,7 +71,7 @@ export const useSystemStore = defineStore('system', () => {
     loading.value = true
     error.value = ''
     try {
-      const data = await getSystemInfo()
+      const data = await getSystemInfoAPI()
       systemInfo.value = mapSystemInfoResponse(data)
       return systemInfo.value
     } catch (e: any) {

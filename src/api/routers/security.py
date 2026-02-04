@@ -6,6 +6,7 @@ Security API Routes
 """
 
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -18,6 +19,8 @@ from ...security.security_manager import (
     ThreatType,
     get_security_manager,
 )
+from ..schemas.error_schemas import ErrorCode
+from ..utils.error_helpers import raise_http_exception
 
 router = APIRouter(prefix="/security", tags=["安全管理"])
 logger = logging.getLogger(__name__)
@@ -146,13 +149,21 @@ async def login(request: LoginRequest, http_request: Request):
                 details={"username": request.username, "reason": "invalid_credentials"},
             )
 
-            raise HTTPException(status_code=401, detail="用户名或密码错误")
+            raise raise_http_exception(
+                status_code=401,
+                message="用户名或密码错误",
+                error_code=ErrorCode.INVALID_CREDENTIALS,
+            )
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"登录失败: {e}")
-        raise HTTPException(status_code=500, detail="登录失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="登录失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.post("/auth/logout", summary="用户登出")
@@ -172,7 +183,11 @@ async def logout(http_request: Request):
 
     except Exception as e:
         logger.error(f"登出失败: {e}")
-        raise HTTPException(status_code=500, detail="登出失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="登出失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.get("/auth/me", response_model=UserInfo, summary="获取当前用户信息")
@@ -186,7 +201,11 @@ async def get_current_user(
         # 验证令牌
         payload = security_manager.verify_access_token(credentials.credentials)
         if not payload:
-            raise HTTPException(status_code=401, detail="无效的访问令牌")
+            raise raise_http_exception(
+                status_code=401,
+                message="无效的访问令牌",
+                error_code=ErrorCode.TOKEN_EXPIRED,
+            )
 
         return UserInfo(
             user_id=payload.get("user_id", ""),
@@ -198,7 +217,11 @@ async def get_current_user(
         raise
     except Exception as e:
         logger.error(f"获取用户信息失败: {e}")
-        raise HTTPException(status_code=500, detail="获取用户信息失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取用户信息失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.get("/events", summary="获取安全事件")
@@ -244,7 +267,11 @@ async def get_security_events(
 
     except Exception as e:
         logger.error(f"获取安全事件失败: {e}")
-        raise HTTPException(status_code=500, detail="获取安全事件失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取安全事件失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.get("/report", response_model=SecurityReportResponse, summary="获取安全报告")
@@ -258,7 +285,11 @@ async def get_security_report():
 
     except Exception as e:
         logger.error(f"获取安全报告失败: {e}")
-        raise HTTPException(status_code=500, detail="获取安全报告失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取安全报告失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.get("/rules", summary="获取访问控制规则")
@@ -288,7 +319,11 @@ async def get_access_control_rules():
 
     except Exception as e:
         logger.error(f"获取访问控制规则失败: {e}")
-        raise HTTPException(status_code=500, detail="获取访问控制规则失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取访问控制规则失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.post("/rules", summary="创建访问控制规则")
@@ -318,7 +353,11 @@ async def create_access_control_rule(rule_request: AccessControlRuleRequest):
 
     except Exception as e:
         logger.error(f"创建访问控制规则失败: {e}")
-        raise HTTPException(status_code=500, detail="创建访问控制规则失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="创建访问控制规则失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.delete("/rules/{rule_id}", summary="删除访问控制规则")
@@ -336,7 +375,11 @@ async def delete_access_control_rule(rule_id: str):
 
     except Exception as e:
         logger.error(f"删除访问控制规则失败: {e}")
-        raise HTTPException(status_code=500, detail="删除访问控制规则失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="删除访问控制规则失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.get("/sessions", summary="获取活跃会话")
@@ -365,7 +408,11 @@ async def get_active_sessions():
 
     except Exception as e:
         logger.error(f"获取活跃会话失败: {e}")
-        raise HTTPException(status_code=500, detail="获取活跃会话失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取活跃会话失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.post("/block-ip/{ip_address}", summary="阻止IP地址")
@@ -383,7 +430,11 @@ async def block_ip_address(ip_address: str, duration: int = 3600):
 
     except Exception as e:
         logger.error(f"阻止IP地址失败: {e}")
-        raise HTTPException(status_code=500, detail="阻止IP地址失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="阻止IP地址失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.delete("/block-ip/{ip_address}", summary="解除IP阻止")
@@ -401,7 +452,11 @@ async def unblock_ip_address(ip_address: str):
 
     except Exception as e:
         logger.error(f"解除IP阻止失败: {e}")
-        raise HTTPException(status_code=500, detail="解除IP阻止失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="解除IP阻止失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.get("/blocked-ips", summary="获取被阻止的IP列表")
@@ -415,7 +470,11 @@ async def get_blocked_ips():
 
     except Exception as e:
         logger.error(f"获取被阻止IP列表失败: {e}")
-        raise HTTPException(status_code=500, detail="获取被阻止IP列表失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取被阻止IP列表失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.post("/threat-detection/test", summary="测试威胁检测")
@@ -435,7 +494,11 @@ async def test_threat_detection(data: Dict[str, Any]):
 
     except Exception as e:
         logger.error(f"威胁检测测试失败: {e}")
-        raise HTTPException(status_code=500, detail="威胁检测测试失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="威胁检测测试失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.get("/threat-types", summary="获取威胁类型列表")
@@ -495,4 +558,8 @@ async def get_security_stats():
 
     except Exception as e:
         logger.error(f"获取安全统计失败: {e}")
-        raise HTTPException(status_code=500, detail="获取安全统计失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取安全统计失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )

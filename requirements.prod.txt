@@ -56,5 +56,10 @@ healthcheck>=1.3.3
 #   - 如果安装失败，代码会自动回退到 PyTorch 模型（不影响功能）
 #   - 安装会增加镜像大小（约几百 MB）
 #   - 首次转换模型可能需要几分钟时间
-# 如果不需要 TensorRT 优化，可以注释掉这一行
+#   - TensorRT 转换需要 ONNX 作为中间格式，因此需要安装 ONNX 相关依赖
+# 如果不需要 TensorRT 优化，可以注释掉 tensorrt>=10.8.0 这一行
 tensorrt>=10.8.0
+# ONNX 相关依赖（TensorRT 转换必需）
+onnx>=1.12.0,<2.0.0
+onnxslim>=0.1.71
+onnxruntime-gpu>=1.12.0

@@ -153,190 +153,18 @@
                   </n-space>
                 </template>
 
-                <!-- 绘制区域按钮 -->
-                <div class="draw-region-section" style="margin-bottom: 16px; margin-left: 12px; margin-right: 12px;">
-                  <n-button
-                    type="primary"
-                    size="large"
-                    @click="startDrawingMode"
-                    :disabled="isDrawing || (!selectedCamera && !regionStore.backgroundImage)"
-                    block
-                  >
-                    <template #icon>
-                      <n-icon><AddOutline /></n-icon>
-                    </template>
-                    {{ isDrawing ? '正在绘制...' : '绘制新区域' }}
-                  </n-button>
-
-                  <n-alert v-if="isDrawing" type="info" size="small" style="margin-top: 8px;">
-                    <template #icon>
-                      <n-icon><BrushOutline /></n-icon>
-                    </template>
-                    在右侧画布上点击绘制区域，双击完成绘制
-                  </n-alert>
-
-                  <n-alert
-                    v-if="!selectedCamera && !regionStore.backgroundImage"
-                    type="warning"
-                    size="small"
-                    style="margin-top: 8px;"
-                  >
-                    <template #icon>
-                      <n-icon><WarningOutline /></n-icon>
-                    </template>
-                    请先在页面顶部选择摄像头或上传图片
-                  </n-alert>
-                </div>
-
                 <!-- 区域配置表单 -->
-                <div class="region-form-section" v-if="currentRegion.id || isDrawing">
-                  <n-divider>
-                    {{ currentRegion.id ? '编辑区域' : '新区域配置' }}
-                  </n-divider>
-
-                  <n-form
-                    ref="formRef"
-                    :model="currentRegion"
-                    :rules="formRules"
-                    label-placement="top"
-                    require-mark-placement="right-hanging"
-                    size="medium"
-                    class="region-form"
-                  >
-                    <!-- 基本信息 -->
-                    <n-form-item label="区域名称" path="name">
-                      <n-input
-                        v-model:value="currentRegion.name"
-                        placeholder="请输入区域名称"
-                        clearable
-                      />
-                    </n-form-item>
-
-                    <n-form-item label="区域类型" path="type">
-                      <n-select
-                        v-model:value="currentRegion.type"
-                        :options="regionTypeOptions"
-                        placeholder="选择区域类型"
-                      />
-                    </n-form-item>
-
-                    <n-form-item label="区域描述" path="description">
-                      <n-input
-                        v-model:value="currentRegion.description"
-                        type="textarea"
-                        placeholder="请输入区域描述（可选）"
-                        :autosize="{ minRows: 2, maxRows: 4 }"
-                      />
-                    </n-form-item>
-
-                    <!-- 检测参数 -->
-                    <n-divider title-placement="left">
-                      <n-text depth="2">检测参数</n-text>
-                    </n-divider>
-
-                    <n-form-item label="启用检测" path="enabled">
-                      <n-switch
-                        v-model:value="currentRegion.enabled"
-                        size="medium"
-                      >
-                        <template #checked>启用</template>
-                        <template #unchecked>禁用</template>
-                      </n-switch>
-                    </n-form-item>
-
-                    <n-form-item
-                      v-if="currentRegion.enabled"
-                      label="检测敏感度"
-                      path="sensitivity"
-                    >
-                      <n-slider
-                        v-model:value="currentRegion.sensitivity"
-                        :min="0.1"
-                        :max="1.0"
-                        :step="0.1"
-                        :format-tooltip="formatSensitivityTooltip"
-                      />
-                      <n-text depth="3" style="font-size: 12px; margin-top: 4px;">
-                        敏感度越高，检测越严格
-                      </n-text>
-                    </n-form-item>
-
-                    <n-form-item
-                      v-if="currentRegion.enabled"
-                      label="最小停留时间（秒）"
-                      path="minDuration"
-                    >
-                      <n-input-number
-                        v-model:value="currentRegion.minDuration"
-                        :min="1"
-                        :max="300"
-                        placeholder="最小停留时间"
-                        style="width: 100%"
-                      />
-                    </n-form-item>
-
-                    <!-- 告警设置 -->
-                    <n-divider title-placement="left">
-                      <n-text depth="2">告警设置</n-text>
-                    </n-divider>
-
-                    <n-form-item label="启用告警" path="alertEnabled">
-                      <n-switch
-                        v-model:value="currentRegion.alertEnabled"
-                        size="medium"
-                      >
-                        <template #checked>启用</template>
-                        <template #unchecked>禁用</template>
-                      </n-switch>
-                    </n-form-item>
-
-                    <n-form-item
-                      v-if="currentRegion.alertEnabled"
-                      label="告警级别"
-                      path="alertLevel"
-                    >
-                      <n-select
-                        v-model:value="currentRegion.alertLevel"
-                        :options="alertLevelOptions"
-                        placeholder="选择告警级别"
-                      />
-                    </n-form-item>
-
-                    <!-- 操作按钮 -->
-                    <n-form-item>
-                      <n-space>
-                        <n-button
-                          type="primary"
-                          @click="saveCurrentRegion"
-                          :loading="saving"
-                        >
-                          <template #icon>
-                            <n-icon><SaveOutline /></n-icon>
-                          </template>
-                          {{ currentRegion.id ? '更新区域' : '保存区域' }}
-                        </n-button>
-
-                        <n-button @click="cancelEdit">
-                          <template #icon>
-                            <n-icon><CloseOutline /></n-icon>
-                          </template>
-                          取消
-                        </n-button>
-
-                        <n-button
-                          v-if="currentRegion.id"
-                          type="error"
-                          @click="deleteCurrentRegion"
-                          :loading="deleting"
-                        >
-                          <template #icon>
-                            <n-icon><TrashOutline /></n-icon>
-                          </template>
-                          删除
-                        </n-button>
-                      </n-space>
-                    </n-form-item>
-                  </n-form>
+                <div v-if="currentRegion.id || isDrawing">
+                  <RegionForm
+                    :current-region="currentRegion"
+                    :is-drawing="isDrawing"
+                    :selected-camera="selectedCamera"
+                    :background-image="regionStore.backgroundImage"
+                    :saving="saving"
+                    @start-drawing="startDrawingMode"
+                    @submit="handleRegionSubmit"
+                    @cancel="cancelRegionEdit"
+                  />
                 </div>
 
                 <!-- 空状态提示 -->
@@ -368,136 +196,19 @@
                   </n-space>
                 </template>
 
-                <!-- 区域列表 -->
-                <div class="region-list-section">
-                  <n-space vertical size="medium">
-                    <n-card
-                      v-for="region in regions"
-                      :key="region.id"
-                      size="small"
-                      :class="{
-                        'region-card': true,
-                        'region-card-selected': selectedRegionId === region.id,
-                        'region-card-disabled': !region.enabled
-                      }"
-                    >
-                      <template #header>
-                        <n-space align="center" justify="space-between">
-                          <n-space align="center" size="small">
-                            <n-icon
-                              :color="getRegionTypeColor(region.type)"
-                              size="16"
-                            >
-                              <component :is="getRegionTypeIcon(region.type)" />
-                            </n-icon>
-                            <n-text strong>{{ region.name }}</n-text>
-                            <n-tag
-                              :type="region.enabled ? 'success' : 'default'"
-                              size="small"
-                            >
-                              {{ region.enabled ? '启用' : '禁用' }}
-                            </n-tag>
-                          </n-space>
-
-                          <n-space align="center" size="small">
-                            <n-dropdown
-                              :options="getRegionActions(region)"
-                              @select="onRegionActionSelect($event, region)"
-                              trigger="click"
-                              @click.stop
-                            >
-                              <n-button
-                                size="small"
-                                quaternary
-                                circle
-                                @click.stop
-                              >
-                                <template #icon>
-                                  <n-icon><EllipsisVerticalOutline /></n-icon>
-                                </template>
-                              </n-button>
-                            </n-dropdown>
-                          </n-space>
-                        </n-space>
-                      </template>
-
-                      <n-space vertical size="small">
-                        <n-text depth="3">
-                          类型：{{ getRegionTypeLabel(region.type) }}
-                        </n-text>
-                        <n-text v-if="region.description" depth="3">
-                          {{ region.description }}
-                        </n-text>
-                        <n-space size="small" justify="space-between" align="center">
-                          <n-space size="small">
-                            <n-tag size="small" type="info">
-                              敏感度：{{ ((region.sensitivity ?? 0.8) * 100).toFixed(0) }}%
-                            </n-tag>
-                            <n-tag size="small" type="warning">
-                              停留：{{ region.minDuration }}s
-                            </n-tag>
-                            <n-tag
-                              v-if="region.alertEnabled"
-                              size="small"
-                              :type="getAlertLevelType(region.alertLevel)"
-                            >
-                              {{ getAlertLevelLabel(region.alertLevel) }}
-                            </n-tag>
-                          </n-space>
-
-                          <!-- 编辑和删除按钮放在右下角，与n-tag水平对齐 -->
-                          <n-space size="small">
-                            <n-button
-                              size="small"
-                              type="primary"
-                              quaternary
-                              @click.stop="selectRegion(region)"
-                            >
-                              <template #icon>
-                                <n-icon><CreateOutline /></n-icon>
-                              </template>
-                              编辑
-                            </n-button>
-
-                            <n-button
-                              size="small"
-                              type="error"
-                              quaternary
-                              @click.stop="handleDeleteRegion(region)"
-                            >
-                              <template #icon>
-                                <n-icon><TrashOutline /></n-icon>
-                              </template>
-                              删除
-                            </n-button>
-                          </n-space>
-                        </n-space>
-                      </n-space>
-                    </n-card>
-
-                    <!-- 空状态 -->
-                    <n-empty
-                      v-if="regions.length === 0"
-                      description="暂无配置的区域"
-                      size="medium"
-                    >
-                      <template #icon>
-                        <n-icon size="48" color="#d0d0d0">
-                          <LayersOutline />
-                        </n-icon>
-                      </template>
-                      <template #extra>
-                        <n-button
-                          type="primary"
-                          @click="startDrawingMode"
-                          :disabled="!selectedCamera && !regionStore.backgroundImage"
-                        >
-                          绘制第一个区域
-                        </n-button>
-                      </template>
-                    </n-empty>
-                  </n-space>
-                </div>
+                <RegionList
+                  :regions="regions"
+                  :selected-region-id="selectedRegionId"
+                  :selected-camera="selectedCamera"
+                  :background-image="regionStore.backgroundImage"
+                  :saving="saving"
+                  @select-region="selectRegion"
+                  @edit-region="selectRegion"
+                  @delete-region="handleDeleteRegion"
+                  @save-all="saveAllRegions"
+                  @start-drawing="startDrawingMode"
+                  @batch-action="handleRegionBatchAction"
+                />
               </n-tab-pane>
             </n-tabs>
           </div>
@@ -505,163 +216,22 @@
 
         <!-- 右侧画布区域 -->
         <n-layout-content class="canvas-container">
-          <div class="canvas-wrapper">
-            <!-- 工具栏 -->
-            <div class="canvas-toolbar">
-              <n-space align="center" justify="space-between">
-                <n-space align="center" size="small">
-                  <!-- 显示选项 -->
-                  <n-space size="small">
-                    <n-checkbox
-                      v-model:checked="showGrid"
-                      size="small"
-                    >
-                      网格
-                    </n-checkbox>
-                    <n-checkbox
-                      v-model:checked="showLabels"
-                      size="small"
-                    >
-                      标签
-                    </n-checkbox>
-                    <n-checkbox
-                      v-model:checked="showCoordinates"
-                      size="small"
-                    >
-                      坐标
-                    </n-checkbox>
-                  </n-space>
-                </n-space>
-
-                <n-space align="center" size="small">
-                  <!-- 画布状态 -->
-                  <n-tag
-                    v-if="isDrawing"
-                    type="info"
-                    size="small"
-                  >
-                    <template #icon>
-                      <n-icon><BrushOutline /></n-icon>
-                    </template>
-                    绘制模式
-                  </n-tag>
-
-                  <n-tag
-                    v-if="selectedRegionId"
-                    type="success"
-                    size="small"
-                  >
-                    <template #icon>
-                      <n-icon><CheckmarkCircleOutline /></n-icon>
-                    </template>
-                    已选择区域
-                  </n-tag>
-
-                  <!-- 清除所有 -->
-                  <n-button
-                    v-if="regions.length > 0"
-                    size="small"
-                    type="error"
-                    @click="clearAllRegions"
-                  >
-                    <template #icon>
-                      <n-icon><TrashOutline /></n-icon>
-                    </template>
-                    清除所有
-                  </n-button>
-                </n-space>
-              </n-space>
-            </div>
-
-            <!-- 画布主体 -->
-            <div class="canvas-main" ref="canvasContainer">
-              <canvas
-                ref="canvas"
-                class="region-canvas"
-                @mousedown="handleCanvasMouseDown"
-                @mousemove="handleCanvasMouseMove"
-                @mouseup="handleCanvasMouseUp"
-                @dblclick.stop="handleCanvasDoubleClick"
-                @wheel="handleCanvasWheel"
-                @contextmenu.prevent
-              ></canvas>
-
-              <!-- 画布覆盖层 -->
-              <div class="canvas-overlay">
-                <!-- 坐标显示 -->
-                <div
-                  v-if="showCoordinates && mousePosition"
-                  class="coordinate-display"
-                  :style="{
-                    left: mousePosition.x + 10 + 'px',
-                    top: mousePosition.y - 30 + 'px'
-                  }"
-                >
-                  {{ Math.round(mousePosition.canvasX) }}, {{ Math.round(mousePosition.canvasY) }}
-                </div>
-
-                <!-- 绘制提示 -->
-                <div
-                  v-if="isDrawing && currentPoints.length === 0"
-                  class="draw-hint"
-                >
-                  <n-icon size="24"><LocationOutline /></n-icon>
-                  <span>点击开始绘制区域</span>
-                </div>
-
-                <div
-                  v-if="isDrawing && currentPoints.length > 0"
-                  class="draw-hint"
-                >
-                  <n-icon size="24"><BrushOutline /></n-icon>
-                  <span>继续点击绘制，双击完成</span>
-                </div>
-              </div>
-
-              <!-- 加载状态 -->
-              <div v-if="loading" class="canvas-loading">
-                <n-spin size="large">
-                  <template #description>
-                    加载画面中...
-                  </template>
-                </n-spin>
-              </div>
-
-              <!-- 空状态 -->
-              <div
-                v-if="!selectedCamera && !regionStore.backgroundImage && !loading"
-                class="canvas-empty"
-              >
-                <n-empty
-                  description="请选择摄像头或上传图片开始配置"
-                  size="large"
-                >
-                  <template #icon>
-                    <n-icon size="64" color="#d0d0d0">
-                      <CameraOutline />
-                    </n-icon>
-                  </template>
-                  <template #extra>
-                    <n-space>
-                      <n-button
-                        type="primary"
-                        @click="focusCameraSelect"
-                      >
-                        选择摄像头
-                      </n-button>
-                      <n-upload
-                        :show-file-list="false"
-                        accept="image/*"
-                        @change="handleImageUpload"
-                      >
-                        <n-button>上传图片</n-button>
-                      </n-upload>
-                    </n-space>
-                  </template>
-                </n-empty>
-              </div>
-            </div>
-          </div>
+          <RegionCanvas
+            :regions="regions"
+            :selected-region-id="selectedRegionId"
+            :background-image="regionStore.backgroundImage"
+            :selected-camera="selectedCamera"
+            :is-drawing="isDrawing"
+            :current-points="currentPoints"
+            v-model:show-grid="showGrid"
+            v-model:show-labels="showLabels"
+            v-model:show-coordinates="showCoordinates"
+            @canvas-click="handleCanvasClick"
+            @canvas-double-click="handleCanvasDoubleClick"
+            @region-select="selectRegion"
+            @mouse-move="handleMouseMove"
+            @clear-all="clearAllRegions"
+          />
         </n-layout-content>
       </n-layout>
     </div>
@@ -728,6 +298,9 @@ import { useMessage, useDialog } from 'naive-ui'
 import { useRegionStore } from '@/stores/region'
 import { useCameraStore } from '@/stores/camera'
 import PageHeader from '@/components/common/PageHeader.vue'
+import RegionForm from '@/components/RegionConfig/RegionForm.vue'
+import RegionList from '@/components/RegionConfig/RegionList.vue'
+import RegionCanvas from '@/components/RegionConfig/RegionCanvas.vue'
 import type { Region } from '@/api/region'
 import type { UploadFileInfo, SelectInst } from 'naive-ui'
 
@@ -921,6 +494,8 @@ const findRegionAtPoint = (canvasX: number, canvasY: number): Region | null => {
   // 从后往前遍历，优先选择最后绘制的区域（在上层的区域）
   for (let i = regions.value.length - 1; i >= 0; i--) {
     const region = regions.value[i]
+    // 防御性检查：确保 points 存在且为数组
+    if (!region.points || !Array.isArray(region.points)) continue
     // 将区域的图片坐标转换为画布坐标进行点击检测
     const canvasPoints = region.points.map(point => imageToCanvasCoords(point.x, point.y))
     if (isPointInPolygon(canvasX, canvasY, canvasPoints)) {
@@ -1506,7 +1081,8 @@ const drawGrid = (ctx: CanvasRenderingContext2D) => {
 }
 
 const drawRegion = (ctx: CanvasRenderingContext2D, region: Region, isSelected: boolean) => {
-  if (!region.points || region.points.length < 3) return
+  // 防御性检查：确保 points 存在、为数组且至少有3个点
+  if (!region.points || !Array.isArray(region.points) || region.points.length < 3) return
 
   // 将区域的图片坐标转换为画布坐标进行绘制
   const canvasPoints = region.points.map(point => imageToCanvasCoords(point.x, point.y))
@@ -1727,6 +1303,42 @@ const handleDeleteRegion = (region: Region) => {
       drawCanvas()
     }
   })
+}
+
+// 子组件事件处理方法
+const handleRegionSubmit = async (region: any) => {
+  if (currentRegion.value.id) {
+    // 更新现有区域
+    await updateRegion(region)
+  } else {
+    // 创建新区域
+    await createRegion(region)
+  }
+}
+
+const handleCanvasClick = (point: { x: number; y: number }) => {
+  handleCanvasMouseDown({ clientX: point.x, clientY: point.y } as MouseEvent)
+}
+
+const handleMouseMove = (position: any) => {
+  mousePosition.value = position
+}
+
+const cancelRegionEdit = () => {
+  cancelEdit()
+}
+
+const handleRegionBatchAction = (action: string) => {
+  if (action.startsWith('enable_')) {
+    const regionId = action.replace('enable_', '')
+    regionStore.updateRegion(regionId, { enabled: true })
+  } else if (action.startsWith('disable_')) {
+    const regionId = action.replace('disable_', '')
+    regionStore.updateRegion(regionId, { enabled: false })
+  } else {
+    batchAction.value = action
+    showBatchModal.value = true
+  }
 }
 
 const handleRegionAction = async (key: string, region: Region) => {

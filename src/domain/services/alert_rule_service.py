@@ -168,3 +168,36 @@ class AlertRuleService:
         except Exception as e:
             logger.error(f"更新告警规则失败: {e}")
             raise
+
+    async def delete_alert_rule(self, rule_id: int) -> Dict[str, Any]:
+        """删除告警规则.
+
+        Args:
+            rule_id: 告警规则ID
+
+        Returns:
+            包含删除结果的字典
+
+        Raises:
+            ValueError: 如果告警规则不存在
+        """
+        try:
+            # 查找告警规则
+            rule = await self.alert_rule_repository.find_by_id(rule_id)
+            if not rule:
+                raise ValueError(f"告警规则不存在: {rule_id}")
+
+            # 删除规则
+            deleted = await self.alert_rule_repository.delete(rule_id)
+
+            if deleted:
+                logger.info(f"告警规则删除成功: {rule_id}")
+                return {"ok": True, "id": rule_id}
+            else:
+                raise ValueError(f"告警规则删除失败: {rule_id}")
+
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.error(f"删除告警规则失败: {e}")
+            raise

@@ -13,6 +13,9 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
+from ..schemas.error_schemas import ErrorCode
+from ..utils.error_helpers import raise_http_exception
+
 router = APIRouter(prefix="/api/v1/export", tags=["Export"])
 logger = logging.getLogger(__name__)
 
@@ -26,10 +29,18 @@ except ImportError:
 def _ensure_domain_service():
     """确保领域服务可用，如果不可用则抛出HTTP异常."""
     if get_detection_service_domain is None:
-        raise HTTPException(status_code=503, detail="检测领域服务不可用，请联系系统管理员")
+        raise raise_http_exception(
+            status_code=503,
+            message="检测领域服务不可用，请联系系统管理员",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
     service = get_detection_service_domain()
     if service is None:
-        raise HTTPException(status_code=503, detail="检测领域服务未初始化，请联系系统管理员")
+        raise raise_http_exception(
+            status_code=503,
+            message="检测领域服务未初始化，请联系系统管理员",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
     return service
 
 
@@ -172,17 +183,27 @@ async def export_detection_records(  # noqa: C901
                     start_time.replace("Z", "+00:00")
                 )
             except ValueError:
-                raise HTTPException(status_code=400, detail="开始时间格式错误，请使用ISO格式")
+                raise raise_http_exception(
+                    status_code=400,
+                    message="开始时间格式错误，请使用ISO格式",
+                    error_code=ErrorCode.VALIDATION_ERROR,
+                )
         if end_time:
             try:
                 end_datetime = datetime.fromisoformat(end_time.replace("Z", "+00:00"))
             except ValueError:
-                raise HTTPException(status_code=400, detail="结束时间格式错误，请使用ISO格式")
+                raise raise_http_exception(
+                    status_code=400,
+                    message="结束时间格式错误，请使用ISO格式",
+                    error_code=ErrorCode.VALIDATION_ERROR,
+                )
 
         # 检查camera_id
         if not camera_id or camera_id == "all":
-            raise HTTPException(
-                status_code=400, detail="导出检测记录需要指定camera_id，暂不支持导出所有摄像头的数据"
+            raise raise_http_exception(
+                status_code=400,
+                message="导出检测记录需要指定camera_id，暂不支持导出所有摄像头的数据",
+                error_code=ErrorCode.VALIDATION_ERROR,
             )
 
         # 定义CSV表头
@@ -216,7 +237,11 @@ async def export_detection_records(  # noqa: C901
         )
 
         if not quick_check.get("records"):
-            raise HTTPException(status_code=404, detail="没有找到符合条件的检测记录")
+            raise raise_http_exception(
+                status_code=404,
+                message="没有找到符合条件的检测记录",
+                error_code=ErrorCode.RESOURCE_NOT_FOUND,
+            )
 
         # 使用流式生成器，边查询边生成CSV
         async def generate_csv_chunks():
@@ -299,7 +324,12 @@ async def export_detection_records(  # noqa: C901
         raise
     except Exception as e:
         logger.error(f"导出检测记录失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"导出检测记录失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="导出检测记录失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
 
 
 @router.get("/violations", summary="导出违规记录")
@@ -359,7 +389,11 @@ async def export_violations(
         )
 
         if not quick_check.get("violations"):
-            raise HTTPException(status_code=404, detail="没有找到符合条件的违规记录")
+            raise raise_http_exception(
+                status_code=404,
+                message="没有找到符合条件的违规记录",
+                error_code=ErrorCode.RESOURCE_NOT_FOUND,
+            )
 
         # 使用流式生成器
         async def generate_csv_chunks():
@@ -440,7 +474,12 @@ async def export_violations(
         raise
     except Exception as e:
         logger.error(f"导出违规记录失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"导出违规记录失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="导出违规记录失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
 
 
 @router.get("/statistics", summary="导出统计数据")
@@ -481,13 +520,21 @@ async def export_statistics(
                     start_time.replace("Z", "+00:00")
                 )
             except ValueError:
-                raise HTTPException(status_code=400, detail="开始时间格式错误，请使用ISO格式")
+                raise raise_http_exception(
+                    status_code=400,
+                    message="开始时间格式错误，请使用ISO格式",
+                    error_code=ErrorCode.VALIDATION_ERROR,
+                )
 
         if end_time:
             try:
                 end_datetime = datetime.fromisoformat(end_time.replace("Z", "+00:00"))
             except ValueError:
-                raise HTTPException(status_code=400, detail="结束时间格式错误，请使用ISO格式")
+                raise raise_http_exception(
+                    status_code=400,
+                    message="结束时间格式错误，请使用ISO格式",
+                    error_code=ErrorCode.VALIDATION_ERROR,
+                )
 
         # 如果没有提供时间范围，使用默认天数
         if not start_datetime or not end_datetime:
@@ -508,7 +555,11 @@ async def export_statistics(
         )
 
         if not daily_stats:
-            raise HTTPException(status_code=404, detail="没有找到符合条件的统计数据")
+            raise raise_http_exception(
+                status_code=404,
+                message="没有找到符合条件的统计数据",
+                error_code=ErrorCode.RESOURCE_NOT_FOUND,
+            )
 
         # 定义CSV表头
         headers = [
@@ -537,7 +588,11 @@ async def export_statistics(
             )
 
         if not stats_list:
-            raise HTTPException(status_code=404, detail="没有找到符合条件的统计数据")
+            raise raise_http_exception(
+                status_code=404,
+                message="没有找到符合条件的统计数据",
+                error_code=ErrorCode.RESOURCE_NOT_FOUND,
+            )
 
         # 生成CSV（统计数据量小，可以直接生成）
         csv_stream = _generate_csv(stats_list, headers)
@@ -561,4 +616,9 @@ async def export_statistics(
         raise
     except Exception as e:
         logger.error(f"导出统计数据失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"导出统计数据失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="导出统计数据失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )

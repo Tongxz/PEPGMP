@@ -13,6 +13,8 @@ from pydantic import BaseModel
 
 from ...utils.error_handler import ErrorCategory, ErrorSeverity, get_error_handler
 from ...utils.error_monitor import AlertLevel, get_error_monitor
+from ..schemas.error_schemas import ErrorCode
+from ..utils.error_helpers import raise_http_exception
 
 router = APIRouter(prefix="/monitoring", tags=["错误监控"])
 logger = logging.getLogger(__name__)
@@ -77,7 +79,11 @@ async def get_error_stats():
 
     except Exception as e:
         logger.error(f"获取错误统计失败: {e}")
-        raise HTTPException(status_code=500, detail="获取错误统计失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取错误统计失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.get("/errors/by-category/{category}", summary="根据分类获取错误")
@@ -90,7 +96,11 @@ async def get_errors_by_category(
         try:
             error_category = ErrorCategory(category)
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"无效的错误分类: {category}")
+            raise raise_http_exception(
+                status_code=400,
+                message=f"无效的错误分类: {category}",
+                error_code=ErrorCode.VALIDATION_ERROR,
+            )
 
         error_handler = get_error_handler()
         errors = error_handler.error_tracker.get_errors_by_category(error_category)
@@ -128,7 +138,11 @@ async def get_errors_by_category(
         raise
     except Exception as e:
         logger.error(f"获取分类错误失败: {e}")
-        raise HTTPException(status_code=500, detail="获取分类错误失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取分类错误失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.get("/errors/by-severity/{severity}", summary="根据严重程度获取错误")
@@ -141,7 +155,11 @@ async def get_errors_by_severity(
         try:
             error_severity = ErrorSeverity(severity)
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"无效的错误严重程度: {severity}")
+            raise raise_http_exception(
+                status_code=400,
+                message=f"无效的错误严重程度: {severity}",
+                error_code=ErrorCode.VALIDATION_ERROR,
+            )
 
         error_handler = get_error_handler()
         errors = error_handler.error_tracker.get_errors_by_severity(error_severity)
@@ -179,7 +197,11 @@ async def get_errors_by_severity(
         raise
     except Exception as e:
         logger.error(f"获取严重程度错误失败: {e}")
-        raise HTTPException(status_code=500, detail="获取严重程度错误失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取严重程度错误失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.get("/health", response_model=HealthStatusResponse, summary="获取系统健康状态")
@@ -193,7 +215,11 @@ async def get_system_health():
 
     except Exception as e:
         logger.error(f"获取健康状态失败: {e}")
-        raise HTTPException(status_code=500, detail="获取健康状态失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取健康状态失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.get("/health/detailed", response_model=HealthCheckResponse, summary="获取详细健康检查")
@@ -207,7 +233,11 @@ async def get_detailed_health_check():
 
     except Exception as e:
         logger.error(f"获取详细健康检查失败: {e}")
-        raise HTTPException(status_code=500, detail="获取详细健康检查失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取详细健康检查失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.get("/alerts/active", summary="获取活跃告警")
@@ -235,7 +265,11 @@ async def get_active_alerts():
 
     except Exception as e:
         logger.error(f"获取活跃告警失败: {e}")
-        raise HTTPException(status_code=500, detail="获取活跃告警失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取活跃告警失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.get("/alerts/history", summary="获取告警历史")
@@ -265,7 +299,11 @@ async def get_alert_history(
 
     except Exception as e:
         logger.error(f"获取告警历史失败: {e}")
-        raise HTTPException(status_code=500, detail="获取告警历史失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取告警历史失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.post("/alerts/{alert_id}/resolve", summary="解决告警")
@@ -285,7 +323,11 @@ async def resolve_alert(alert_id: str):
 
     except Exception as e:
         logger.error(f"解决告警失败: {e}")
-        raise HTTPException(status_code=500, detail="解决告警失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="解决告警失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.get("/performance", summary="获取性能统计")
@@ -294,16 +336,20 @@ async def get_performance_stats():
     try:
         # 这里可以集成性能监控数据
         # 暂时返回基础信息
+        from datetime import datetime
+
         return {
             "message": "性能统计功能开发中",
-            "timestamp": error_monitor.active_alerts.get(alert_id, {}).get(
-                "resolved_at"
-            ),
+            "timestamp": datetime.utcnow().isoformat() + "Z",
         }
 
     except Exception as e:
         logger.error(f"获取性能统计失败: {e}")
-        raise HTTPException(status_code=500, detail="获取性能统计失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取性能统计失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.post("/monitoring/start", summary="启动错误监控")
@@ -317,7 +363,11 @@ async def start_monitoring():
 
     except Exception as e:
         logger.error(f"启动监控失败: {e}")
-        raise HTTPException(status_code=500, detail="启动监控失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="启动监控失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.post("/monitoring/stop", summary="停止错误监控")
@@ -331,7 +381,11 @@ async def stop_monitoring():
 
     except Exception as e:
         logger.error(f"停止监控失败: {e}")
-        raise HTTPException(status_code=500, detail="停止监控失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="停止监控失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.get("/monitoring/status", summary="获取监控状态")
@@ -350,7 +404,11 @@ async def get_monitoring_status():
 
     except Exception as e:
         logger.error(f"获取监控状态失败: {e}")
-        raise HTTPException(status_code=500, detail="获取监控状态失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取监控状态失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 # 错误分类和严重程度枚举端点

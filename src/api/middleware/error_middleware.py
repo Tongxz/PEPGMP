@@ -6,6 +6,7 @@ Error Handling Middleware
 """
 
 import logging
+import os
 import time
 import traceback
 from typing import Any, Callable, Dict
@@ -22,8 +23,15 @@ from ...utils.error_handler import (
     get_error_handler,
 )
 from ...utils.error_monitor import get_error_monitor
+from ..utils.error_helpers import create_error_response
 
 logger = logging.getLogger(__name__)
+
+
+def is_development() -> bool:
+    """检查是否为开发环境"""
+    env = os.getenv("ENVIRONMENT", "development").lower()
+    return env in ("dev", "development")
 
 
 class ErrorHandlingMiddleware(BaseHTTPMiddleware):
@@ -71,28 +79,39 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
         except HTTPException as e:
             # FastAPI HTTP异常
             self._handle_http_exception(e, context, start_time)
-            return JSONResponse(
-                status_code=e.status_code,
-                content={
-                    "error": "HTTP Error",
-                    "message": e.detail,
-                    "request_id": request_id,
-                    "timestamp": time.time(),
-                },
-            )
+
+            # 检查detail是否已经是统一格式（字典）
+            if isinstance(e.detail, dict) and "error" in e.detail:
+                # 已经是统一格式，添加request_id（如果缺失）
+                error_response = e.detail.copy()
+                if "error" in error_response and isinstance(
+                    error_response["error"], dict
+                ):
+                    if (
+                        "request_id" not in error_response["error"]
+                        or error_response["error"]["request_id"] is None
+                    ):
+                        error_response["error"]["request_id"] = request_id
+                return JSONResponse(status_code=e.status_code, content=error_response)
+            else:
+                # 旧格式（字符串），转换为统一格式
+                error_response = create_error_response(
+                    status_code=e.status_code,
+                    message=str(e.detail) if e.detail else "HTTP错误",
+                    request_id=request_id,
+                )
+                return JSONResponse(status_code=e.status_code, content=error_response)
 
         except Exception as e:
             # 其他异常
             self._handle_general_exception(e, context, start_time)
-            return JSONResponse(
+            error_response = create_error_response(
                 status_code=500,
-                content={
-                    "error": "Internal Server Error",
-                    "message": "服务器内部错误",
-                    "request_id": request_id,
-                    "timestamp": time.time(),
-                },
+                message="服务器内部错误",
+                details=str(e) if is_development() else None,
+                request_id=request_id,
             )
+            return JSONResponse(status_code=500, content=error_response)
 
     def _record_successful_request(self, start_time: float, context: ErrorContext):
         """记录成功请求"""
@@ -319,17 +338,20 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         if self.is_development:
             return True
 
+        # 本地请求（127.0.0.1, localhost, ::1）跳过速率限制
+        if client_ip in ("127.0.0.1", "localhost", "::1", "unknown"):
+            return True
+
         current_time = time.time()
         current_time - self.rate_limit_window
 
-        # 清理过期的请求记录
-        if client_ip in self.request_counts:
-            # 这里应该实现更复杂的速率限制逻辑
-            # 简化版本：检查最近1分钟的请求数
-            pass
+        # 清理过期的请求记录（这里简化处理，实际应该使用时间窗口）
+        # 由于是简化版本，我们使用固定时间窗口重置计数器
+        if client_ip not in self.request_counts:
+            self.request_counts[client_ip] = 0
 
         # 更新请求计数
-        self.request_counts[client_ip] = self.request_counts.get(client_ip, 0) + 1
+        self.request_counts[client_ip] = self.request_counts[client_ip] + 1
 
         # 检查是否超过限制
         if self.request_counts[client_ip] > self.rate_limit_threshold:

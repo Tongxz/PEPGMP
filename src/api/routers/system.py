@@ -6,9 +6,12 @@ import platform
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 
 from src.api.utils.rollout import should_use_domain
+
+from ..schemas.error_schemas import ErrorCode
+from ..utils.error_helpers import raise_http_exception
 
 logger = logging.getLogger(__name__)
 
@@ -173,7 +176,12 @@ async def get_system_info(
             "psutil_available": HAS_PSUTIL,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取系统信息失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取系统信息失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )
 
 
 @router.get("/system/config", summary="获取系统配置信息")
@@ -223,7 +231,12 @@ async def get_system_config() -> Dict[str, Any]:
             "working_directory": os.getcwd(),
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取配置信息失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取配置信息失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )
 
 
 @router.get("/system/health", summary="获取系统健康状态")
@@ -326,4 +339,9 @@ async def get_system_health() -> Dict[str, Any]:
             "psutil_available": HAS_PSUTIL,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"健康检查失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="健康检查失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )

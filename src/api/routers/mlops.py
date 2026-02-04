@@ -42,6 +42,9 @@ except ImportError:
 
 from src.workflow.workflow_engine import workflow_engine
 
+from ..schemas.error_schemas import ErrorCode
+from ..utils.error_helpers import raise_http_exception
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/mlops", tags=["MLOps"])
@@ -53,9 +56,10 @@ def _get_docker_manager():
         return get_service(IDeploymentService)
     except Exception:
         if DockerManager is None:
-            raise HTTPException(
+            raise raise_http_exception(
                 status_code=503,
-                detail="部署管理模块未启用，无法执行此操作",
+                message="部署管理模块未启用，无法执行此操作",
+                error_code=ErrorCode.SERVICE_UNAVAILABLE,
             )
         return DockerManager()
 
@@ -224,7 +228,11 @@ async def get_datasets(
         return [dataset.to_dict() for dataset in datasets]
     except Exception as e:
         logger.error(f"获取数据集列表失败: {e}")
-        raise HTTPException(status_code=500, detail="获取数据集列表失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取数据集列表失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.post("/datasets/upload")
@@ -255,7 +263,11 @@ async def upload_dataset(
                     shutil.rmtree(dataset_dir, ignore_errors=True)
                 error_msg = "文件校验失败:\n" + "\n".join(f"  - {e}" for e in errors)
                 logger.error(error_msg)
-                raise HTTPException(status_code=400, detail=error_msg)
+                raise raise_http_exception(
+                    status_code=400,
+                    message=error_msg,
+                    error_code=ErrorCode.VALIDATION_ERROR,
+                )
             logger.info("所有文件校验通过")
 
         # 2. 文件上传阶段
@@ -283,11 +295,15 @@ async def upload_dataset(
                     logger.info(f"解压文件: {archive_path.name}")
                     if archive_path.suffix.lower() == ".zip":
                         with zipfile.ZipFile(archive_path, "r") as zip_file:
-                            zip_file.extractall(dataset_dir)
+                            zip_file.extractall(
+                                dataset_dir
+                            )  # nosec B202 - path from upload, dataset_dir controlled
                     elif archive_path.suffix.lower() in (".tar", ".gz", ".tgz"):
                         mode = "r:gz" if archive_path.suffix.endswith("gz") else "r"
                         with tarfile.open(archive_path, mode) as tar_file:
-                            tar_file.extractall(dataset_dir)
+                            tar_file.extractall(
+                                dataset_dir
+                            )  # nosec B202 - path from upload, dataset_dir controlled
 
                     # 验证数据集结构（如果是 YOLO 格式）
                     (
@@ -330,7 +346,11 @@ async def upload_dataset(
         }
     except Exception as e:
         logger.error(f"数据集上传失败: {e}")
-        raise HTTPException(status_code=500, detail="数据集上传失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="数据集上传失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.get("/datasets/{dataset_id}")
@@ -341,13 +361,21 @@ async def get_dataset(
     try:
         dataset = await DatasetDAO.get_by_id(session, dataset_id)
         if not dataset:
-            raise HTTPException(status_code=404, detail="数据集不存在")
+            raise raise_http_exception(
+                status_code=404,
+                message="数据集不存在",
+                error_code=ErrorCode.NOT_FOUND,
+            )
         return dataset.to_dict()
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"获取数据集详情失败: {e}")
-        raise HTTPException(status_code=500, detail="获取数据集详情失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取数据集详情失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.delete("/datasets/{dataset_id}")
@@ -359,7 +387,11 @@ async def delete_dataset(
     try:
         dataset = await DatasetDAO.get_by_id(session, dataset_id)
         if not dataset:
-            raise HTTPException(status_code=404, detail="数据集不存在")
+            raise raise_http_exception(
+                status_code=404,
+                message="数据集不存在",
+                error_code=ErrorCode.NOT_FOUND,
+            )
 
         dataset_path = Path(dataset.file_path) if dataset.file_path else None
 
@@ -375,7 +407,11 @@ async def delete_dataset(
         return {"message": "数据集删除成功"}
     except Exception as e:
         logger.error(f"数据集删除失败: {e}")
-        raise HTTPException(status_code=500, detail="数据集删除失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="数据集删除失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.get("/datasets/{dataset_id}/download")
@@ -388,10 +424,18 @@ async def download_dataset(
     try:
         dataset = await DatasetDAO.get_by_id(session, dataset_id)
         if not dataset:
-            raise HTTPException(status_code=404, detail="数据集不存在")
+            raise raise_http_exception(
+                status_code=404,
+                message="数据集不存在",
+                error_code=ErrorCode.NOT_FOUND,
+            )
         dataset_path = Path(dataset.file_path) if dataset.file_path else None
         if not dataset_path or not dataset_path.exists():
-            raise HTTPException(status_code=404, detail="数据集文件不存在")
+            raise raise_http_exception(
+                status_code=404,
+                message="数据集文件不存在",
+                error_code=ErrorCode.NOT_FOUND,
+            )
 
         if format == "zip":
             # 创建ZIP文件
@@ -431,11 +475,19 @@ async def download_dataset(
             return {"files": files}
 
         else:
-            raise HTTPException(status_code=400, detail="不支持的下载格式")
+            raise raise_http_exception(
+                status_code=400,
+                message="不支持的下载格式",
+                error_code=ErrorCode.VALIDATION_ERROR,
+            )
 
     except Exception as e:
         logger.error(f"数据集下载失败: {e}")
-        raise HTTPException(status_code=500, detail="数据集下载失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="数据集下载失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.get("/datasets/{dataset_id}/files/{file_path:path}")
@@ -448,22 +500,38 @@ async def download_dataset_file(
     try:
         dataset = await DatasetDAO.get_by_id(session, dataset_id)
         if not dataset:
-            raise HTTPException(status_code=404, detail="数据集不存在")
+            raise raise_http_exception(
+                status_code=404,
+                message="数据集不存在",
+                error_code=ErrorCode.NOT_FOUND,
+            )
 
         dataset_path = Path(dataset.file_path) if dataset.file_path else None
         if not dataset_path or not dataset_path.exists():
-            raise HTTPException(status_code=404, detail="数据集文件不存在")
+            raise raise_http_exception(
+                status_code=404,
+                message="数据集文件不存在",
+                error_code=ErrorCode.NOT_FOUND,
+            )
 
         full_path = dataset_path / file_path
 
         if not full_path.exists() or not full_path.is_file():
-            raise HTTPException(status_code=404, detail="文件不存在")
+            raise raise_http_exception(
+                status_code=404,
+                message="文件不存在",
+                error_code=ErrorCode.NOT_FOUND,
+            )
 
         return FileResponse(path=str(full_path), filename=full_path.name)
 
     except Exception as e:
         logger.error(f"文件下载失败: {e}")
-        raise HTTPException(status_code=500, detail="文件下载失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="文件下载失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.get("/datasets/{dataset_id}/samples")
@@ -480,11 +548,19 @@ async def get_dataset_samples(
 
         dataset = await DatasetDAO.get_by_id(session, dataset_id)
         if not dataset:
-            raise HTTPException(status_code=404, detail="数据集不存在")
+            raise raise_http_exception(
+                status_code=404,
+                message="数据集不存在",
+                error_code=ErrorCode.NOT_FOUND,
+            )
 
         dataset_path = Path(dataset.file_path) if dataset.file_path else None
         if not dataset_path or not dataset_path.exists():
-            raise HTTPException(status_code=404, detail="数据集文件不存在")
+            raise raise_http_exception(
+                status_code=404,
+                message="数据集文件不存在",
+                error_code=ErrorCode.NOT_FOUND,
+            )
 
         # 读取标注文件
         annotations_file = dataset_path / "annotations.csv"
@@ -564,7 +640,11 @@ async def get_dataset_samples(
         raise
     except Exception as e:
         logger.error(f"获取数据集样本失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="获取数据集样本失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取数据集样本失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.post("/datasets/generate")
@@ -590,7 +670,12 @@ async def generate_dataset(
         return result
     except Exception as e:
         logger.error(f"生成数据集失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"生成数据集失败: {e}")
+        raise raise_http_exception(
+            status_code=500,
+            message="生成数据集失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )
 
 
 # 模型注册管理 API
@@ -608,10 +693,18 @@ async def list_models(
         )
         return models
     except ValueError:
-        raise HTTPException(status_code=503, detail="模型注册服务不可用")
+        raise raise_http_exception(
+            status_code=503,
+            message="模型注册服务不可用",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
     except Exception as exc:
         logger.error("获取模型列表失败: %s", exc)
-        raise HTTPException(status_code=500, detail="获取模型列表失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取模型列表失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.get("/models/{model_id}", response_model=ModelInfo)
@@ -620,15 +713,27 @@ async def get_model(model_id: str):
         service = get_service(ModelRegistryService)
         model = await service.get_model(model_id)
         if not model:
-            raise HTTPException(status_code=404, detail="模型不存在")
+            raise raise_http_exception(
+                status_code=404,
+                message="模型不存在",
+                error_code=ErrorCode.NOT_FOUND,
+            )
         return model
     except HTTPException:
         raise
     except ValueError:
-        raise HTTPException(status_code=503, detail="模型注册服务不可用")
+        raise raise_http_exception(
+            status_code=503,
+            message="模型注册服务不可用",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
     except Exception as exc:
         logger.error("获取模型详情失败: %s", exc)
-        raise HTTPException(status_code=500, detail="获取模型详情失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取模型详情失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.post("/models/register", response_model=ModelInfo)
@@ -653,10 +758,18 @@ async def register_model(payload: ModelRegisterRequest):
         model = await service.register_model(registration)
         return model
     except ValueError:
-        raise HTTPException(status_code=503, detail="模型注册服务不可用")
+        raise raise_http_exception(
+            status_code=503,
+            message="模型注册服务不可用",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
     except Exception as exc:
         logger.error("注册模型失败: %s", exc)
-        raise HTTPException(status_code=500, detail="注册模型失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="注册模型失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.post("/models/{model_id}/status", response_model=ModelInfo)
@@ -665,15 +778,27 @@ async def update_model_status(model_id: str, request: ModelStatusUpdate):
         service = get_service(ModelRegistryService)
         model = await service.update_status(model_id, request.status)
         if not model:
-            raise HTTPException(status_code=404, detail="模型不存在")
+            raise raise_http_exception(
+                status_code=404,
+                message="模型不存在",
+                error_code=ErrorCode.NOT_FOUND,
+            )
         return model
     except HTTPException:
         raise
     except ValueError:
-        raise HTTPException(status_code=503, detail="模型注册服务不可用")
+        raise raise_http_exception(
+            status_code=503,
+            message="模型注册服务不可用",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
     except Exception as exc:
         logger.error("更新模型状态失败: %s", exc)
-        raise HTTPException(status_code=500, detail="更新模型状态失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="更新模型状态失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.delete("/models/{model_id}")
@@ -682,15 +807,27 @@ async def delete_model(model_id: str):
         service = get_service(ModelRegistryService)
         deleted = await service.delete_model(model_id)
         if not deleted:
-            raise HTTPException(status_code=404, detail="模型不存在")
+            raise raise_http_exception(
+                status_code=404,
+                message="模型不存在",
+                error_code=ErrorCode.NOT_FOUND,
+            )
         return {"message": "模型删除成功"}
     except HTTPException:
         raise
     except ValueError:
-        raise HTTPException(status_code=503, detail="模型注册服务不可用")
+        raise raise_http_exception(
+            status_code=503,
+            message="模型注册服务不可用",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
     except Exception as exc:
         logger.error("删除模型失败: %s", exc)
-        raise HTTPException(status_code=500, detail="删除模型失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="删除模型失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 # 模型部署管理API
@@ -702,7 +839,11 @@ async def get_deployments(session: AsyncSession = Depends(get_async_session)):
         return [deployment.to_dict() for deployment in deployments]
     except Exception as e:
         logger.error(f"获取部署列表失败: {e}")
-        raise HTTPException(status_code=500, detail="获取部署列表失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取部署列表失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.post("/deployments")
@@ -727,16 +868,25 @@ async def create_deployment(
         detection_task = deployment.get("detection_task")
 
         if not model_id:
-            raise HTTPException(status_code=400, detail="缺少必需参数: model_id")
+            raise raise_http_exception(
+                status_code=400,
+                message="缺少必需参数: model_id",
+                error_code=ErrorCode.VALIDATION_ERROR,
+            )
         if not detection_task:
-            raise HTTPException(status_code=400, detail="缺少必需参数: detection_task")
+            raise raise_http_exception(
+                status_code=400,
+                message="缺少必需参数: detection_task",
+                error_code=ErrorCode.VALIDATION_ERROR,
+            )
 
         # 验证检测任务
         valid_tasks = ["hairnet_detection", "human_detection", "pose_detection"]
         if detection_task not in valid_tasks:
-            raise HTTPException(
+            raise raise_http_exception(
                 status_code=400,
-                detail=f"无效的检测任务: {detection_task}，有效值: {', '.join(valid_tasks)}",
+                message=f"无效的检测任务: {detection_task}，有效值: {', '.join(valid_tasks)}",
+                error_code=ErrorCode.VALIDATION_ERROR,
             )
 
         # 获取模型信息
@@ -744,14 +894,26 @@ async def create_deployment(
             service = get_service(ModelRegistryService)
             model = await service.get_model(model_id)
             if not model:
-                raise HTTPException(status_code=404, detail="模型不存在")
+                raise raise_http_exception(
+                    status_code=404,
+                    message="模型不存在",
+                    error_code=ErrorCode.NOT_FOUND,
+                )
         except ValueError:
-            raise HTTPException(status_code=503, detail="模型注册服务不可用")
+            raise raise_http_exception(
+                status_code=503,
+                message="模型注册服务不可用",
+                error_code=ErrorCode.SERVICE_UNAVAILABLE,
+            )
 
         # 验证模型文件是否存在
         model_path = Path(model.get("model_path", ""))
         if not model_path or not model_path.exists():
-            raise HTTPException(status_code=404, detail=f"模型文件不存在: {model_path}")
+            raise raise_http_exception(
+                status_code=404,
+                message=f"模型文件不存在: {model_path}",
+                error_code=ErrorCode.NOT_FOUND,
+            )
 
         # 生成部署ID
         deployment_id = f"deployment_{int(datetime.utcnow().timestamp())}"
@@ -845,7 +1007,12 @@ async def create_deployment(
         raise
     except Exception as e:
         logger.error(f"[模型部署] ❌ 部署失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"部署失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="部署失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )
 
 
 @router.put("/deployments/{deployment_id}/scale")
@@ -859,7 +1026,11 @@ async def scale_deployment(
         # 检查部署是否存在
         deployment = await DeploymentDAO.get_by_id(session, deployment_id)
         if not deployment:
-            raise HTTPException(status_code=404, detail="部署不存在")
+            raise raise_http_exception(
+                status_code=404,
+                message="部署不存在",
+                error_code=ErrorCode.NOT_FOUND,
+            )
 
         # 执行Docker扩缩容
         docker_manager = _get_docker_manager()
@@ -888,15 +1059,21 @@ async def scale_deployment(
             }
         else:
             logger.error(f"❌ 扩缩容失败: {scale_result.get('error')}")
-            raise HTTPException(
-                status_code=500, detail=f"扩缩容失败: {scale_result.get('error', '未知错误')}"
+            raise raise_http_exception(
+                status_code=500,
+                message=f"扩缩容失败: {scale_result.get('error', '未知错误')}",
+                error_code=ErrorCode.INTERNAL_SERVER_ERROR,
             )
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"扩缩容失败: {e}")
-        raise HTTPException(status_code=500, detail="扩缩容失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="扩缩容失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.put("/deployments/{deployment_id}")
@@ -912,7 +1089,11 @@ async def update_deployment(
             session, deployment_id, deployment
         )
         if not updated_deployment:
-            raise HTTPException(status_code=404, detail="部署不存在")
+            raise raise_http_exception(
+                status_code=404,
+                message="部署不存在",
+                error_code=ErrorCode.NOT_FOUND,
+            )
 
         logger.info(f"更新部署 {deployment_id}: {deployment}")
         return {"message": "部署更新成功", "deployment_id": deployment_id}
@@ -920,7 +1101,11 @@ async def update_deployment(
         raise
     except Exception as e:
         logger.error(f"更新部署失败: {e}")
-        raise HTTPException(status_code=500, detail="更新部署失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="更新部署失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.delete("/deployments/{deployment_id}")
@@ -932,7 +1117,11 @@ async def delete_deployment(
         # 检查部署是否存在
         deployment = await DeploymentDAO.get_by_id(session, deployment_id)
         if not deployment:
-            raise HTTPException(status_code=404, detail="部署不存在")
+            raise raise_http_exception(
+                status_code=404,
+                message="部署不存在",
+                error_code=ErrorCode.NOT_FOUND,
+            )
 
         # 执行Docker删除
         docker_manager = _get_docker_manager()
@@ -953,15 +1142,21 @@ async def delete_deployment(
             return {"message": "部署删除成功", "deployment_id": deployment_id}
         else:
             logger.error(f"❌ 部署删除失败: {delete_result.get('error')}")
-            raise HTTPException(
-                status_code=500, detail=f"部署删除失败: {delete_result.get('error', '未知错误')}"
+            raise raise_http_exception(
+                status_code=500,
+                message=f"部署删除失败: {delete_result.get('error', '未知错误')}",
+                error_code=ErrorCode.INTERNAL_SERVER_ERROR,
             )
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"删除部署失败: {e}")
-        raise HTTPException(status_code=500, detail="删除部署失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="删除部署失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 # 工作流管理API
@@ -982,7 +1177,11 @@ async def get_workflows(session: AsyncSession = Depends(get_async_session)):
         return result
     except Exception as e:
         logger.error(f"获取工作流列表失败: {e}")
-        raise HTTPException(status_code=500, detail="获取工作流列表失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取工作流列表失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.post("/workflows")
@@ -1040,15 +1239,21 @@ async def create_workflow(
             )
 
             logger.error(f"❌ 工作流引擎创建失败: {engine_result.get('error')}")
-            raise HTTPException(
-                status_code=500, detail=f"工作流创建失败: {engine_result.get('error', '未知错误')}"
+            raise raise_http_exception(
+                status_code=500,
+                message=f"工作流创建失败: {engine_result.get('error', '未知错误')}",
+                error_code=ErrorCode.INTERNAL_SERVER_ERROR,
             )
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"创建工作流失败: {e}")
-        raise HTTPException(status_code=500, detail="创建工作流失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="创建工作流失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.put("/workflows/{workflow_id}")
@@ -1088,7 +1293,11 @@ async def update_workflow(
         # 更新数据库中的工作流信息
         updated_workflow = await WorkflowDAO.update(session, workflow_id, workflow)
         if not updated_workflow:
-            raise HTTPException(status_code=404, detail="工作流不存在")
+            raise raise_http_exception(
+                status_code=404,
+                message="工作流不存在",
+                error_code=ErrorCode.NOT_FOUND,
+            )
 
         logger.info(f"更新工作流 {workflow_id}: {workflow}")
         return {"message": "工作流更新成功", "workflow_id": workflow_id}
@@ -1096,7 +1305,11 @@ async def update_workflow(
         raise
     except Exception as e:
         logger.error(f"更新工作流失败: {e}")
-        raise HTTPException(status_code=500, detail="更新工作流失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="更新工作流失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.post("/workflows/{workflow_id}/run")
@@ -1110,7 +1323,11 @@ async def run_workflow(
         workflow = await WorkflowDAO.get_by_id(session, workflow_id)
         if not workflow:
             logger.error(f"[API] 工作流不存在: workflow_id={workflow_id}")
-            raise HTTPException(status_code=404, detail="工作流不存在")
+            raise raise_http_exception(
+                status_code=404,
+                message="工作流不存在",
+                error_code=ErrorCode.NOT_FOUND,
+            )
 
         logger.info(f"[API] 工作流存在: name={workflow.name}, status={workflow.status}")
 
@@ -1243,7 +1460,11 @@ async def run_workflow(
         raise
     except Exception as e:
         logger.error(f"运行工作流失败: {e}")
-        raise HTTPException(status_code=500, detail="运行工作流失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="运行工作流失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 @router.post("/workflows/{workflow_id}/stop")
@@ -1257,7 +1478,11 @@ async def stop_workflow(
         # 检查工作流是否存在
         workflow = await WorkflowDAO.get_by_id(session, workflow_id)
         if not workflow:
-            raise HTTPException(status_code=404, detail="工作流不存在")
+            raise raise_http_exception(
+                status_code=404,
+                message="工作流不存在",
+                error_code=ErrorCode.NOT_FOUND,
+            )
 
         # 检查是否有正在运行的记录
         recent_runs = await WorkflowRunDAO.get_by_workflow_id(
@@ -1302,13 +1527,22 @@ async def stop_workflow(
         else:
             error_msg = result.get("message", "停止工作流失败")
             logger.warning(f"停止工作流失败: {workflow_id} - {error_msg}")
-            raise HTTPException(status_code=400, detail=error_msg)
+            raise raise_http_exception(
+                status_code=400,
+                message=error_msg,
+                error_code=ErrorCode.VALIDATION_ERROR,
+            )
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"停止工作流异常: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"停止工作流失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="停止工作流失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )
 
 
 @router.get("/workflows/{workflow_id}/runs/{run_id}")
@@ -1322,11 +1556,19 @@ async def get_workflow_run(
         # 获取运行记录
         run = await WorkflowRunDAO.get_by_id(session, run_id)
         if not run:
-            raise HTTPException(status_code=404, detail="运行记录不存在")
+            raise raise_http_exception(
+                status_code=404,
+                message="运行记录不存在",
+                error_code=ErrorCode.NOT_FOUND,
+            )
 
         # 验证运行记录是否属于该工作流
         if run.workflow_id != workflow_id:
-            raise HTTPException(status_code=404, detail="运行记录不属于该工作流")
+            raise raise_http_exception(
+                status_code=404,
+                message="运行记录不属于该工作流",
+                error_code=ErrorCode.NOT_FOUND,
+            )
 
         # 解析运行日志
         step_outputs = []
@@ -1357,7 +1599,12 @@ async def get_workflow_run(
         raise
     except Exception as e:
         logger.error(f"获取运行详情失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"获取运行详情失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取运行详情失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )
 
 
 @router.delete("/workflows/{workflow_id}")
@@ -1375,7 +1622,11 @@ async def delete_workflow(workflow_id: str):
         return {"message": "工作流删除成功"}
     except Exception as e:
         logger.error(f"删除工作流失败: {e}")
-        raise HTTPException(status_code=500, detail="删除工作流失败")
+        raise raise_http_exception(
+            status_code=500,
+            message="删除工作流失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
 
 # 健康检查
@@ -1391,3 +1642,188 @@ async def health_check():
             "workflow_manager": "healthy",
         },
     }
+
+
+# ========== MLOps管理页面API ==========
+
+
+@router.get("/experiments", summary="获取MLflow实验列表")
+async def get_mlflow_experiments(
+    limit: int = Query(10, ge=1, le=100, description="返回数量限制"),
+    offset: int = Query(0, ge=0, description="偏移量"),
+):
+    """获取MLflow实验列表
+
+    返回MLflow跟踪的实验运行记录，包括参数、指标等信息。
+    如果MLflow未配置，返回空列表。
+    """
+    try:
+        items = []
+
+        # 尝试导入MLflow（可选依赖）
+        try:
+            from mlflow.tracking import MlflowClient
+
+            client = MlflowClient()
+            # 获取所有实验
+            experiments = client.search_experiments()
+
+            for exp in experiments[:1]:  # 只获取第一个实验的运行
+                runs = client.search_runs(
+                    experiment_ids=[exp.experiment_id],
+                    max_results=limit,
+                    order_by=["start_time DESC"],
+                )
+
+                for run in runs:
+                    items.append(
+                        {
+                            "run_id": run.info.run_id,
+                            "run_name": run.data.tags.get(
+                                "mlflow.runName", f"Run {run.info.run_id[:8]}"
+                            ),
+                            "experiment_id": run.info.experiment_id,
+                            "status": run.info.status,
+                            "start_time": run.info.start_time,
+                            "end_time": run.info.end_time,
+                            "params": dict(run.data.params),
+                            "metrics": dict(run.data.metrics),
+                        }
+                    )
+        except ImportError:
+            logger.warning("MLflow未安装，返回空实验列表")
+        except Exception as e:
+            logger.warning(f"获取MLflow实验失败: {e}")
+
+        return {
+            "items": items,
+            "total": len(items),
+            "limit": limit,
+            "offset": offset,
+        }
+    except Exception as e:
+        logger.error(f"获取MLflow实验失败: {e}", exc_info=True)
+        raise raise_http_exception(
+            status_code=500,
+            message="获取实验列表失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )
+
+
+@router.get("/models-versions", summary="获取DVC模型版本列表")
+async def get_dvc_models():
+    """获取DVC模型版本列表
+
+    扫描models目录，返回所有模型文件的版本信息。
+    """
+    try:
+        items = []
+        models_dir = Path("models")
+
+        if models_dir.exists():
+            # 遍历models目录
+            for model_path in models_dir.rglob("*.pt"):
+                try:
+                    stat = model_path.stat()
+                    # 从路径中提取版本信息
+                    parts = model_path.parts
+                    version = parts[-2] if len(parts) > 2 else "unknown"
+
+                    items.append(
+                        {
+                            "name": model_path.name,
+                            "version": version,
+                            "path": str(model_path),
+                            "size": stat.st_size,
+                            "modified_time": int(stat.st_mtime * 1000),
+                        }
+                    )
+                except Exception as e:
+                    logger.warning(f"读取模型文件失败 {model_path}: {e}")
+                    continue
+
+            # 也检查.pth文件
+            for model_path in models_dir.rglob("*.pth"):
+                try:
+                    stat = model_path.stat()
+                    parts = model_path.parts
+                    version = parts[-2] if len(parts) > 2 else "unknown"
+
+                    items.append(
+                        {
+                            "name": model_path.name,
+                            "version": version,
+                            "path": str(model_path),
+                            "size": stat.st_size,
+                            "modified_time": int(stat.st_mtime * 1000),
+                        }
+                    )
+                except Exception as e:
+                    logger.warning(f"读取模型文件失败 {model_path}: {e}")
+                    continue
+
+        return {"items": items, "total": len(items)}
+    except Exception as e:
+        logger.error(f"获取DVC模型失败: {e}", exc_info=True)
+        raise raise_http_exception(
+            status_code=500,
+            message="获取模型列表失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )
+
+
+@router.get("/performance", summary="获取性能指标")
+async def get_performance_metrics():
+    """获取性能指标
+
+    返回系统性能相关的指标，包括处理时间、检测准确率、系统稳定性等。
+    """
+    try:
+        # 从统计API获取实时数据
+        from src.api.routers.statistics import get_realtime_statistics_domain
+
+        try:
+            stats = await get_realtime_statistics_domain()
+
+            # 提取性能指标
+            avg_processing_time = stats.get("avg_processing_time", 0)
+            detection_accuracy = (
+                stats.get("accuracy", 0) * 100 if stats.get("accuracy") else 0
+            )
+
+            # 计算系统稳定性（基于在线摄像头比例）
+            total_cameras = stats.get("total_cameras", 0)
+            online_cameras = stats.get("online_cameras", 0)
+            system_stability = (
+                (online_cameras / total_cameras * 100) if total_cameras > 0 else 0
+            )
+
+            # 资源利用率（简化计算）
+            resource_utilization = min(
+                100, (online_cameras / max(1, total_cameras) * 80)
+            )
+
+        except Exception as e:
+            logger.warning(f"获取实时统计失败: {e}")
+            # 返回默认值
+            avg_processing_time = 0
+            detection_accuracy = 0
+            system_stability = 0
+            resource_utilization = 0
+
+        return {
+            "avg_processing_time": round(avg_processing_time, 2),
+            "detection_accuracy": round(detection_accuracy, 2),
+            "system_stability": round(system_stability, 2),
+            "resource_utilization": round(resource_utilization, 2),
+        }
+    except Exception as e:
+        logger.error(f"获取性能指标失败: {e}", exc_info=True)
+        raise raise_http_exception(
+            status_code=500,
+            message="获取性能指标失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )

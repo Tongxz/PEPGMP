@@ -615,6 +615,9 @@ class AlertHistory(Base):
     timestamp = Column(
         DateTime, nullable=False, default=lambda: datetime.utcnow(), index=True
     )
+    status = Column(String(20), nullable=True, default="pending", index=True)
+    handled_at = Column(DateTime, nullable=True)
+    handled_by = Column(String(100), nullable=True)
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
@@ -636,4 +639,7 @@ class AlertHistory(Base):
             "notification_sent": self.notification_sent,
             "notification_channels_used": self.notification_channels_used,
             "timestamp": format_datetime(self.timestamp),
+            "status": self.status,
+            "handled_at": format_datetime(self.handled_at),
+            "handled_by": self.handled_by,
         }

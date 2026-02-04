@@ -6,19 +6,14 @@
 
 from typing import Optional
 
-from fastapi import (
-    APIRouter,
-    Body,
-    Header,
-    HTTPException,
-    Request,
-    WebSocket,
-    WebSocketDisconnect,
-)
+from fastapi import APIRouter, Body, Header, Request, WebSocket, WebSocketDisconnect
 from loguru import logger
 from pydantic import BaseModel, Field
 
 from src.services.video_stream_manager import get_stream_manager
+
+from ..schemas.error_schemas import ErrorCode
+from ..utils.error_helpers import raise_http_exception
 
 router = APIRouter(prefix="/video-stream", tags=["视频流"])
 
@@ -148,11 +143,19 @@ async def receive_frame(
     expected = os.getenv("VIDEO_PUSH_TOKEN")
     if expected:
         if not x_video_token or x_video_token != expected:
-            raise HTTPException(status_code=401, detail="Unauthorized")
+            raise raise_http_exception(
+                status_code=401,
+                message="Unauthorized",
+                error_code=ErrorCode.AUTHENTICATION_REQUIRED,
+            )
 
     body = await request.body()
     if not body:
-        raise HTTPException(status_code=400, detail="Empty body")
+        raise raise_http_exception(
+            status_code=400,
+            message="Empty body",
+            error_code=ErrorCode.VALIDATION_ERROR,
+        )
 
     sm = get_stream_manager()
     await sm.update_frame(camera_id, body)
@@ -216,7 +219,12 @@ async def update_video_stream_config(
         )
     except Exception as e:
         logger.error(f"更新视频流配置失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"更新配置失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="更新配置失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )
 
 
 @router.get("/config/{camera_id}", summary="获取视频流配置")
@@ -269,4 +277,9 @@ async def get_video_stream_config(camera_id: str):
         }
     except Exception as e:
         logger.error(f"获取视频流配置失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"获取配置失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取配置失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )

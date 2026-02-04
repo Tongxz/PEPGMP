@@ -17,8 +17,23 @@
       </n-space>
     </template>
 
+    <!-- 错误提示 -->
+    <n-alert
+      v-if="errorMessage"
+      type="error"
+      title="获取部署列表失败"
+      :description="errorMessage"
+      closable
+      @close="errorMessage = null"
+      style="margin-bottom: 16px"
+    >
+      <template #icon>
+        <n-icon><AlertCircleOutline /></n-icon>
+      </template>
+    </n-alert>
+
     <!-- 部署列表 -->
-    <n-empty v-if="deployments.length === 0" description="暂无部署">
+    <n-empty v-if="!loading && !errorMessage && deployments.length === 0" description="暂无部署">
       <template #extra>
         <n-button size="small" @click="showDeployDialog = true">部署第一个模型</n-button>
       </template>
@@ -248,8 +263,8 @@
       <template #action>
         <n-space>
           <n-button @click="showDetailDialog = false">关闭</n-button>
-          <n-button type="primary" @click="scaleDeployment(selectedDeployment)">扩缩容</n-button>
-          <n-button type="warning" @click="updateDeployment(selectedDeployment)">更新</n-button>
+          <n-button type="primary" @click="scaleDeployment(selectedDeployment!)" v-if="selectedDeployment">扩缩容</n-button>
+          <n-button type="warning" @click="updateDeployment(selectedDeployment!)" v-if="selectedDeployment">更新</n-button>
         </n-space>
       </template>
     </n-modal>
@@ -347,8 +362,9 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { NCard, NButton, NSpace, NIcon, NEmpty, NList, NListItem, NTag, NDescriptions, NDescriptionsItem, NDivider, NText, NGrid, NGi, NStatistic, NProgress, NModal, NForm, NFormItem, NSelect, NInput, NInputNumber, NInputGroup, NInputGroupLabel, NSwitch, NRadioGroup, NRadio, NP, useMessage } from 'naive-ui'
-import { RefreshOutline, RocketOutline } from '@vicons/ionicons5'
+import { RefreshOutline, RocketOutline, AlertCircleOutline } from '@vicons/ionicons5'
 import { listModels, type ModelInfo } from '../../api/mlops'
+import { http } from '@/lib/http'
 
 interface Deployment {
   id: string
@@ -372,6 +388,7 @@ interface Deployment {
 const message = useMessage()
 const deployments = ref<Deployment[]>([])
 const loading = ref(false)
+const errorMessage = ref<string | null>(null)
 const showDeployDialog = ref(false)
 const showDetailDialog = ref(false)
 const showUpdateDialog = ref(false)
@@ -470,93 +487,30 @@ const modelVersionOptions = computed(() => {
 // 获取部署列表
 async function fetchDeployments() {
   loading.value = true
+  errorMessage.value = null
   try {
-    // 调用实际API
-    const response = await fetch('/api/v1/mlops/deployments')
-    if (response.ok) {
-      deployments.value = await response.json()
-    } else {
-      console.error('获取部署列表失败:', response.statusText)
-      // 如果API失败，使用模拟数据作为备用
-      deployments.value = [
-      {
-        id: '1',
-        name: 'human-detection-prod',
-        model_version: 'yolo_human_v1.0',
-        environment: 'production',
-        status: 'running',
-        replicas: 3,
-        cpu_usage: 65,
-        memory_usage: 78,
-        gpu_usage: 45,
-        requests_per_minute: 1200,
-        avg_response_time: 45,
-        error_rate: 0.5,
-        total_requests: 172800,
-        success_rate: 99.5,
-        deployed_at: '2025-01-15T10:30:00Z',
-        updated_at: '2025-01-20T14:20:00Z'
-      },
-      {
-        id: '2',
-        name: 'hairnet-detection-staging',
-        model_version: 'yolo_hairnet_v2.1',
-        environment: 'staging',
-        status: 'running',
-        replicas: 1,
-        cpu_usage: 45,
-        memory_usage: 60,
-        gpu_usage: 30,
-        requests_per_minute: 300,
-        avg_response_time: 35,
-        error_rate: 1.2,
-        total_requests: 43200,
-        success_rate: 98.8,
-        deployed_at: '2025-01-18T09:15:00Z',
-        updated_at: '2025-01-19T16:30:00Z'
-      },
-      {
-        id: '3',
-        name: 'behavior-classification-dev',
-        model_version: 'xgb_behavior_v1.5',
-        environment: 'development',
-        status: 'stopped',
-        replicas: 0,
-        cpu_usage: 0,
-        memory_usage: 0,
-        requests_per_minute: 0,
-        avg_response_time: 0,
-        error_rate: 0,
-        total_requests: 0,
-        success_rate: 0,
-        deployed_at: '2025-01-20T11:00:00Z',
-        updated_at: '2025-01-20T11:00:00Z'
-      }
-    ]
+    // 使用统一的http客户端
+    const response = await http.get('/mlops/deployments')
+    const data = response.data
+    deployments.value = Array.isArray(data) ? data : (data.deployments || data.items || [])
+    if (deployments.value.length === 0) {
+      message.info('暂无部署，请先部署模型')
     }
-  } catch (error) {
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.detail || error.message || '获取部署列表失败'
     console.error('获取部署列表失败:', error)
-    // 使用模拟数据作为备用
-    deployments.value = [
-      {
-        id: '1',
-        name: 'human-detection-prod',
-        model_version: 'yolo_human_v1.0',
-        environment: 'production',
-        status: 'running',
-        replicas: 3,
-        cpu_usage: 65,
-        memory_usage: 78,
-        gpu_usage: 45,
-        requests_per_minute: 1200,
-        avg_response_time: 45,
-        error_rate: 0.5,
-        total_requests: 172800,
-        success_rate: 99.5,
-        deployed_at: '2025-01-15T10:30:00Z',
-        updated_at: '2025-01-20T14:20:00Z'
-      }
-    ]
+    errorMessage.value = errorMsg
+    deployments.value = []
+    const statusCode = error.response?.status
+    if (statusCode === 404 || statusCode === 503) {
+      message.error('部署服务不可用，请检查后端服务是否正常运行', {
+        duration: 5000
+      })
+    } else {
+      message.error(`无法获取部署列表: ${errorMsg}`, {
+        duration: 5000
+      })
+    }
   } finally {
     loading.value = false
   }
@@ -569,7 +523,7 @@ function refreshDeployments() {
 
 // 获取部署状态类型
 function getDeploymentStatusType(status: string) {
-  const statusMap = {
+  const statusMap: Record<string, 'default' | 'success' | 'warning' | 'error' | 'info'> = {
     running: 'success',
     stopped: 'default',
     deploying: 'warning',
@@ -581,7 +535,7 @@ function getDeploymentStatusType(status: string) {
 
 // 获取部署状态文本
 function getDeploymentStatusText(status: string) {
-  const statusMap = {
+  const statusMap: Record<string, string> = {
     running: '运行中',
     stopped: '已停止',
     deploying: '部署中',
@@ -754,7 +708,7 @@ async function submitDeployment() {
 
 // 获取环境类型
 function getEnvironmentType(environment: string) {
-  const envMap = {
+  const envMap: Record<string, 'default' | 'success' | 'warning' | 'error' | 'info'> = {
     production: 'error',
     staging: 'warning',
     development: 'info'
@@ -764,7 +718,7 @@ function getEnvironmentType(environment: string) {
 
 // 获取环境文本
 function getEnvironmentText(environment: string) {
-  const envMap = {
+  const envMap: Record<string, string> = {
     production: '生产环境',
     staging: '测试环境',
     development: '开发环境'

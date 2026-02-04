@@ -7,7 +7,7 @@
 import logging
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from src.api.dependencies import get_detection_app_service
@@ -15,6 +15,9 @@ from src.application.detection_application_service import (
     DetectionApplicationService,
     SaveStrategy,
 )
+
+from ..schemas.error_schemas import ErrorCode
+from ..utils.error_helpers import raise_http_exception
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -74,9 +77,10 @@ async def get_save_policy(
         当前保存策略配置
     """
     if app_service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="检测应用服务未初始化",
+        raise raise_http_exception(
+            status_code=503,
+            message="检测应用服务未初始化",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
         )
 
     policy = app_service.save_policy
@@ -124,9 +128,10 @@ async def update_save_policy(
         ```
     """
     if app_service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="检测应用服务未初始化",
+        raise raise_http_exception(
+            status_code=503,
+            message="检测应用服务未初始化",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
         )
 
     current_policy = app_service.save_policy
@@ -137,9 +142,9 @@ async def update_save_policy(
             try:
                 current_policy.strategy = SaveStrategy[request.strategy.upper()]
             except KeyError:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"无效的保存策略: {request.strategy}，"
+                raise raise_http_exception(
+                    status_code=400,
+                    message=f"无效的保存策略: {request.strategy}，"
                     f"有效值: all, violations_only, interval, smart",
                 )
 
@@ -173,9 +178,11 @@ async def update_save_policy(
         raise
     except Exception as e:
         logger.error(f"更新保存策略失败: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"更新保存策略失败: {str(e)}",
+        raise raise_http_exception(
+            status_code=500,
+            message="更新保存策略失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
         )
 
 
@@ -194,9 +201,10 @@ async def get_detection_stats(
         检测统计信息
     """
     if app_service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="检测应用服务未初始化",
+        raise raise_http_exception(
+            status_code=503,
+            message="检测应用服务未初始化",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
         )
 
     stats = app_service.stats_buffer
@@ -236,9 +244,10 @@ async def reset_detection_stats(
         操作结果
     """
     if app_service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="检测应用服务未初始化",
+        raise raise_http_exception(
+            status_code=503,
+            message="检测应用服务未初始化",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
         )
 
     # 重置统计缓冲

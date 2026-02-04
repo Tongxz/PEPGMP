@@ -11,6 +11,9 @@ from src.api.utils.rollout import should_use_domain
 # This would be in a service file
 from src.services.region_service import RegionService, get_region_service
 
+from ..schemas.error_schemas import ErrorCode
+from ..utils.error_helpers import raise_http_exception
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -66,10 +69,18 @@ async def get_all_regions(
                 return regions
             else:
                 logger.error("区域领域服务未初始化")
-                raise HTTPException(status_code=500, detail="区域服务未初始化")
+                raise raise_http_exception(
+                    status_code=500,
+                    message="区域服务未初始化",
+                    error_code=ErrorCode.SERVICE_UNAVAILABLE,
+                )
         else:
             logger.error("区域领域服务不可用")
-            raise HTTPException(status_code=500, detail="区域服务不可用")
+            raise raise_http_exception(
+                status_code=500,
+                message="区域服务不可用",
+                error_code=ErrorCode.SERVICE_UNAVAILABLE,
+            )
     except HTTPException:
         raise
     except Exception as e:
@@ -77,7 +88,12 @@ async def get_all_regions(
         import traceback
 
         logger.debug(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"获取区域列表失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取区域列表失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
 
 
 @router.post("/regions", summary="创建新区域")
@@ -98,21 +114,38 @@ async def create_region(
                 return result
             else:
                 logger.error("区域领域服务未初始化")
-                raise HTTPException(status_code=500, detail="区域服务未初始化")
+                raise raise_http_exception(
+                    status_code=500,
+                    message="区域服务未初始化",
+                    error_code=ErrorCode.SERVICE_UNAVAILABLE,
+                )
         else:
             logger.error("区域领域服务不可用")
-            raise HTTPException(status_code=500, detail="区域服务不可用")
+            raise raise_http_exception(
+                status_code=500,
+                message="区域服务不可用",
+                error_code=ErrorCode.SERVICE_UNAVAILABLE,
+            )
     except HTTPException:
         raise
     except ValueError as e:
         # 业务逻辑错误（如ID已存在），直接抛出HTTP异常
-        raise HTTPException(status_code=409, detail=str(e))
+        raise raise_http_exception(
+            status_code=409,
+            message=str(e),
+            error_code=ErrorCode.RESOURCE_CONFLICT,
+        )
     except Exception as e:
         logger.error(f"创建区域失败: {e}")
         import traceback
 
         logger.debug(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"创建区域失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="创建区域失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
 
 
 @router.post("/regions/meta", summary="更新区域元信息（画布/背景/铺放/参考）")
@@ -175,7 +208,11 @@ async def update_regions_meta(
             pass
         return {"status": "success", "meta": normalized}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise raise_http_exception(
+            status_code=400,
+            message=str(e),
+            error_code=ErrorCode.VALIDATION_ERROR,
+        )
 
 
 @router.put("/regions/{region_id}", summary="更新区域信息")
@@ -196,20 +233,37 @@ async def update_region(
                 return result
             else:
                 logger.error("区域领域服务未初始化")
-                raise HTTPException(status_code=500, detail="区域服务未初始化")
+                raise raise_http_exception(
+                    status_code=500,
+                    message="区域服务未初始化",
+                    error_code=ErrorCode.SERVICE_UNAVAILABLE,
+                )
         else:
             logger.error("区域领域服务不可用")
-            raise HTTPException(status_code=500, detail="区域服务不可用")
+            raise raise_http_exception(
+                status_code=500,
+                message="区域服务不可用",
+                error_code=ErrorCode.SERVICE_UNAVAILABLE,
+            )
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise raise_http_exception(
+            status_code=404,
+            message=str(e),
+            error_code=ErrorCode.RESOURCE_NOT_FOUND,
+        )
     except Exception as e:
         logger.error(f"更新区域失败: {e}")
         import traceback
 
         logger.debug(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"更新区域失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="更新区域失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
 
 
 @router.delete("/regions/{region_id}", summary="删除区域")
@@ -227,20 +281,37 @@ async def delete_region(
                 return result
             else:
                 logger.error("区域领域服务未初始化")
-                raise HTTPException(status_code=500, detail="区域服务未初始化")
+                raise raise_http_exception(
+                    status_code=500,
+                    message="区域服务未初始化",
+                    error_code=ErrorCode.SERVICE_UNAVAILABLE,
+                )
         else:
             logger.error("区域领域服务不可用")
-            raise HTTPException(status_code=500, detail="区域服务不可用")
+            raise raise_http_exception(
+                status_code=500,
+                message="区域服务不可用",
+                error_code=ErrorCode.SERVICE_UNAVAILABLE,
+            )
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise raise_http_exception(
+            status_code=404,
+            message=str(e),
+            error_code=ErrorCode.RESOURCE_NOT_FOUND,
+        )
     except Exception as e:
         logger.error(f"删除区域失败: {e}")
         import traceback
 
         logger.debug(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"删除区域失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="删除区域失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
 
 
 @router.post("/regions/import", summary="从配置文件导入区域到数据库")
@@ -270,10 +341,18 @@ async def import_regions_from_file(
                 return result
             else:
                 logger.error("区域领域服务未初始化")
-                raise HTTPException(status_code=500, detail="区域服务未初始化")
+                raise raise_http_exception(
+                    status_code=500,
+                    message="区域服务未初始化",
+                    error_code=ErrorCode.SERVICE_UNAVAILABLE,
+                )
         else:
             logger.error("区域领域服务不可用")
-            raise HTTPException(status_code=500, detail="区域服务不可用")
+            raise raise_http_exception(
+                status_code=500,
+                message="区域服务不可用",
+                error_code=ErrorCode.SERVICE_UNAVAILABLE,
+            )
     except HTTPException:
         raise
     except Exception as e:
@@ -281,7 +360,12 @@ async def import_regions_from_file(
         import traceback
 
         logger.debug(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"导入区域失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="导入区域失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
 
 
 @router.get("/regions/export", summary="导出区域配置到文件")
@@ -330,10 +414,18 @@ async def export_regions_to_file(
                 }
             else:
                 logger.error("区域领域服务未初始化")
-                raise HTTPException(status_code=500, detail="区域服务未初始化")
+                raise raise_http_exception(
+                    status_code=500,
+                    message="区域服务未初始化",
+                    error_code=ErrorCode.SERVICE_UNAVAILABLE,
+                )
         else:
             logger.error("区域领域服务不可用")
-            raise HTTPException(status_code=500, detail="区域服务不可用")
+            raise raise_http_exception(
+                status_code=500,
+                message="区域服务不可用",
+                error_code=ErrorCode.SERVICE_UNAVAILABLE,
+            )
     except HTTPException:
         raise
     except Exception as e:
@@ -341,7 +433,12 @@ async def export_regions_to_file(
         import traceback
 
         logger.debug(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"导出区域配置失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="导出区域配置失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )
 
 
 # ----------------------------
@@ -377,14 +474,26 @@ async def compat_get_regions() -> Dict[str, Any]:
                     "canvas_size": {"width": 800, "height": 600},
                 }
             else:
-                raise HTTPException(status_code=500, detail="区域服务未初始化")
+                raise raise_http_exception(
+                    status_code=500,
+                    message="区域服务未初始化",
+                    error_code=ErrorCode.SERVICE_UNAVAILABLE,
+                )
         else:
-            raise HTTPException(status_code=500, detail="区域服务不可用")
+            raise raise_http_exception(
+                status_code=500,
+                message="区域服务不可用",
+                error_code=ErrorCode.SERVICE_UNAVAILABLE,
+            )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"获取区域失败: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise raise_http_exception(
+            status_code=400,
+            message=str(e),
+            error_code=ErrorCode.VALIDATION_ERROR,
+        )
 
 
 @compat_router.post("/api/regions", summary="[兼容] 保存区域（旧版前端）")
@@ -491,4 +600,8 @@ def compat_save_regions(
             "removed": removed,
         }
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise raise_http_exception(
+            status_code=400,
+            message=str(e),
+            error_code=ErrorCode.VALIDATION_ERROR,
+        )

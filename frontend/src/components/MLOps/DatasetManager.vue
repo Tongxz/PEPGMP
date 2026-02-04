@@ -23,8 +23,23 @@
       </n-space>
     </template>
 
+    <!-- 错误提示 -->
+    <n-alert
+      v-if="errorMessage"
+      type="error"
+      title="获取数据集失败"
+      :description="errorMessage"
+      closable
+      @close="errorMessage = null"
+      style="margin-bottom: 16px"
+    >
+      <template #icon>
+        <n-icon><AlertCircleOutline /></n-icon>
+      </template>
+    </n-alert>
+
     <!-- 数据集列表 -->
-    <n-empty v-if="datasets.length === 0" description="暂无数据集">
+    <n-empty v-if="!loading && !errorMessage && datasets.length === 0" description="暂无数据集">
       <template #extra>
         <n-button size="small" @click="showUploadDialog = true">上传第一个数据集</n-button>
       </template>
@@ -376,7 +391,7 @@
       <template #action>
         <n-space>
           <n-button @click="showDetailDialog = false">关闭</n-button>
-          <n-button type="primary" @click="downloadDataset(selectedDataset)">下载</n-button>
+          <n-button type="primary" @click="downloadDataset(selectedDataset!)" v-if="selectedDataset">下载</n-button>
         </n-space>
       </template>
     </n-modal>
@@ -542,12 +557,14 @@ import {
   NDatePicker,
   NPagination,
   NSpin,
+  NAlert,
   useMessage,
   type FormInst,
   type FormRules
 } from 'naive-ui'
-import { RefreshOutline, CloudUploadOutline, CreateOutline } from '@vicons/ionicons5'
+import { RefreshOutline, CloudUploadOutline, CreateOutline, AlertCircleOutline } from '@vicons/ionicons5'
 import { useCameraStore } from '@/stores/camera'
+import { http } from '@/lib/http'
 
 interface Dataset {
   id: string
@@ -572,6 +589,7 @@ interface Dataset {
 const message = useMessage()
 const datasets = ref<Dataset[]>([])
 const loading = ref(false)
+const errorMessage = ref<string | null>(null)
 const showUploadDialog = ref(false)
 const showDetailDialog = ref(false)
 const showCompareDialog = ref(false)
@@ -607,7 +625,7 @@ const currentSampleImage = ref<SamplePreview | null>(null)
 const sampleFilter = ref<string | null>(null)
 
 const sampleFilterOptions = [
-  { label: '全部', value: null },
+  { label: '全部', value: 'all' },
   { label: '正常样本', value: 'normal' },
   { label: '违规样本', value: 'violation' },
 ]
@@ -659,94 +677,30 @@ const generateRules: FormRules = {
 // 获取数据集列表
 async function fetchDatasets() {
   loading.value = true
+  errorMessage.value = null
   try {
-    // 调用实际API
-    const response = await fetch('/api/v1/mlops/datasets')
-    if (response.ok) {
-      datasets.value = await response.json()
-    } else {
-      console.error('获取数据集失败:', response.statusText)
-      // 如果API失败，使用模拟数据作为备用
-      datasets.value = [
-      {
-        id: '1',
-        name: 'handwash_detection_v1',
-        version: '1.0.0',
-        status: 'active',
-        size: 1024 * 1024 * 500, // 500MB
-        sample_count: 1500,
-        label_count: 3,
-        quality_score: 85,
-        quality_metrics: {
-          completeness: 92,
-          accuracy: 88,
-          consistency: 85
-        },
-        created_at: '2025-01-15T10:30:00Z',
-        updated_at: '2025-01-15T10:30:00Z',
-        description: '洗手行为检测数据集',
-        tags: ['handwash', 'detection', 'behavior']
-      },
-      {
-        id: '2',
-        name: 'hairnet_detection_v2',
-        version: '2.1.0',
-        status: 'active',
-        size: 1024 * 1024 * 300, // 300MB
-        sample_count: 800,
-        label_count: 2,
-        quality_score: 92,
-        quality_metrics: {
-          completeness: 95,
-          accuracy: 90,
-          consistency: 92
-        },
-        created_at: '2025-01-10T14:20:00Z',
-        updated_at: '2025-01-12T16:45:00Z',
-        description: '安全帽检测数据集',
-        tags: ['hairnet', 'detection', 'safety']
-      },
-      {
-        id: '3',
-        name: 'pose_detection_v1',
-        version: '1.2.0',
-        status: 'processing',
-        size: 1024 * 1024 * 1200, // 1.2GB
-        sample_count: 2000,
-        label_count: 17,
-        quality_score: undefined,
-        quality_metrics: undefined,
-        created_at: '2025-01-20T09:15:00Z',
-        updated_at: '2025-01-20T09:15:00Z',
-        description: '姿态检测数据集',
-        tags: ['pose', 'detection', 'keypoints']
-      }
-    ]
+    // 使用统一的http客户端
+    const response = await http.get('/mlops/datasets')
+    const data = response.data
+    datasets.value = Array.isArray(data) ? data : (data.datasets || data.items || [])
+    if (datasets.value.length === 0) {
+      message.info('暂无数据集，请先创建或上传数据集')
     }
-  } catch (error) {
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.detail || error.message || '获取数据集列表失败'
     console.error('获取数据集列表失败:', error)
-    // 使用模拟数据作为备用
-    datasets.value = [
-      {
-        id: '1',
-        name: 'handwash_detection_v1',
-        version: '1.0.0',
-        status: 'active',
-        size: 1024 * 1024 * 500,
-        sample_count: 1500,
-        label_count: 3,
-        quality_score: 85,
-        quality_metrics: {
-          completeness: 92,
-          accuracy: 88,
-          consistency: 85
-        },
-        created_at: '2025-01-15T10:30:00Z',
-        updated_at: '2025-01-15T10:30:00Z',
-        description: '洗手行为检测数据集',
-        tags: ['handwash', 'detection', 'behavior']
-      }
-    ]
+    errorMessage.value = errorMsg
+    datasets.value = []
+    const statusCode = error.response?.status
+    if (statusCode === 404 || statusCode === 503) {
+      message.error('数据集服务不可用，请检查后端服务是否正常运行', {
+        duration: 5000
+      })
+    } else {
+      message.error(`无法获取数据集列表: ${errorMsg}`, {
+        duration: 5000
+      })
+    }
   } finally {
     loading.value = false
   }
@@ -839,7 +793,7 @@ watch(showGenerateDialog, (visible) => {
 
 // 获取数据集状态类型
 function getDatasetStatusType(status: string) {
-  const statusMap = {
+  const statusMap: Record<string, 'default' | 'success' | 'warning' | 'error'> = {
     active: 'success',
     archived: 'default',
     processing: 'warning',
@@ -1010,6 +964,7 @@ function applySampleFilter() {
   } else if (sampleFilter.value === 'violation') {
     filtered = filtered.filter(sample => sample.has_violation)
   }
+  // 'all' 或其他值显示所有样本
 
   // 更新总数
   samplePreviewTotal.value = filtered.length

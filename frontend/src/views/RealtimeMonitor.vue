@@ -1,502 +1,850 @@
 <template>
-  <div class="realtime-monitor-container">
+  <div class="professional-monitor">
     <!-- 页面头部 -->
-    <PageHeader
-      title="实时监控大屏"
-      subtitle="多摄像头实时画面监控"
-      icon="📹"
-    >
-      <template #actions>
-        <n-space>
-          <n-select
-            v-model:value="selectedCameraIds"
-            :options="cameraOptions"
-            placeholder="选择摄像头"
-            multiple
-            clearable
-            filterable
-            style="width: 300px"
-            @update:value="handleCameraSelectionChange"
-          />
-          <n-button @click="toggleFullscreen" :type="isFullscreen ? 'primary' : 'default'">
-            <template #icon>
-              <n-icon>
-                <component :is="isFullscreen ? 'ContractOutline' : 'ExpandOutline'" />
-              </n-icon>
-            </template>
-            {{ isFullscreen ? '退出全屏' : '全屏' }}
-          </n-button>
-          <n-button @click="refreshCameras" :loading="loading">
-            <template #icon>
-              <n-icon><RefreshOutline /></n-icon>
-            </template>
-            刷新
-          </n-button>
-        </n-space>
-      </template>
-    </PageHeader>
-
-    <!-- 加载状态 -->
-    <n-spin :show="cameraStore.loading">
-      <n-card class="control-card" :bordered="false">
-        <div class="control-wrap-container">
-          <n-space align="center">
-            <n-text strong>布局模式:</n-text>
-            <n-radio-group v-model:value="layoutMode" size="small">
-              <n-radio-button value="grid">网格</n-radio-button>
-              <n-radio-button value="single">单屏</n-radio-button>
-            </n-radio-group>
-            <n-text strong style="margin-left: 16px">网格大小:</n-text>
-            <n-select
-              v-model:value="gridColumns"
-              :options="gridColumnOptions"
-              size="small"
-              style="width: 100px"
-              :disabled="layoutMode !== 'grid'"
-            />
-          </n-space>
-          <n-space align="center">
-            <n-tag type="info" size="small">
-              总摄像头: {{ cameras.length }} 个
-            </n-tag>
-            <n-tag type="warning" size="small">
-              已启用: {{ enabledCameras.length }} 个
-            </n-tag>
-            <n-tag type="info" size="small">
-              已选择: {{ selectedCameraIds.length }} 个
-            </n-tag>
-            <n-tag type="success" size="small">
-              已连接: {{ connectedCount }} 个
-            </n-tag>
-          </n-space>
-        </div>
-      </n-card>
-    </n-spin>
-
-    <!-- 错误提示 -->
-    <n-alert
-      v-if="cameraStore.error"
-      type="error"
-      closable
-      @close="cameraStore.clearError"
-      style="margin: 16px 0"
-    >
-      {{ cameraStore.error }}
-    </n-alert>
-
-    <!-- 提示信息 -->
-    <n-alert
-      v-if="cameras.length === 0 && !cameraStore.loading"
-      type="warning"
-      style="margin: 16px 0"
-    >
-      <template #header>没有摄像头</template>
-      系统中还没有配置摄像头，请先前往"相机配置"页面添加摄像头。
-    </n-alert>
-
-    <n-alert
-      v-else-if="enabledCameras.length === 0 && !cameraStore.loading && cameras.length > 0"
-      type="warning"
-      style="margin: 16px 0"
-    >
-      <template #header>没有启用的摄像头</template>
-      所有摄像头都未启用，请在"相机配置"页面启用摄像头后再查看实时画面。
-    </n-alert>
-
-    <n-alert
-      v-if="selectedCameraIds.length > 0 && connectedCount === 0 && !cameraStore.loading"
-      type="info"
-      style="margin: 16px 0"
-    >
-      <template #header>视频流连接提示</template>
-      <div style="white-space: pre-line;">
-        已选择摄像头但未连接到视频流，可能的原因：
-        <br />1. 摄像头检测进程未运行（请前往"相机配置"页面启动摄像头）
-        <br />2. 后端视频流服务未启动或异常
-        <br />3. WebSocket连接失败（请查看浏览器控制台获取详细错误）
-        <br />
-        <br />请检查：
-        <br />- 摄像头是否正在运行（查看"相机配置"页面中的运行状态）
-        <br />- 浏览器控制台是否有错误信息
-        <br />- 后端服务日志是否有异常
+    <div class="page-header">
+      <div class="header-left">
+        <h1 class="page-title">实时监控</h1>
+        <p class="page-subtitle">多路视频流实时监控与异常行为即时告警</p>
       </div>
-    </n-alert>
-
-    <!-- 视频网格区域 -->
-    <div class="video-grid-container" :class="{ 'fullscreen': isFullscreen }">
-      <!-- 调试信息 -->
-      <div v-if="displayedCameras.length === 0" class="empty-state">
-        <n-empty description="请选择要监控的摄像头">
-          <template #extra>
-            <n-button type="primary" @click="selectAllCameras">
-              选择所有摄像头
-            </n-button>
-          </template>
-        </n-empty>
-      </div>
-
-      <!-- 网格布局 -->
-      <div v-else-if="layoutMode === 'grid'" class="video-grid" :style="gridStyle">
-        <div
-          v-for="cameraId in displayedCameras"
-          :key="cameraId"
-          class="video-item"
-        >
-          <VideoStreamCard
-            :camera-id="cameraId"
-            :camera-name="getCameraName(cameraId)"
-            @connected="handleVideoConnected(cameraId)"
-            @disconnected="handleVideoDisconnected(cameraId)"
-          />
-        </div>
-      </div>
-
-      <!-- 单屏布局 -->
-      <div v-else class="video-single">
-        <VideoStreamCard
-          :camera-id="selectedCameraIds[0]"
-          :camera-name="getCameraName(selectedCameraIds[0])"
-          :full-size="true"
-          @connected="handleVideoConnected(selectedCameraIds[0])"
-          @disconnected="handleVideoDisconnected(selectedCameraIds[0])"
+      <div class="header-actions">
+        <n-select
+          v-model:value="selectedCameraIds"
+          :options="cameraOptions"
+          placeholder="选择摄像头"
+          multiple
+          clearable
+          filterable
+          style="width: 280px"
+          size="medium"
         />
+        <n-button-group>
+          <n-button @click="layoutMode = 'grid'" :type="layoutMode === 'grid' ? 'primary' : 'default'">
+            <template #icon><n-icon><GridOutline /></n-icon></template>
+            网格
+          </n-button>
+          <n-button @click="layoutMode = 'single'" :type="layoutMode === 'single' ? 'primary' : 'default'">
+            <template #icon><n-icon><SquareOutline /></n-icon></template>
+            单屏
+          </n-button>
+        </n-button-group>
+        <n-button @click="refreshCameras" :loading="loading">
+          <template #icon><n-icon><RefreshOutline /></n-icon></template>
+          刷新
+        </n-button>
+      </div>
+    </div>
+
+    <!-- 统计卡片区 -->
+    <div class="stats-cards">
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-online">
+          <n-icon size="24"><VideocamOutline /></n-icon>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ onlineCameras }}</div>
+          <div class="stat-label">在线摄像头</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-detection">
+          <n-icon size="24"><EyeOutline /></n-icon>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ detectionCount }}</div>
+          <div class="stat-label">实时检测数</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-fps">
+          <n-icon size="24"><SpeedometerOutline /></n-icon>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ avgFps }}fps</div>
+          <div class="stat-label">平均帧率</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-alert">
+          <n-icon size="24"><WarningOutline /></n-icon>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ alertCount }}</div>
+          <div class="stat-label">实时告警</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 视频网格 -->
+    <div class="video-grid" :class="`grid-${gridSize}`" v-if="layoutMode === 'grid'">
+      <div
+        v-for="camera in displayedCameras"
+        :key="camera.id"
+        class="video-card"
+        @click="selectCamera(camera)"
+      >
+        <div class="video-wrapper">
+          <!-- WebSocket视频流 -->
+          <VideoStream
+            :camera-id="camera.id"
+            :auto-connect="camera.status === 'active'"
+            :show-fps="true"
+          />
+
+          <!-- 视频信息覆盖层 -->
+          <div class="video-overlay">
+            <div class="video-header">
+              <div class="camera-name">{{ camera.name }}</div>
+              <div class="camera-status" :class="camera.status">
+                <div class="status-dot"></div>
+                {{ camera.status === 'online' ? '在线' : '离线' }}
+              </div>
+            </div>
+            <div class="video-footer">
+              <div class="video-info">
+                <span class="info-item">
+                  <n-icon size="14"><TimeOutline /></n-icon>
+                  {{ formatTime(camera.last_update) }}
+                </span>
+                <span class="info-item">
+                  <n-icon size="14"><PeopleOutline /></n-icon>
+                  {{ camera.detection_count || 0 }}
+                </span>
+              </div>
+              <div class="video-controls" @click.stop>
+                <n-button
+                  v-if="camera.status === 'inactive' || camera.status === 'offline'"
+                  size="small"
+                  type="success"
+                  @click="handleCameraControl(camera.id, 'start')"
+                  :loading="controlLoading[camera.id]"
+                >
+                  <template #icon><n-icon><PlayOutline /></n-icon></template>
+                </n-button>
+                <n-button
+                  v-if="camera.status === 'active' || camera.status === 'online'"
+                  size="small"
+                  type="warning"
+                  @click="handleCameraControl(camera.id, 'stop')"
+                  :loading="controlLoading[camera.id]"
+                >
+                  <template #icon><n-icon><StopOutline /></n-icon></template>
+                </n-button>
+                <n-button
+                  size="small"
+                  type="info"
+                  @click="handleCameraControl(camera.id, 'restart')"
+                  :loading="controlLoading[camera.id]"
+                >
+                  <template #icon><n-icon><RefreshOutline /></n-icon></template>
+                </n-button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 空状态 -->
+      <div v-if="displayedCameras.length === 0" class="empty-state">
+        <n-icon size="64" color="#8C9BAB"><VideocamOffOutline /></n-icon>
+        <p class="empty-text">暂无摄像头数据</p>
+        <n-button type="primary" @click="refreshCameras">刷新数据</n-button>
+      </div>
+    </div>
+
+    <!-- 单屏模式 -->
+    <div class="single-view" v-if="layoutMode === 'single' && selectedCamera">
+      <div class="single-video-card">
+        <div class="single-video-wrapper">
+          <!-- WebSocket视频流 -->
+          <VideoStream
+            :camera-id="selectedCamera.id"
+            :auto-connect="selectedCamera.status === 'active'"
+            :show-fps="true"
+            :width="1920"
+            :height="1080"
+          />
+        </div>
+        <div class="single-video-info">
+          <div class="single-video-header">
+            <h3>{{ selectedCamera.name }}</h3>
+            <div class="single-video-controls">
+              <n-button
+                v-if="selectedCamera.status === 'inactive' || selectedCamera.status === 'offline'"
+                type="success"
+                @click="handleCameraControl(selectedCamera.id, 'start')"
+                :loading="controlLoading[selectedCamera.id]"
+              >
+                <template #icon><n-icon><PlayOutline /></n-icon></template>
+                启动摄像头
+              </n-button>
+              <n-button
+                v-if="selectedCamera.status === 'active' || selectedCamera.status === 'online'"
+                type="warning"
+                @click="handleCameraControl(selectedCamera.id, 'stop')"
+                :loading="controlLoading[selectedCamera.id]"
+              >
+                <template #icon><n-icon><StopOutline /></n-icon></template>
+                停止摄像头
+              </n-button>
+              <n-button
+                type="info"
+                @click="handleCameraControl(selectedCamera.id, 'restart')"
+                :loading="controlLoading[selectedCamera.id]"
+              >
+                <template #icon><n-icon><RefreshOutline /></n-icon></template>
+                重启摄像头
+              </n-button>
+            </div>
+          </div>
+          <n-descriptions :column="2" size="medium" bordered>
+            <n-descriptions-item label="位置">{{ selectedCamera.location }}</n-descriptions-item>
+            <n-descriptions-item label="状态">
+              <n-tag :type="selectedCamera.status === 'active' || selectedCamera.status === 'online' ? 'success' : 'error'" size="small">
+                {{ selectedCamera.status === 'active' || selectedCamera.status === 'online' ? '在线' : '离线' }}
+              </n-tag>
+            </n-descriptions-item>
+            <n-descriptions-item label="检测数">{{ selectedCamera.detection_count || 0 }}</n-descriptions-item>
+            <n-descriptions-item label="最后更新">{{ formatTime(selectedCamera.last_update) }}</n-descriptions-item>
+          </n-descriptions>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { NButton, NButtonGroup, NSelect, NIcon, NTag, NDescriptions, NDescriptionsItem, useMessage } from 'naive-ui'
 import {
-  NCard,
-  NSpace,
-  NSelect,
-  NButton,
-  NIcon,
-  NTag,
-  NText,
-  NRadioGroup,
-  NRadioButton,
-  NEmpty,
-  NSpin,
-  NAlert,
-  useMessage,
-} from 'naive-ui'
-import {
+  VideocamOutline,
+  VideocamOffOutline,
+  EyeOutline,
+  SpeedometerOutline,
+  WarningOutline,
   RefreshOutline,
-  ExpandOutline,
-  ContractOutline,
+  GridOutline,
+  SquareOutline,
+  TimeOutline,
+  PeopleOutline,
+  PlayOutline,
+  StopOutline
 } from '@vicons/ionicons5'
-import { PageHeader } from '@/components/common'
-import { useCameraStore } from '@/stores/camera'
-import VideoStreamCard from '@/components/VideoStreamCard.vue'
+
+// 导入组件
+import VideoStream from '@/components/VideoStream.vue'
+
+// 导入 API
+import { getRealtimeStatistics, getDetectionRealtimeStatistics } from '@/api/modules/statistics'
+import { getCameras, startCamera, stopCamera, restartCamera } from '@/api/modules/cameras'
 
 const message = useMessage()
-const cameraStore = useCameraStore()
 
-// 响应式数据
-const loading = ref(false)
-const selectedCameraIds = ref<string[]>([])
+// 布局模式
 const layoutMode = ref<'grid' | 'single'>('grid')
-const gridColumns = ref(2)
-const isFullscreen = ref(false)
-const connectedCameras = ref<Set<string>>(new Set())
+const gridSize = ref(4)
+const loading = ref(false)
 
-// 网格列选项
-const gridColumnOptions = [
-  { label: '1列', value: 1 },
-  { label: '2列', value: 2 },
-  { label: '3列', value: 3 },
-  { label: '4列', value: 4 },
-]
+// 摄像头数据
+const cameras = ref<any[]>([])
+const selectedCameraIds = ref<string[]>([])
+const selectedCamera = ref<any>(null)
+const controlLoading = ref<Record<string, boolean>>({})
+
+// 统计数据
+const onlineCameras = ref(0)
+const detectionCount = ref(0)
+const avgFps = ref(0)
+const alertCount = ref(0)
 
 // 计算属性
-const cameras = computed(() => cameraStore.cameras)
-// 检查摄像头是否启用：同时检查 enabled 和 active 字段，以及是否正在运行
-const enabledCameras = computed(() => {
-  return cameras.value.filter((cam) => {
-    // 检查 enabled 或 active 字段（兼容不同的字段名）
-    const isEnabled = cam.enabled === true || cam.active === true
-    // 也可以认为正在运行的摄像头是"启用"的
-    const isRunning = cameraStore.runtimeStatus[cam.id]?.running === true
-    return isEnabled || isRunning
-  })
-})
-
-// 摄像头选项：显示所有摄像头，但标注启用状态
 const cameraOptions = computed(() =>
-  cameras.value.map((cam) => ({
-    label: `${cam.name || cam.id} (${cam.id})${(cam.enabled || cam.active) ? ' ✓' : ' [未启用]'}`,
-    value: cam.id,
-    disabled: false, // 允许选择未启用的摄像头（用户可能想查看）
-  }))
+  cameras.value.map(c => ({ label: c.name, value: c.id }))
 )
 
 const displayedCameras = computed(() => {
-  if (layoutMode.value === 'single') {
-    return selectedCameraIds.value.slice(0, 1)
-  }
-  return selectedCameraIds.value
-})
+  console.log('displayedCameras计算:', {
+    totalCameras: cameras.value.length,
+    selectedIds: selectedCameraIds.value,
+    cameras: cameras.value
+  })
 
-const gridStyle = computed(() => {
-  return {
-    gridTemplateColumns: `repeat(${gridColumns.value}, 1fr)`,
+  if (selectedCameraIds.value.length > 0) {
+    const filtered = cameras.value.filter(c => selectedCameraIds.value.includes(c.id))
+    console.log('过滤后的摄像头:', filtered)
+    return filtered
   }
+  return cameras.value
 })
-
-const connectedCount = computed(() => connectedCameras.value.size)
 
 // 方法
-function getCameraName(cameraId: string): string {
-  const camera = cameras.value.find((cam) => cam.id === cameraId)
-  return camera?.name || cameraId
+const selectCamera = (camera: any) => {
+  selectedCamera.value = camera
+  layoutMode.value = 'single'
 }
 
-function handleCameraSelectionChange(cameraIds: string[]) {
-  // 如果单屏模式，只保留第一个
-  if (layoutMode.value === 'single' && cameraIds.length > 1) {
-    selectedCameraIds.value = [cameraIds[0]]
-    message.info('单屏模式只能显示一个摄像头')
-  } else {
-    selectedCameraIds.value = cameraIds
+// 获取监控数据
+const fetchMonitoringData = async () => {
+  console.log('🔄 开始获取监控数据, loading:', loading.value)
+
+  if (loading.value) {
+    console.log('⚠️ 已经在加载中，跳过')
+    return
   }
-}
 
-function selectAllCameras() {
-  selectedCameraIds.value = enabledCameras.value.map((cam) => cam.id)
-  message.success(`已选择 ${selectedCameraIds.value.length} 个摄像头`)
-}
-
-function handleVideoConnected(cameraId: string) {
-  connectedCameras.value.add(cameraId)
-}
-
-function handleVideoDisconnected(cameraId: string) {
-  connectedCameras.value.delete(cameraId)
-}
-
-async function refreshCameras() {
   loading.value = true
+
   try {
-    await cameraStore.fetchCameras()
-    await cameraStore.refreshRuntimeStatus()
+    // 获取摄像头列表
+    const camerasResponse = await getCameras()
+    cameras.value = (camerasResponse.cameras || []).map((cam: any) => ({
+      id: cam.id,
+      name: cam.name,
+      location: cam.location || '未知位置',
+      status: cam.status || 'offline',
+      detection_count: 0,
+      last_update: cam.updated_at || new Date().toISOString(),
+      stream_url: `/api/v1/video-stream/${cam.id}`
+    }))
 
-    console.log('摄像头列表刷新完成:', {
-      total: cameras.value.length,
-      enabled: enabledCameras.value.length,
-      selected: selectedCameraIds.value.length,
-      running: Object.values(cameraStore.runtimeStatus).filter((s: any) => s?.running).length
-    })
+    // 获取统计数据（可选，失败不影响摄像头显示）
+    try {
+      // 同时获取实时统计和检测统计
+      const [realtimeStats, detectionStats] = await Promise.all([
+        getRealtimeStatistics(),
+        getDetectionRealtimeStatistics()
+      ])
 
-    // 如果当前没有选中的摄像头，但有了启用的摄像头，自动选择
-    if (selectedCameraIds.value.length === 0 && enabledCameras.value.length > 0) {
-      selectedCameraIds.value = enabledCameras.value.map((cam) => cam.id)
+      // 从不同的API组合数据
+      onlineCameras.value = detectionStats.connection_status?.active_cameras || 0
+      detectionCount.value = realtimeStats.detection_stats?.total_detections_today || 0
+      avgFps.value = Math.round(detectionStats.avg_fps || 0)
+      alertCount.value = realtimeStats.alerts?.active_alerts || 0
+    } catch (statsError: any) {
+      console.warn('统计数据获取失败，使用默认值:', statsError.message)
+      // 使用默认统计值
+      onlineCameras.value = cameras.value.filter(c => c.status === 'active' || c.status === 'online').length
+      detectionCount.value = 0
+      avgFps.value = 0
+      alertCount.value = 0
     }
-
-    const runningCount = Object.values(cameraStore.runtimeStatus).filter((s: any) => s?.running).length
-    message.success(`摄像头列表已刷新: 共 ${cameras.value.length} 个，已启用 ${enabledCameras.value.length} 个，运行中 ${runningCount} 个`)
   } catch (error: any) {
-    console.error('刷新摄像头列表失败:', error)
-    message.error('刷新失败: ' + (error.message || '未知错误'))
+    console.error('获取监控数据失败:', error)
+    message.error(error.message || '获取监控数据失败，请稍后重试')
+
+    // 使用默认值
+    onlineCameras.value = 0
+    detectionCount.value = 0
+    avgFps.value = 0
+    alertCount.value = 0
+    cameras.value = []
   } finally {
     loading.value = false
   }
 }
 
-function toggleFullscreen() {
-  if (!isFullscreen.value) {
-    // 进入全屏
-    const container = document.querySelector('.realtime-monitor-container')
-    if (container) {
-      if ((container as any).requestFullscreen) {
-        ;(container as any).requestFullscreen()
-      } else if ((container as any).webkitRequestFullscreen) {
-        ;(container as any).webkitRequestFullscreen()
-      } else if ((container as any).mozRequestFullScreen) {
-        ;(container as any).mozRequestFullScreen()
-      } else if ((container as any).msRequestFullscreen) {
-        ;(container as any).msRequestFullscreen()
-      }
-    }
-  } else {
-    // 退出全屏
-    if (document.exitFullscreen) {
-      document.exitFullscreen()
-    } else if ((document as any).webkitExitFullscreen) {
-      ;(document as any).webkitExitFullscreen()
-    } else if ((document as any).mozCancelFullScreen) {
-      ;(document as any).mozCancelFullScreen()
-    } else if ((document as any).msExitFullscreen) {
-      ;(document as any).msExitFullscreen()
-    }
-  }
+const refreshCameras = async () => {
+  await fetchMonitoringData()
+  message.success('刷新成功')
 }
 
-// 监听全屏状态变化
-function handleFullscreenChange() {
-  isFullscreen.value = !!(
-    document.fullscreenElement ||
-    (document as any).webkitFullscreenElement ||
-    (document as any).mozFullScreenElement ||
-    (document as any).msFullscreenElement
-  )
-}
+// 摄像头控制
+const handleCameraControl = async (cameraId: string, action: 'start' | 'stop' | 'restart') => {
+  controlLoading.value[cameraId] = true
 
-// 监听布局模式变化
-watch(layoutMode, (newMode) => {
-  if (newMode === 'single' && selectedCameraIds.value.length > 1) {
-    selectedCameraIds.value = [selectedCameraIds.value[0]]
-  }
-})
-
-// 生命周期
-onMounted(async () => {
   try {
-    // 先加载摄像头列表
-    await cameraStore.fetchCameras()
-    // 然后刷新摄像头运行状态
-    await cameraStore.refreshRuntimeStatus()
-
-    // 💡 优化：使用 nextTick 等待 DOM 和响应性更新完成
-    // 确保所有计算属性基于最新的 store 状态完成计算
-    await nextTick()
-
-    console.log('摄像头列表加载完成:', {
-      total: cameras.value.length,
-      enabled: enabledCameras.value.length,
-      cameras: cameras.value.map(c => ({
-        id: c.id,
-        name: c.name,
-        enabled: c.enabled,
-        active: c.active,
-        running: cameraStore.runtimeStatus[c.id]?.running || false,
-        isEnabled: c.enabled === true || c.active === true || cameraStore.runtimeStatus[c.id]?.running === true
-      }))
-    })
-
-    // 默认选择所有启用的摄像头，如果没有启用的，则选择所有摄像头
-    if (enabledCameras.value.length > 0) {
-      selectedCameraIds.value = enabledCameras.value.map((cam) => cam.id)
-      console.log('已选择启用的摄像头:', selectedCameraIds.value)
-
-      // 检查是否有正在运行的摄像头
-      const runningCameras = enabledCameras.value.filter(
-        cam => cameraStore.runtimeStatus[cam.id]?.running
-      )
-      if (runningCameras.length === 0) {
-        // 不显示警告，因为可能刚启动，摄像头还在连接中
-        console.log('摄像头已启用但未运行，可能在启动中...')
-      }
-    } else if (cameras.value.length > 0) {
-      // 如果没有启用的摄像头，选择所有摄像头（用户可以选择要查看的）
-      selectedCameraIds.value = cameras.value.map((cam) => cam.id)
-      console.log('没有启用的摄像头，已选择所有摄像头:', selectedCameraIds.value)
-      // 不显示警告，因为用户可能想查看未启用的摄像头
-    } else {
-      console.log('摄像头列表为空')
+    let actionText = ''
+    switch (action) {
+      case 'start':
+        await startCamera(cameraId)
+        actionText = '启动'
+        break
+      case 'stop':
+        await stopCamera(cameraId)
+        actionText = '停止'
+        break
+      case 'restart':
+        await restartCamera(cameraId)
+        actionText = '重启'
+        break
     }
-  } catch (error: any) {
-    console.error('加载摄像头列表失败:', error)
-    message.error('加载摄像头列表失败: ' + (error.message || '未知错误'))
-  }
 
-  // 监听全屏状态变化
-  document.addEventListener('fullscreenchange', handleFullscreenChange)
-  document.addEventListener('webkitfullscreenchange', handleFullscreenChange)
-  document.addEventListener('mozfullscreenchange', handleFullscreenChange)
-  document.addEventListener('MSFullscreenChange', handleFullscreenChange)
+    message.success(`${actionText}成功`)
+
+    // 延迟刷新，等待状态更新
+    setTimeout(async () => {
+      await fetchMonitoringData()
+    }, 1000)
+  } catch (error: any) {
+    message.error(error.message || '操作失败')
+  } finally {
+    controlLoading.value[cameraId] = false
+  }
+}
+
+const handleImageError = (e: Event) => {
+  console.error('Image load error:', e)
+}
+
+const formatTime = (timestamp: string | Date) => {
+  if (!timestamp) return '--'
+  const date = new Date(timestamp)
+  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
+// 定时刷新
+let updateInterval: NodeJS.Timeout
+
+onMounted(() => {
+  // 首次加载
+  fetchMonitoringData()
+
+  // 每30秒刷新一次
+  updateInterval = setInterval(() => {
+    fetchMonitoringData()
+  }, 30000)
 })
 
 onUnmounted(() => {
-  document.removeEventListener('fullscreenchange', handleFullscreenChange)
-  document.removeEventListener('webkitfullscreenchange', handleFullscreenChange)
-  document.removeEventListener('mozfullscreenchange', handleFullscreenChange)
-  document.removeEventListener('MSFullscreenChange', handleFullscreenChange)
+  if (updateInterval) {
+    clearInterval(updateInterval)
+  }
 })
 </script>
 
-<style scoped>
-.realtime-monitor-container {
-  display: flex;
-  flex-direction: column;
-  min-height: calc(100vh - 200px);
-  width: 100%;
-  padding: 16px;
+<style scoped lang="scss">
+/**
+ * 实时监控页面 - 专业版
+ */
+
+// 颜色变量
+$color-bg: #F7FAFC;
+$color-white: #FFFFFF;
+$color-border: #E6EDF5;
+$color-text-primary: #1F2D3D;
+$color-text-secondary: #6B778C;
+$color-text-tertiary: #8C9BAB;
+
+$color-online: #52C41A;
+$color-offline: #FF4D4F;
+$color-detection: #1E9FFF;
+$color-alert: #FF6B6B;
+
+.professional-monitor {
+  padding: 24px;
+  background: $color-bg;
+  min-height: 100vh;
 }
 
-.control-card {
-  margin: 16px 0;
-  flex-shrink: 0;
-}
-
-/* 💡 优化：响应式布局容器，支持自动换行 */
-.control-wrap-container {
+// ===== 页面头部 =====
+.page-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  padding: 20px 24px;
+  background: $color-white;
+  border-radius: 12px;
+  border: 1px solid $color-border;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.header-left {
+  flex: 1;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: $color-text-primary;
+  margin: 0 0 4px 0;
+}
+
+.page-subtitle {
+  font-size: 14px;
+  color: $color-text-secondary;
+  margin: 0;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
   gap: 12px;
 }
 
-.video-grid-container {
+// ===== 统计卡片 =====
+.stats-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  background: $color-white;
+  border-radius: 12px;
+  border: 1px solid $color-border;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+}
+
+.stat-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  flex-shrink: 0;
+
+  &.stat-icon-online {
+    background: rgba(82, 196, 26, 0.1);
+    color: $color-online;
+  }
+
+  &.stat-icon-detection {
+    background: rgba(30, 159, 255, 0.1);
+    color: $color-detection;
+  }
+
+  &.stat-icon-fps {
+    background: rgba(43, 201, 201, 0.1);
+    color: #2BC9C9;
+  }
+
+  &.stat-icon-alert {
+    background: rgba(255, 107, 107, 0.1);
+    color: $color-alert;
+  }
+}
+
+.stat-content {
   flex: 1;
-  overflow: auto;
-  background: var(--body-color);
 }
 
-.video-grid-container.fullscreen {
-  padding: 0;
-  background: #000;
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: $color-text-primary;
+  line-height: 1.2;
+  margin-bottom: 4px;
+  font-variant-numeric: tabular-nums;
 }
 
+.stat-label {
+  font-size: 13px;
+  color: $color-text-secondary;
+}
+
+// ===== 视频网格 =====
 .video-grid {
   display: grid;
   gap: 16px;
-  height: 100%;
+
+  &.grid-2 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  &.grid-3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  &.grid-4 {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
-.video-item {
+.video-card {
+  background: $color-white;
+  border-radius: 12px;
+  border: 1px solid $color-border;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    border-color: $color-detection;
+
+    .video-overlay {
+      opacity: 1;
+    }
+  }
+}
+
+.video-wrapper {
   position: relative;
-  min-height: 300px;
+  width: 100%;
+  padding-top: 56.25%; // 16:9
   background: #000;
-  border-radius: 8px;
   overflow: hidden;
 }
 
-.video-single {
+.video-stream {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.video-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.05);
+
+  p {
+    margin: 0;
+    font-size: 14px;
+    color: $color-text-tertiary;
+  }
 }
 
-.empty-state {
+.video-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.6) 0%, transparent 30%, transparent 70%, rgba(0, 0, 0, 0.6) 100%);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 12px;
+  pointer-events: none; // 允许点击穿透到VideoStream组件
+}
+
+.video-header {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
 }
 
-/* 全屏模式样式 */
-:fullscreen .video-grid-container,
-:-webkit-full-screen .video-grid-container,
-:-moz-full-screen .video-grid-container,
-:-ms-fullscreen .video-grid-container {
-  padding: 8px;
-  background: #000;
+.camera-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #FFFFFF;
 }
 
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .video-grid {
-    grid-template-columns: 1fr !important;
+.camera-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #FFFFFF;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+
+  &.online .status-dot {
+    background: $color-online;
   }
 
-  .control-card {
-    margin: 8px 0;
+  &.offline .status-dot {
+    background: $color-offline;
+  }
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.video-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.video-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #FFFFFF;
+}
+
+.video-controls {
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: auto; // 恢复按钮的点击事件
+
+  .n-button {
+    padding: 4px 8px;
+    height: 28px;
+  }
+}
+
+.video-card:hover .video-controls {
+  opacity: 1;
+}
+
+// ===== 空状态 =====
+.empty-state {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  background: $color-white;
+  border-radius: 12px;
+  border: 1px solid $color-border;
+}
+
+.empty-text {
+  margin: 16px 0 24px 0;
+  font-size: 16px;
+  color: $color-text-secondary;
+}
+
+// ===== 单屏模式 =====
+.single-view {
+  background: $color-white;
+  border-radius: 12px;
+  border: 1px solid $color-border;
+  overflow: hidden;
+}
+
+.single-video-card {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 24px;
+  padding: 24px;
+}
+
+.single-video-wrapper {
+  position: relative;
+  width: 100%;
+  padding-top: 56.25%;
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+
+  // VideoStream组件绝对定位填充容器
+  > * {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+  }
+}
+
+.single-video-stream {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.single-video-info {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.single-video-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+
+  h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: $color-text-primary;
+    margin: 0;
+  }
+}
+
+.single-video-controls {
+  display: flex;
+  gap: 8px;
+}
+
+// ===== 响应式 =====
+@media (max-width: 1400px) {
+  .stats-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .video-grid.grid-4 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 1024px) {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .header-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .video-grid.grid-3,
+  .video-grid.grid-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .single-video-card {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .professional-monitor {
+    padding: 16px;
+  }
+
+  .stats-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .video-grid {
+    grid-template-columns: 1fr !important;
   }
 }
 </style>

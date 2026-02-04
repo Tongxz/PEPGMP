@@ -112,7 +112,17 @@ class HumanDetector(BaseDetector):
 
         # 使用统一配置或传入参数
         model_path = model_path if model_path is not None else self.params.model_path
-        device = device if device != "auto" else self.params.device
+
+        # 解析 device：如果为 "auto"，需要先解析为实际设备
+        if device == "auto":
+            device = self.params.device
+        # 如果统一配置中的 device 也是 "auto"，需要通过 ModelConfig 解析
+        if device == "auto":
+            from src.config.model_config import ModelConfig
+
+            config = ModelConfig()
+            device = config.select_device(requested=None)
+            logger.info(f"设备 'auto' 已解析为: {device}")
 
         # 确定是否启用TensorRT自动转换
         # 优先级：显式参数 > 环境变量 > 默认值True（向后兼容）
@@ -191,8 +201,13 @@ class HumanDetector(BaseDetector):
                 logger.warning(f"模型文件不存在: {model_path}")
                 return model_path
 
-            # 生成TensorRT引擎路径
-            engine_file = pt_file.with_suffix(".engine")
+            # 将转换后的文件保存到可写目录（/app/output/models/yolo/）
+            # 因为原始模型目录可能是只读的（Docker volume 挂载）
+            output_dir = Path("/app/output/models/yolo")
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            # 生成TensorRT引擎路径（保存在可写目录）
+            engine_file = output_dir / pt_file.with_suffix(".engine").name
 
             # 检查是否需要转换
             needs_conversion = False
@@ -211,23 +226,65 @@ class HumanDetector(BaseDetector):
             if needs_conversion:
                 logger.info(f"🔄 开始转换为TensorRT: {pt_file.name}")
 
+                import shutil
+                import tempfile
+
                 from ultralytics import YOLO
 
                 # 加载模型
-                model = YOLO(str(pt_file))
+                YOLO(str(pt_file))
 
-                # 导出为TensorRT FP16
-                model.export(
-                    format="engine",
-                    device=0,
-                    imgsz=640,
-                    half=True,  # FP16精度
-                    workspace=4,  # 4GB工作空间
-                    simplify=True,
-                    opset=12,
-                    dynamic=False,
-                    verbose=False,
-                )
+                # 使用临时目录进行转换（因为 export 方法可能需要在模型目录写入临时文件）
+                # 然后将结果文件移动到目标目录
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    Path(tmpdir) / pt_file.stem
+
+                    # 导出为TensorRT FP16（会生成 .engine 文件）
+                    # export 方法会将文件保存到与输入文件相同的目录
+                    # 所以我们先复制模型文件到临时目录
+                    tmp_pt_file = Path(tmpdir) / pt_file.name
+                    shutil.copy2(pt_file, tmp_pt_file)
+
+                    # 在临时目录中导出
+                    model_tmp = YOLO(str(tmp_pt_file))
+                    exported_path = model_tmp.export(
+                        format="engine",
+                        device=0,
+                        imgsz=640,
+                        half=True,  # FP16精度
+                        workspace=4,  # 4GB工作空间
+                        simplify=True,
+                        opset=12,
+                        dynamic=False,
+                        verbose=False,
+                    )
+
+                    # 将生成的 .engine 文件移动到目标目录
+                    # export() 方法返回导出文件的路径，通常与输入文件在同一目录
+                    exported_engine = Path(exported_path)
+                    if exported_engine.exists() and exported_engine.suffix == ".engine":
+                        # 直接使用 export() 返回的路径
+                        shutil.move(str(exported_engine), str(engine_file))
+                        logger.info(f"✅ TensorRT引擎已保存到: {engine_file}")
+                    else:
+                        # 如果 export 返回的路径不存在或不是 .engine 文件，尝试在临时目录中查找
+                        # export() 可能返回 .onnx 文件路径，我们需要找 .engine 文件
+                        tmp_engine = Path(tmpdir) / (tmp_pt_file.stem + ".engine")
+                        if tmp_engine.exists():
+                            shutil.move(str(tmp_engine), str(engine_file))
+                            logger.info(f"✅ TensorRT引擎已保存到: {engine_file}")
+                        else:
+                            # 最后尝试：在临时目录中查找所有 .engine 文件
+                            engine_files = list(Path(tmpdir).glob("*.engine"))
+                            if engine_files:
+                                shutil.move(str(engine_files[0]), str(engine_file))
+                                logger.info(f"✅ TensorRT引擎已保存到: {engine_file}")
+                            else:
+                                raise FileNotFoundError(
+                                    f"TensorRT转换失败: 输出文件不存在。"
+                                    f"export()返回路径: {exported_path}, "
+                                    f"临时目录: {tmpdir}"
+                                )
 
                 # 检查输出文件
                 if engine_file.exists():
@@ -250,10 +307,18 @@ class HumanDetector(BaseDetector):
         """加载YOLO模型"""
         try:
             model = YOLO(model_path)
-            # 在测试环境中使用的 DummyYOLO 可能不实现 .to 方法，这里做兼容处理
-            if hasattr(model, "to"):
-                model.to(self.device)
-            logger.info(f"成功加载模型: {model_path} 到设备: {self.device}")
+
+            # TensorRT 引擎文件（.engine）不支持 .to() 方法
+            # 而且 TensorRT 引擎已经针对特定设备优化，不需要移动设备
+            # 只有 PyTorch 模型（.pt）才需要调用 .to() 方法
+            if model_path.endswith(".engine"):
+                logger.info(f"成功加载TensorRT引擎: {model_path}")
+            else:
+                # 在测试环境中使用的 DummyYOLO 可能不实现 .to 方法，这里做兼容处理
+                if hasattr(model, "to"):
+                    model.to(self.device)
+                logger.info(f"成功加载模型: {model_path} 到设备: {self.device}")
+
             return model
         except Exception as e:
             logger.error(f"模型加载失败: {e}")

@@ -173,85 +173,45 @@ const resourceUtilization = ref(0)
 // 获取实验数据
 async function fetchExperiments() {
   try {
-    // 这里应该调用实际的MLflow API
-    // 目前使用模拟数据
-    experiments.value = [
-      {
-        run_id: 'exp_001',
-        run_name: 'YOLOv8训练实验',
-        status: 'FINISHED',
-        start_time: Date.now() - 3600000,
-        end_time: Date.now() - 1800000,
-        params: {
-          learning_rate: 0.001,
-          batch_size: 32,
-          epochs: 100
-        },
-        metrics: {
-          accuracy: 0.95,
-          loss: 0.05,
-          f1_score: 0.93
-        }
-      },
-      {
-        run_id: 'exp_002',
-        run_name: '模型优化实验',
-        status: 'RUNNING',
-        start_time: Date.now() - 1800000,
-        end_time: Date.now(),
-        params: {
-          learning_rate: 0.0005,
-          batch_size: 64,
-          epochs: 50
-        },
-        metrics: {
-          accuracy: 0.97,
-          loss: 0.03
-        }
-      }
-    ]
-  } catch (error) {
+    const response = await http.get('/mlops/experiments', {
+      params: { limit: 10, offset: 0 }
+    })
+    experiments.value = response.data.items || []
+  } catch (error: any) {
     console.error('获取实验数据失败:', error)
+    message.error(error.message || '获取实验数据失败')
+    experiments.value = []
   }
 }
 
 // 获取模型数据
 async function fetchModels() {
   try {
-    // 这里应该调用实际的DVC API
-    // 目前使用模拟数据
-    models.value = [
-      {
-        name: 'yolov8s.pt',
-        version: 'v1.2.0',
-        path: 'models/yolo/yolov8s.pt',
-        size: 21474836, // 20MB
-        modified_time: Date.now() - 86400000
-      },
-      {
-        name: 'hairnet_detection.pt',
-        version: 'v2.1.0',
-        path: 'models/hairnet_detection/hairnet_detection.pt',
-        size: 52428800, // 50MB
-        modified_time: Date.now() - 172800000
-      }
-    ]
-  } catch (error) {
+    const response = await http.get('/mlops/models-versions')
+    models.value = response.data.items || []
+  } catch (error: any) {
     console.error('获取模型数据失败:', error)
+    message.error(error.message || '获取模型数据失败')
+    models.value = []
   }
 }
 
 // 获取性能数据
 async function fetchPerformanceData() {
   try {
-    // 这里应该调用实际的性能API
-    // 目前使用模拟数据
-    avgProcessingTime.value = 45.2
-    detectionAccuracy.value = 94.5
-    systemStability.value = 98.2
-    resourceUtilization.value = 76.8
-  } catch (error) {
+    const response = await http.get('/mlops/performance')
+    const data = response.data
+    avgProcessingTime.value = data.avg_processing_time || 0
+    detectionAccuracy.value = data.detection_accuracy || 0
+    systemStability.value = data.system_stability || 0
+    resourceUtilization.value = data.resource_utilization || 0
+  } catch (error: any) {
     console.error('获取性能数据失败:', error)
+    message.error(error.message || '获取性能数据失败')
+    avgProcessingTime.value = 0
+    detectionAccuracy.value = 0
+    systemStability.value = 0
+    resourceUtilization.value = 0
   }
 }
 

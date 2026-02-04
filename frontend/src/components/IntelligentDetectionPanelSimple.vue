@@ -151,7 +151,7 @@ const stats = ref<{
 } | null>(null)
 
 // 自动刷新定时器
-let refreshInterval: NodeJS.Timeout | null = null
+let refreshInterval: number | null = null
 
 // 加载统计数据
 async function loadStats() {

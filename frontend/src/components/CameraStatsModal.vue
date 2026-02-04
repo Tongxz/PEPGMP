@@ -512,8 +512,8 @@ function formatViolationType(type: string): string {
   return typeMap[type] || type || '未知违规'
 }
 
-function getViolationTypeColor(type: string): string {
-  const colorMap: Record<string, string> = {
+function getViolationTypeColor(type: string): 'default' | 'success' | 'warning' | 'error' | 'info' | 'primary' {
+  const colorMap: Record<string, 'default' | 'success' | 'warning' | 'error' | 'info' | 'primary'> = {
     'no_hairnet': 'error',
     'no_handwash': 'warning',
     'no_sanitize': 'warning',
@@ -556,8 +556,8 @@ function formatStatus(status: string): string {
   return statusMap[status] || status
 }
 
-function getStatusTypeColor(status: string): string {
-  const colorMap: Record<string, string> = {
+function getStatusTypeColor(status: string): 'default' | 'success' | 'warning' | 'error' | 'info' | 'primary' {
+  const colorMap: Record<string, 'default' | 'success' | 'warning' | 'error' | 'info' | 'primary'> = {
     'pending': 'warning',
     'confirmed': 'error',
     'false_positive': 'info',

@@ -1,6 +1,6 @@
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
 import { regionApi, type Region } from '@/api/region'
+import { defineStore } from 'pinia'
+import { computed, ref } from 'vue'
 
 export const useRegionStore = defineStore('region', () => {
   // 状态

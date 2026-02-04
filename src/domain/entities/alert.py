@@ -23,6 +23,9 @@ class Alert:
     details: Optional[Dict[str, Any]] = None
     notification_sent: bool = False
     notification_channels_used: Optional[List[str]] = None
+    status: Optional[str] = "pending"  # pending, confirmed, false_positive, resolved
+    handled_at: Optional[datetime] = None
+    handled_by: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式.
@@ -49,5 +52,18 @@ class Alert:
 
         if self.notification_channels_used is not None:
             result["notification_channels_used"] = self.notification_channels_used
+
+        if self.status is not None:
+            result["status"] = self.status
+
+        if self.handled_at is not None:
+            result["handled_at"] = (
+                self.handled_at.isoformat()
+                if isinstance(self.handled_at, datetime)
+                else str(self.handled_at)
+            )
+
+        if self.handled_by is not None:
+            result["handled_by"] = self.handled_by
 
         return result

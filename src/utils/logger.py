@@ -3,10 +3,72 @@
 
 import logging
 import logging.handlers
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
+
+
+class LogThrottler:
+    """日志节流器，控制高频日志的输出频率.
+
+    用于减少高频操作的日志输出，避免日志洪水。
+
+    Example:
+        >>> throttler = LogThrottler(interval=30)
+        >>> for i in range(100):
+        ...     should_log, count = throttler.should_log("operation")
+        ...     if should_log:
+        ...         logger.info(f"已处理 {count} 次操作")
+    """
+
+    def __init__(self, interval: int = 30, max_keys: int = 100):
+        """
+        初始化日志节流器.
+
+        Args:
+            interval: 每N次操作记录一次日志
+            max_keys: 最大key数量，防止内存无限增长
+        """
+        self.interval = interval
+        self.max_keys = max_keys
+        self.counters: Dict[str, int] = {}
+
+    def should_log(self, key: str) -> Tuple[bool, int]:
+        """
+        检查是否应该记录日志.
+
+        Args:
+            key: 操作的唯一标识（如 "push_frame_camera_001"）
+
+        Returns:
+            (是否记录日志, 当前计数)
+        """
+        # 防止内存无限增长
+        if len(self.counters) >= self.max_keys and key not in self.counters:
+            # 清理计数最小的key（最不活跃）
+            oldest_key = min(self.counters, key=self.counters.get)  # type: ignore
+            del self.counters[oldest_key]
+
+        if key not in self.counters:
+            self.counters[key] = 0
+
+        self.counters[key] += 1
+        count = self.counters[key]
+
+        if count % self.interval == 0:
+            return True, count
+        return False, count
+
+    def reset(self, key: str):
+        """重置指定key的计数器."""
+        if key in self.counters:
+            self.counters[key] = 0
+
+    def reset_all(self):
+        """重置所有计数器."""
+        self.counters.clear()
 
 
 class ColoredFormatter(logging.Formatter):
@@ -27,9 +89,45 @@ class ColoredFormatter(logging.Formatter):
         return super().format(record)
 
 
-def get_logger(
+def get_log_level_from_env() -> int:
+    """根据环境获取日志级别.
+
+    优先级:
+    1. LOG_LEVEL环境变量（如 LOG_LEVEL=DEBUG）
+    2. ENV环境变量（development/production/testing）
+    3. 默认 INFO
+
+    Returns:
+        日志级别常量（logging.DEBUG, logging.INFO等）
+
+    Example:
+        >>> import os
+        >>> os.environ["ENV"] = "production"
+        >>> level = get_log_level_from_env()
+        >>> level == logging.INFO
+        True
+    """
+    # 优先使用LOG_LEVEL环境变量
+    log_level_str = os.getenv("LOG_LEVEL", "").upper()
+    if log_level_str and hasattr(logging, log_level_str):
+        return getattr(logging, log_level_str)
+
+    # 根据ENV环境变量自动选择
+    env = os.getenv("ENV", "development").lower()
+    level_map = {
+        "production": logging.INFO,
+        "prod": logging.INFO,
+        "testing": logging.WARNING,
+        "test": logging.WARNING,
+        "development": logging.DEBUG,
+        "dev": logging.DEBUG,
+    }
+    return level_map.get(env, logging.INFO)
+
+
+def get_logger(  # noqa: C901
     name: str = "HumanBehaviorDetection",
-    level: str = "INFO",
+    level: Optional[str] = None,
     log_file: Optional[str] = None,
     log_category: Optional[str] = None,
     console_output: bool = True,
@@ -39,7 +137,8 @@ def get_logger(
 
     Args:
         name: 日志记录器名称
-        level: 日志级别 (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        level: 日志级别 (DEBUG, INFO, WARNING, ERROR, CRITICAL)，
+               如果为None则根据环境自动选择
         log_file: 日志文件路径，如果为None则不写入文件
         log_category: 日志分类（detection, api, application, error, event），用于自动构建日志路径
         console_output: 是否输出到控制台
@@ -53,7 +152,13 @@ def get_logger(
     if logger.handlers:
         return logger
 
-    logger.setLevel(getattr(logging, level.upper()))
+    # 如果未指定level，使用环境感知的级别
+    if level is None:
+        log_level = get_log_level_from_env()
+    else:
+        log_level = getattr(logging, level.upper())
+
+    logger.setLevel(log_level)
 
     # 如果指定了分类且未指定日志文件，自动构建日志路径
     if log_category and log_file is None:
@@ -182,6 +287,25 @@ def setup_project_logger(log_dir: str = "logs") -> logging.Logger:
 
 # 默认日志记录器
 default_logger = get_logger()
+
+# 全局日志节流器（用于高频操作）
+_global_throttler = LogThrottler(interval=30)
+
+
+def get_throttler() -> LogThrottler:
+    """获取全局日志节流器.
+
+    Returns:
+        全局日志节流器实例
+
+    Example:
+        >>> from src.utils.logger import get_throttler
+        >>> throttler = get_throttler()
+        >>> should_log, count = throttler.should_log("operation")
+        >>> if should_log:
+        ...     logger.info(f"已处理 {count} 次操作")
+    """
+    return _global_throttler
 
 
 def setup_error_logger() -> logging.Logger:

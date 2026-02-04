@@ -10,6 +10,11 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
+from src.utils.cache import redis_cache
+
+from ..schemas.error_schemas import ErrorCode
+from ..utils.error_helpers import raise_http_exception
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
@@ -23,14 +28,23 @@ except ImportError:
 def _ensure_domain_service():
     """确保领域服务可用，如果不可用则抛出HTTP异常."""
     if get_detection_service_domain is None:
-        raise HTTPException(status_code=503, detail="检测领域服务不可用，请联系系统管理员")
+        raise raise_http_exception(
+            status_code=503,
+            message="检测领域服务不可用，请联系系统管理员",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
     service = get_detection_service_domain()
     if service is None:
-        raise HTTPException(status_code=503, detail="检测领域服务未初始化，请联系系统管理员")
+        raise raise_http_exception(
+            status_code=503,
+            message="检测领域服务未初始化，请联系系统管理员",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
     return service
 
 
 @router.get("/statistics/realtime", summary="实时统计接口")
+@redis_cache(ttl=10, key_prefix="stats:realtime:v1")
 async def get_realtime_statistics() -> Dict[str, Any]:
     """获取实时统计信息.
 
@@ -48,10 +62,16 @@ async def get_realtime_statistics() -> Dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"获取实时统计失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"获取实时统计失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取实时统计失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
 
 
 @router.get("/statistics/detection-realtime", summary="智能检测实时统计接口")
+@redis_cache(ttl=10, key_prefix="stats:detection:v1")
 async def get_detection_realtime_statistics() -> Dict[str, Any]:
     """获取智能检测实时统计数据（用于首页检测面板）.
 
@@ -77,7 +97,12 @@ async def get_detection_realtime_statistics() -> Dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"获取检测实时统计失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"获取检测实时统计失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取检测实时统计失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
 
 
 @router.get("/statistics/summary", summary="事件统计汇总")
@@ -133,7 +158,12 @@ async def get_statistics_summary(
         raise
     except Exception as e:
         logger.error(f"获取统计摘要失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"获取统计摘要失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取统计摘要失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
 
 
 @router.get("/statistics/daily", summary="按天统计事件趋势")
@@ -165,7 +195,12 @@ async def get_statistics_daily(
         raise
     except Exception as e:
         logger.error(f"获取每日统计失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"获取每日统计失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取每日统计失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
 
 
 @router.get("/statistics/events", summary="事件列表查询")
@@ -204,13 +239,21 @@ async def get_statistics_events(
             try:
                 start_dt = dt.fromisoformat(start_time.replace("Z", "+00:00"))
             except Exception as e:
-                raise HTTPException(status_code=400, detail=f"开始时间格式错误: {str(e)}")
+                raise raise_http_exception(
+                    status_code=400,
+                    message=f"开始时间格式错误: {str(e)}",
+                    error_code=ErrorCode.VALIDATION_ERROR,
+                )
 
         if end_time:
             try:
                 end_dt = dt.fromisoformat(end_time.replace("Z", "+00:00"))
             except Exception as e:
-                raise HTTPException(status_code=400, detail=f"结束时间格式错误: {str(e)}")
+                raise raise_http_exception(
+                    status_code=400,
+                    message=f"结束时间格式错误: {str(e)}",
+                    error_code=ErrorCode.VALIDATION_ERROR,
+                )
 
         result = await domain_service.get_event_history(
             start_time=start_dt,
@@ -224,7 +267,12 @@ async def get_statistics_events(
         raise
     except Exception as e:
         logger.error(f"获取事件列表失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"获取事件列表失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取事件列表失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
 
 
 @router.get("/statistics/history", summary="近期事件历史")
@@ -270,4 +318,9 @@ async def get_statistics_history(
         raise
     except Exception as e:
         logger.error(f"获取近期历史失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"获取近期历史失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取近期历史失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )

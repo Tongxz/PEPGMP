@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Optional
 import asyncpg
 from asyncpg.pool import Pool
 
+from src.database.pool_config import PoolConfig
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,20 +37,39 @@ class DatabaseService:
             return
 
         try:
-            logger.info("Connecting to database...")
+            # 获取环境感知的连接池配置
+            pool_config = PoolConfig.from_env()
+
+            logger.info(
+                f"初始化数据库连接池 - "
+                f"ENV={os.getenv('ENV', 'development')}, "
+                f"min_size={pool_config.min_size}, "
+                f"max_size={pool_config.max_size}, "
+                f"command_timeout={pool_config.command_timeout}s"
+            )
+
             self.pool = await asyncpg.create_pool(
                 self.database_url,
-                min_size=5,
-                max_size=20,
-                command_timeout=60,
+                min_size=pool_config.min_size,
+                max_size=pool_config.max_size,
+                command_timeout=pool_config.command_timeout,
+                max_queries=pool_config.max_queries,
+                max_inactive_connection_lifetime=pool_config.max_inactive_connection_lifetime,
             )
             self._initialized = True
-            logger.info("✅ Database connection pool created successfully")
+            logger.info("✅ 数据库连接池创建成功")
 
-            # 测试连接
+            # 测试连接并记录版本信息
             async with self.pool.acquire() as conn:
                 version = await conn.fetchval("SELECT version()")
                 logger.info(f"PostgreSQL version: {version}")
+
+            # 记录连接池状态
+            logger.info(
+                f"连接池状态 - "
+                f"size={self.pool.get_size()}, "
+                f"idle={self.pool.get_idle_size()}"
+            )
 
         except Exception as e:
             logger.error(f"Failed to initialize database: {e}")
@@ -60,6 +81,66 @@ class DatabaseService:
             await self.pool.close()
             self._initialized = False
             logger.info("Database connection pool closed")
+
+    async def health_check(self) -> Dict[str, Any]:
+        """连接池健康检查.
+
+        Returns:
+            健康状态字典，包含：
+            - healthy: 是否健康
+            - message: 状态消息
+            - size: 连接池大小（可选）
+            - idle_size: 空闲连接数（可选）
+            - usage_percent: 使用率（可选）
+        """
+        if not self._initialized or self.pool is None:
+            return {
+                "healthy": False,
+                "message": "连接池未初始化",
+            }
+
+        try:
+            # 执行简单查询测试连接
+            async with self.pool.acquire() as conn:
+                result = await conn.fetchval("SELECT 1")
+                if result != 1:
+                    return {
+                        "healthy": False,
+                        "message": "数据库查询异常",
+                    }
+
+            # 获取连接池状态
+            size = self.pool.get_size()
+            idle_size = self.pool.get_idle_size()
+            max_size = self.pool.get_max_size()
+
+            # 计算使用率
+            usage = (size - idle_size) / max_size if max_size > 0 else 0
+
+            # 如果使用率超过90%，返回警告
+            if usage > 0.9:
+                return {
+                    "healthy": True,
+                    "warning": "连接池使用率过高",
+                    "usage_percent": round(usage * 100, 2),
+                    "size": size,
+                    "idle_size": idle_size,
+                    "max_size": max_size,
+                }
+
+            return {
+                "healthy": True,
+                "message": "连接池正常",
+                "usage_percent": round(usage * 100, 2),
+                "size": size,
+                "idle_size": idle_size,
+                "max_size": max_size,
+            }
+        except Exception as e:
+            return {
+                "healthy": False,
+                "message": f"健康检查失败: {str(e)}",
+            }
 
     async def save_detection_record(
         self,
@@ -483,7 +564,7 @@ class DatabaseService:
                     f"""
                     UPDATE alert_rules SET {', '.join(fields)}, updated_at = NOW()
                     WHERE id = ${idx}
-                    """,
+                    """,  # nosec B608 - fields from code keys, not user input
                     *values,
                 )
             return True

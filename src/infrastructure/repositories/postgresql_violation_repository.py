@@ -2,8 +2,8 @@
 
 import json
 import logging
-from datetime import timezone
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Tuple
 
 import asyncpg
 from asyncpg import Pool
@@ -322,6 +322,112 @@ class PostgreSQLViolationRepository(IViolationRepository):
         except Exception as e:
             logger.error(f"查询违规事件列表失败: {e}")
             raise RepositoryError(f"查询违规事件列表失败: {e}")
+        finally:
+            if conn:
+                await self._release_connection(conn)
+
+    async def find_paginated(
+        self,
+        camera_id: Optional[str] = None,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        violation_type: Optional[str] = None,
+        status: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """分页查询违规记录.
+
+        Args:
+            camera_id: 摄像头ID（可选）
+            start_time: 开始时间（可选）
+            end_time: 结束时间（可选）
+            violation_type: 违规类型（可选）
+            status: 状态（可选）
+            offset: 跳过的记录数
+            limit: 返回的记录数
+
+        Returns:
+            (违规记录列表, 总数)
+
+        Raises:
+            RepositoryError: 查询失败时
+        """
+        conn = None
+        try:
+            conn = await self._get_connection()
+
+            # 构建WHERE条件
+            where_clauses = []
+            params: List[Any] = []
+            param_idx = 0
+
+            if camera_id:
+                param_idx += 1
+                where_clauses.append(f"camera_id = ${param_idx}")
+                params.append(camera_id)
+
+            if start_time:
+                param_idx += 1
+                where_clauses.append(f"timestamp >= ${param_idx}")
+                params.append(start_time)
+
+            if end_time:
+                param_idx += 1
+                where_clauses.append(f"timestamp <= ${param_idx}")
+                params.append(end_time)
+
+            if violation_type:
+                param_idx += 1
+                where_clauses.append(f"violation_type = ${param_idx}")
+                params.append(violation_type)
+
+            if status:
+                param_idx += 1
+                where_clauses.append(f"status = ${param_idx}")
+                params.append(status)
+
+            where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+
+            # 查询总数
+            total = await conn.fetchval(
+                f"SELECT COUNT(*) FROM violation_events{where_sql}",  # nosec B608
+                *params,
+            )
+
+            # 查询数据
+            param_idx += 1
+            limit_param = param_idx
+            param_idx += 1
+            offset_param = param_idx
+
+            rows = await conn.fetch(
+                f"""
+                SELECT id, detection_id, camera_id, timestamp, violation_type,
+                       track_id, confidence, snapshot_path, bbox, status,
+                       handled_at, handled_by, notes, created_at, updated_at
+                FROM violation_events
+                {where_sql}
+                ORDER BY timestamp DESC
+                LIMIT ${limit_param} OFFSET ${offset_param}
+                """,  # nosec B608
+                *params,
+                limit,
+                offset,
+            )
+
+            violations = [self._row_to_dict(row) for row in rows]
+
+            logger.debug(
+                f"查询违规记录成功: offset={offset}, limit={limit}, "
+                f"返回{len(violations)}条, 总共{total}条"
+            )
+
+            return violations, int(total)
+
+        except Exception as e:
+            logger.error(f"分页查询违规记录失败: {e}", exc_info=True)
+            raise RepositoryError(f"分页查询违规记录失败: {e}")
         finally:
             if conn:
                 await self._release_connection(conn)

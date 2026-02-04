@@ -1077,6 +1077,78 @@ class DetectionServiceDomain:
             logger.error(f"获取最近事件失败: {e}")
             raise
 
+    async def _get_active_alerts(
+        self, start_time: datetime, end_time: datetime
+    ) -> Dict[str, Any]:
+        """
+        获取活跃告警数据（辅助方法）
+
+        Args:
+            start_time: 开始时间
+            end_time: 结束时间
+
+        Returns:
+            Dict[str, Any]: 包含活跃告警数和最近违规列表
+        """
+        active_alerts_count = 0
+        recent_violations = []
+
+        try:
+            if self.violation_repository:
+                # 查询未处理的违规（status='pending'）
+                violations_data = await self.violation_repository.find_all(
+                    status="pending",
+                    limit=100,  # 查询最多100条
+                    offset=0,
+                )
+                violations = violations_data.get("violations", [])
+
+                # 过滤时间范围
+                filtered_violations = []
+                for v in violations:
+                    # 检查时间戳是否在范围内
+                    v_timestamp = v.get("timestamp")
+                    if v_timestamp:
+                        # 处理不同的时间格式
+                        if isinstance(v_timestamp, str):
+                            try:
+                                from datetime import datetime as dt
+
+                                v_dt = dt.fromisoformat(
+                                    v_timestamp.replace("Z", "+00:00")
+                                )
+                            except Exception:
+                                continue
+                        elif hasattr(v_timestamp, "timestamp"):
+                            v_dt = v_timestamp
+                        else:
+                            continue
+
+                        # 检查是否在时间范围内
+                        if start_time <= v_dt <= end_time:
+                            filtered_violations.append(v)
+
+                active_alerts_count = len(filtered_violations)
+                recent_violations = [
+                    {
+                        "camera_id": str(v.get("camera_id", "")),
+                        "violation_type": str(v.get("violation_type", "")),
+                        "timestamp": (
+                            v.get("timestamp").isoformat()
+                            if hasattr(v.get("timestamp"), "isoformat")
+                            else str(v.get("timestamp", ""))
+                        ),
+                    }
+                    for v in filtered_violations[:10]  # 只返回最近10条
+                ]
+        except Exception as e:
+            logger.warning(f"查询告警数据失败: {e}")
+
+        return {
+            "active_alerts": active_alerts_count,
+            "recent_violations": recent_violations,
+        }
+
     async def get_realtime_statistics(self) -> Dict[str, Any]:
         """
         获取实时统计信息（基于领域服务数据）
@@ -1174,17 +1246,14 @@ class DetectionServiceDomain:
                     ),
                     "system_uptime": "N/A",  # 需要从系统层面获取
                 },
-                "alerts": {
-                    "active_alerts": 0,  # 需要从告警系统获取
-                    "recent_violations": [],
-                },
+                "alerts": await self._get_active_alerts(start_time, end_time),
             }
 
         except Exception as e:
             logger.error(f"获取实时统计失败: {e}")
             raise
 
-    async def get_detection_realtime_stats(self) -> Dict[str, Any]:
+    async def get_detection_realtime_stats(self) -> Dict[str, Any]:  # noqa: C901
         """
         获取智能检测实时统计数据（用于首页检测面板）
 
@@ -1224,14 +1293,25 @@ class DetectionServiceDomain:
                 else:
                     skipped_frames += 1
 
-                # 统计FPS
+                # 统计FPS（从processing_time计算或从metadata获取）
+                fps_value = 0.0
                 if hasattr(record, "fps") and record.fps:
+                    # 优先使用fps字段（如果存在）
                     fps_value = (
                         record.fps if isinstance(record.fps, (int, float)) else 0.0
                     )
-                    if fps_value > 0:
-                        total_fps += fps_value
-                        fps_count += 1
+                elif hasattr(record, "processing_time") and record.processing_time > 0:
+                    # 从processing_time计算FPS（fps = 1.0 / processing_time）
+                    fps_value = 1.0 / record.processing_time
+                elif hasattr(record, "metadata") and record.metadata:
+                    # 从metadata中获取fps（如果有）
+                    fps_value = record.metadata.get("fps", 0.0)
+                    if not isinstance(fps_value, (int, float)):
+                        fps_value = 0.0
+
+                if fps_value > 0:
+                    total_fps += fps_value
+                    fps_count += 1
 
                 # 场景分布（根据元数据判断）
                 metadata = record.metadata if hasattr(record, "metadata") else {}
@@ -1285,8 +1365,18 @@ class DetectionServiceDomain:
                 logger.warning(f"获取系统性能数据失败: {e}")
 
             # 获取活跃摄像头数
-            active_cameras = await self.camera_repository.find_active()
-            active_camera_count = len(active_cameras)
+            logger.info(f"开始查询活跃摄像头... camera_repository={self.camera_repository}")
+            if self.camera_repository is None:
+                logger.error("camera_repository 为 None!")
+                active_camera_count = 0
+            else:
+                try:
+                    active_cameras = await self.camera_repository.find_active()
+                    active_camera_count = len(active_cameras)
+                    logger.info(f"查询活跃摄像头完成: 找到 {active_camera_count} 个活跃摄像头")
+                except Exception as repo_error:
+                    logger.error(f"调用 find_active() 失败: {repo_error}", exc_info=True)
+                    active_camera_count = 0
 
             # 检查连接状态（通过检查是否有最近的检测记录）
             connected = total_frames > 0 or active_camera_count > 0
@@ -1714,6 +1804,13 @@ class DefaultCameraRepository(ICameraRepository):
         return camera_id in self._store
 
 
+def reset_detection_service_domain():
+    """重置领域模型检测服务单例（用于测试或重新初始化）"""
+    global _detection_service_domain_instance
+    _detection_service_domain_instance = None
+    logger.info("领域模型检测服务单例已重置")
+
+
 def get_detection_service_domain() -> DetectionServiceDomain:
     """
     获取领域模型检测服务实例（单例模式）
@@ -1724,9 +1821,30 @@ def get_detection_service_domain() -> DetectionServiceDomain:
     global _detection_service_domain_instance
 
     if _detection_service_domain_instance is None:
-        # 直接通过工厂创建检测记录仓储；摄像头仓储采用默认内存实现
+        # 直接通过工厂创建检测记录仓储
         detection_repo = RepositoryFactory.create_repository_from_env()
-        camera_repo = DefaultCameraRepository()
+
+        # 创建摄像头仓储（使用PostgreSQL实现）
+        camera_repo = None
+        try:
+            from src.infrastructure.repositories.postgresql_camera_repository import (
+                PostgreSQLCameraRepository,
+            )
+            from src.services import database_service
+
+            # 获取已初始化的数据库服务实例（使用全局变量）
+            db_service = database_service._db_service
+            pool = db_service.pool if db_service else None
+
+            if pool is not None:
+                camera_repo = PostgreSQLCameraRepository(pool)
+                logger.info("摄像头仓储已创建（PostgreSQL实现）")
+            else:
+                logger.warning("数据库连接池未初始化，使用默认摄像头仓储")
+                camera_repo = DefaultCameraRepository()
+        except Exception as e:
+            logger.warning(f"创建PostgreSQL摄像头仓储失败: {e}，使用默认摄像头仓储")
+            camera_repo = DefaultCameraRepository()
 
         # 创建违规仓储
         violation_repo = None
@@ -1746,6 +1864,6 @@ def get_detection_service_domain() -> DetectionServiceDomain:
             camera_repository=camera_repo,
             violation_repository=violation_repo,
         )
-        logger.info("领域模型检测服务单例已创建 (工厂+默认摄像头仓储+违规仓储)")
+        logger.info("领域模型检测服务单例已创建 (检测仓储+摄像头仓储+违规仓储)")
 
     return _detection_service_domain_instance

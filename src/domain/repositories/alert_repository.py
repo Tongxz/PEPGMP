@@ -73,3 +73,21 @@ class IAlertRepository(ABC):
         Returns:
             保存后的告警ID
         """
+
+    @abstractmethod
+    async def update_status(
+        self,
+        alert_id: int,
+        status: str,
+        handled_by: Optional[str] = None,
+    ) -> Optional[Alert]:
+        """更新告警状态.
+
+        Args:
+            alert_id: 告警ID
+            status: 新状态 (confirmed, false_positive, resolved)
+            handled_by: 处理人（可选）
+
+        Returns:
+            更新后的告警实体，如果不存在则返回None
+        """

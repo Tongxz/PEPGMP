@@ -8,14 +8,20 @@ import logging
 import logging.handlers
 import os
 import sys
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from src.api.schemas.error_schemas import ErrorCode
+from src.api.utils.error_helpers import create_error_response, is_development
 
 project_root = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -62,6 +68,7 @@ try:
     from src.api.redis_listener import shutdown_redis_listener, start_redis_listener
     from src.api.routers import (
         alerts,
+        cache,
         cameras,
         comprehensive,
         config,
@@ -93,6 +100,7 @@ except ImportError:
     from src.api.redis_listener import shutdown_redis_listener, start_redis_listener
     from src.api.routers import (
         alerts,
+        cache,
         cameras,
         comprehensive,
         config,
@@ -174,6 +182,15 @@ async def lifespan(app: FastAPI):  # noqa: C901
     """应用程序生命周期管理."""
     # Startup
     logger.info("Starting up the application...")
+
+    # 重置领域服务单例（确保使用最新代码）
+    try:
+        from src.services.detection_service_domain import reset_detection_service_domain
+
+        reset_detection_service_domain()
+        logger.info("领域服务单例已重置")
+    except Exception as e:
+        logger.warning(f"领域服务单例重置失败: {e}")
 
     # 初始化数据库服务
     try:
@@ -536,6 +553,59 @@ app.add_middleware(MetricsMiddleware)
 setup_security_middleware(app)
 
 
+# 添加全局异常处理器，确保所有错误都使用统一格式
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """处理HTTP异常，转换为统一格式"""
+    request_id = getattr(request.state, "request_id", f"req_{int(time.time() * 1000)}")
+
+    # 检查detail是否已经是统一格式（字典）
+    if isinstance(exc.detail, dict) and "error" in exc.detail:
+        # 已经是统一格式，添加request_id（如果缺失）
+        error_response = exc.detail.copy()
+        if "error" in error_response and isinstance(error_response["error"], dict):
+            if (
+                "request_id" not in error_response["error"]
+                or error_response["error"]["request_id"] is None
+            ):
+                error_response["error"]["request_id"] = request_id
+        return JSONResponse(status_code=exc.status_code, content=error_response)
+    else:
+        # 旧格式（字符串），转换为统一格式
+        error_response = create_error_response(
+            status_code=exc.status_code,
+            message=str(exc.detail) if exc.detail else "HTTP错误",
+            request_id=request_id,
+        )
+        return JSONResponse(status_code=exc.status_code, content=error_response)
+
+
+@app.exception_handler(404)
+async def not_found_handler(request: Request, exc: Exception):
+    """处理404错误（路由不存在）"""
+    request_id = getattr(request.state, "request_id", f"req_{int(time.time() * 1000)}")
+    error_response = create_error_response(
+        status_code=404,
+        message="端点不存在",
+        request_id=request_id,
+    )
+    return JSONResponse(status_code=404, content=error_response)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """处理请求验证错误"""
+    request_id = getattr(request.state, "request_id", f"req_{int(time.time() * 1000)}")
+    error_response = create_error_response(
+        status_code=422,
+        message="请求参数验证失败",
+        error_code=ErrorCode.VALIDATION_ERROR,
+        details=str(exc.errors()) if is_development() else None,
+        request_id=request_id,
+    )
+    return JSONResponse(status_code=422, content=error_response)
+
+
 @app.get("/health")
 async def health_check():
     """健康检查端点."""
@@ -573,6 +643,8 @@ app.include_router(video_stream.router, prefix="/api/v1", tags=["Video Stream"])
 app.include_router(config.router, prefix="/api/v1/config", tags=["Config"])
 app.include_router(detection_config.router, tags=["Detection Config"])
 app.include_router(mlops.router)
+# 缓存管理路由
+app.include_router(cache.router, prefix="/api/v1", tags=["Cache Management"])
 
 
 @app.get("/", include_in_schema=False)

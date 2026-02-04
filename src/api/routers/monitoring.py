@@ -1,324 +1,198 @@
-"""监控和健康检查端点."""
+"""监控API路由.
+
+提供系统监控、连接池状态查询等功能。
+"""
 
 import logging
-from datetime import datetime
-from typing import Any, Dict, Optional
+import os
+from typing import Any, Dict
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
+
+from ..schemas.error_schemas import ErrorCode
+from ..utils.error_helpers import raise_http_exception
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/monitoring", tags=["monitoring"])
+router = APIRouter(prefix="/monitoring", tags=["Monitoring"])
 
-# 尝试导入CameraService相关模块（可选）
-try:
-    from src.domain.services.camera_service import CameraService
-    from src.services.detection_service_domain import DefaultCameraRepository
-
-    async def get_camera_service() -> Optional[CameraService]:
-        """获取摄像头服务实例."""
-        try:
-            if DefaultCameraRepository is None:
-                return None
-            camera_repo = DefaultCameraRepository()
-            # 尝试从配置中获取YAML路径
-            import os
-
-            cameras_yaml_path = os.getenv("CAMERAS_YAML_PATH", "config/cameras.yaml")
-            return CameraService(camera_repo, cameras_yaml_path)
-        except Exception:
-            return None
-
-except Exception:
-    get_camera_service = None  # type: ignore
-
-# 简单的内存指标存储（生产环境应使用Redis或专业metrics系统）
-_metrics = {
-    "requests_total": 0,
-    "requests_by_status": {},
-    "domain_service_usage": {"count": 0, "old_count": 0},
+# 请求指标（用于metrics_middleware）
+_request_metrics = {
+    "total_requests": 0,
+    "status_codes": {},
+    "domain_service_requests": 0,
     "response_times": [],
-    "errors": [],
 }
 
 
-async def check_camera_data_consistency() -> Dict[str, Any]:
-    """检查CameraService数据一致性.
-
-    Returns:
-        包含一致性检查结果的字典
-    """
-    if get_camera_service is None:
-        return {"consistent": True, "issues": [], "message": "CameraService未可用"}
-
-    issues = []
-
-    try:
-        camera_service = await get_camera_service()
-        if not camera_service:
-            return {"consistent": True, "issues": [], "message": "CameraService未初始化"}
-
-        # 从数据库获取所有摄像头
-        db_cameras = await camera_service.camera_repository.find_all()
-        db_camera_ids = {cam.id for cam in db_cameras}
-
-        # 从YAML获取所有摄像头
-        yaml_config = camera_service._read_yaml_config()
-        yaml_cameras = yaml_config.get("cameras", [])
-        yaml_camera_ids = {cam.get("id") for cam in yaml_cameras if cam.get("id")}
-
-        # 检查不一致
-        only_in_db = db_camera_ids - yaml_camera_ids
-        only_in_yaml = yaml_camera_ids - db_camera_ids
-
-        if only_in_db:
-            issues.append(f"数据库中存在但YAML中不存在: {sorted(only_in_db)}")
-
-        if only_in_yaml:
-            issues.append(f"YAML中存在但数据库中不存在: {sorted(only_in_yaml)}")
-
-        # 检查字段一致性（对于同时存在的摄像头）
-        common_ids = db_camera_ids & yaml_camera_ids
-        for camera_id in common_ids:
-            db_camera = next((c for c in db_cameras if c.id == camera_id), None)
-            yaml_camera = next(
-                (c for c in yaml_cameras if c.get("id") == camera_id), None
-            )
-
-            if db_camera and yaml_camera:
-                # 检查关键字段是否一致
-                if db_camera.name != yaml_camera.get("name"):
-                    issues.append(
-                        f"摄像头 {camera_id} name不一致: DB={db_camera.name}, YAML={yaml_camera.get('name')}"
-                    )
-
-                if db_camera.metadata.get("source") != yaml_camera.get("source"):
-                    issues.append(f"摄像头 {camera_id} source不一致")
-
-        return {
-            "consistent": len(issues) == 0,
-            "issues": issues,
-            "db_count": len(db_camera_ids),
-            "yaml_count": len(yaml_camera_ids),
-        }
-    except Exception as e:
-        logger.error(f"数据一致性检查失败: {e}")
-        return {
-            "consistent": False,
-            "issues": [f"检查失败: {str(e)}"],
-            "error": str(e),
-        }
-
-
-@router.get("/health")
-async def health_check() -> Dict[str, Any]:
-    """健康检查端点.
-
-    Returns:
-        包含健康状态的字典
-    """
-    try:
-        # 基础健康检查
-        checks = {
-            "database": "ok",
-            "redis": "ok",
-            "domain_services": "ok",
-        }
-
-        # 注意: camera_data_consistency检查已移除
-        # 相机配置现在只存储在数据库中（单一数据源）
-
-        # 检查数据库连接
-        try:
-            import os
-
-            database_url = os.getenv("DATABASE_URL")
-            if database_url:
-                try:
-                    import asyncpg
-
-                    # 尝试连接数据库
-                    conn = await asyncpg.connect(database_url, timeout=2)
-                    await conn.close()
-                    checks["database"] = "ok"
-                except Exception as e:
-                    checks["database"] = "error"
-                    checks["database_error"] = str(e)
-        except Exception as e:
-            logger.warning(f"数据库连接检查失败: {e}")
-            checks["database"] = "error"
-            checks["database_error"] = str(e)
-
-        # 检查Redis连接
-        try:
-            import os
-
-            redis_url = os.getenv("REDIS_URL")
-            if redis_url:
-                try:
-                    import redis.asyncio as redis
-
-                    # 尝试连接Redis
-                    redis_client = redis.from_url(redis_url)
-                    await redis_client.ping()
-                    await redis_client.close()
-                    checks["redis"] = "ok"
-                except Exception as e:
-                    checks["redis"] = "error"
-                    checks["redis_error"] = str(e)
-        except Exception as e:
-            logger.warning(f"Redis连接检查失败: {e}")
-            checks["redis"] = "error"
-            checks["redis_error"] = str(e)
-
-        # 判断整体状态
-        all_ok = all(
-            v == "ok"
-            for k, v in checks.items()
-            if k not in ["database_error", "redis_error"]
-        )
-
-        health_status = {
-            "status": "healthy" if all_ok else "degraded",
-            "timestamp": datetime.now().isoformat(),
-            "checks": checks,
-        }
-
-        return health_status
-    except Exception as e:
-        logger.error(f"健康检查失败: {e}")
-        raise HTTPException(status_code=503, detail="服务不健康")
-
-
-@router.get("/metrics")
-async def get_metrics() -> Dict[str, Any]:
-    """获取监控指标（Prometheus格式）.
-
-    Returns:
-        包含监控指标的字典
-    """
-    try:
-        # 计算成功率
-        total_requests = _metrics["requests_total"]
-        success_requests = sum(
-            count
-            for status, count in _metrics["requests_by_status"].items()
-            if status.startswith("2")
-        )
-        error_requests = sum(
-            count
-            for status, count in _metrics["requests_by_status"].items()
-            if status.startswith("4") or status.startswith("5")
-        )
-
-        success_rate = (
-            (success_requests / total_requests * 100) if total_requests > 0 else 100.0
-        )
-        error_rate = (
-            (error_requests / total_requests * 100) if total_requests > 0 else 0.0
-        )
-
-        # 计算领域服务使用率
-        domain_usage = _metrics["domain_service_usage"]
-        domain_total = domain_usage["count"] + domain_usage["old_count"]
-        domain_service_usage_rate = (
-            (domain_usage["count"] / domain_total * 100) if domain_total > 0 else 0.0
-        )
-
-        # 计算响应时间统计
-        response_times = _metrics["response_times"]
-        if response_times:
-            sorted_times = sorted(response_times)
-            p50_idx = int(len(sorted_times) * 0.5)
-            p95_idx = int(len(sorted_times) * 0.95)
-            p99_idx = int(len(sorted_times) * 0.99)
-
-            p50 = sorted_times[p50_idx] if p50_idx < len(sorted_times) else 0
-            p95 = sorted_times[p95_idx] if p95_idx < len(sorted_times) else 0
-            p99 = sorted_times[p99_idx] if p99_idx < len(sorted_times) else 0
-            max_time = max(response_times)
-            avg_time = sum(response_times) / len(response_times)
-        else:
-            p50 = p95 = p99 = max_time = avg_time = 0
-
-        # 添加数据一致性指标
-        consistency_check = await check_camera_data_consistency()
-
-        metrics = {
-            "timestamp": datetime.now().isoformat(),
-            "requests": {
-                "total": total_requests,
-                "success": success_requests,
-                "error": error_requests,
-                "success_rate": round(success_rate, 2),
-                "error_rate": round(error_rate, 2),
-                "by_status": _metrics["requests_by_status"],
-            },
-            "domain_service": {
-                "usage_count": domain_usage["count"],
-                "old_count": domain_usage["old_count"],
-                "usage_rate": round(domain_service_usage_rate, 2),
-            },
-            "response_time": {
-                "p50_ms": round(p50, 2),
-                "p95_ms": round(p95, 2),
-                "p99_ms": round(p99, 2),
-                "max_ms": round(max_time, 2),
-                "avg_ms": round(avg_time, 2),
-            },
-            "errors": {
-                "total": len(_metrics["errors"]),
-                "recent": _metrics["errors"][-10:] if _metrics["errors"] else [],
-            },
-            "data_consistency": {
-                "consistent": consistency_check.get("consistent", True),
-                "issues_count": len(consistency_check.get("issues", [])),
-                "db_count": consistency_check.get("db_count", 0),
-                "yaml_count": consistency_check.get("yaml_count", 0),
-                "last_check": datetime.now().isoformat(),
-            },
-        }
-
-        return metrics
-    except Exception as e:
-        logger.error(f"获取指标失败: {e}")
-        raise HTTPException(status_code=500, detail="获取指标失败")
-
-
 def record_request(
-    status_code: int, domain_service_used: bool = False, response_time_ms: float = 0.0
+    status_code: int,
+    domain_service_used: bool = False,
+    response_time_ms: float = 0.0,
 ):
-    """记录请求指标.
+    """记录请求指标（用于metrics_middleware）.
 
     Args:
         status_code: HTTP状态码
-        domain_service_used: 是否使用领域服务
+        domain_service_used: 是否使用了领域服务
         response_time_ms: 响应时间（毫秒）
     """
-    _metrics["requests_total"] += 1
+    _request_metrics["total_requests"] += 1
 
-    status_str = str(status_code)
-    _metrics["requests_by_status"][status_str] = (
-        _metrics["requests_by_status"].get(status_str, 0) + 1
+    # 记录状态码
+    status_key = str(status_code)
+    _request_metrics["status_codes"][status_key] = (
+        _request_metrics["status_codes"].get(status_key, 0) + 1
     )
 
+    # 记录领域服务使用
     if domain_service_used:
-        _metrics["domain_service_usage"]["count"] += 1
-    else:
-        _metrics["domain_service_usage"]["old_count"] += 1
+        _request_metrics["domain_service_requests"] += 1
 
-    if response_time_ms > 0:
-        _metrics["response_times"].append(response_time_ms)
-        # 只保留最近1000个响应时间记录
-        if len(_metrics["response_times"]) > 1000:
-            _metrics["response_times"] = _metrics["response_times"][-1000:]
+    # 记录响应时间（保留最近1000个）
+    _request_metrics["response_times"].append(response_time_ms)
+    if len(_request_metrics["response_times"]) > 1000:
+        _request_metrics["response_times"].pop(0)
 
-    if status_code >= 400:
-        error_entry = {
-            "timestamp": datetime.now().isoformat(),
-            "status_code": status_code,
+
+@router.get("/db-pool/status", summary="获取数据库连接池状态")
+async def get_db_pool_status() -> Dict[str, Any]:
+    """获取数据库连接池状态.
+
+    Returns:
+        连接池状态信息，包括：
+        - status: 状态（healthy/not_initialized）
+        - size: 连接池大小
+        - free_size: 空闲连接数
+        - min_size: 最小连接数
+        - max_size: 最大连接数
+        - usage_percent: 使用率（百分比）
+    """
+    try:
+        # 导入DatabaseService（延迟导入避免循环依赖）
+        from src.services.detection_service_domain import _db_service
+
+        if _db_service is None or _db_service.pool is None:
+            return {"status": "not_initialized", "message": "数据库连接池未初始化"}
+
+        pool = _db_service.pool
+        size = pool.get_size()
+        idle_size = pool.get_idle_size()
+        min_size = pool.get_min_size()
+        max_size = pool.get_max_size()
+
+        # 计算使用率
+        usage_percent = round((1 - idle_size / size) * 100, 2) if size > 0 else 0
+
+        return {
+            "status": "healthy",
+            "size": size,
+            "free_size": idle_size,
+            "min_size": min_size,
+            "max_size": max_size,
+            "usage_percent": usage_percent,
         }
-        _metrics["errors"].append(error_entry)
-        # 只保留最近100个错误记录
-        if len(_metrics["errors"]) > 100:
-            _metrics["errors"] = _metrics["errors"][-100:]
+    except Exception as e:
+        logger.error(f"获取连接池状态失败: {e}", exc_info=True)
+        raise raise_http_exception(
+            status_code=500,
+            message="获取连接池状态失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
+
+
+@router.get("/db-pool/config", summary="获取数据库连接池配置")
+async def get_db_pool_config() -> Dict[str, Any]:
+    """获取数据库连接池配置.
+
+    Returns:
+        连接池配置信息，包括：
+        - min_size: 最小连接数
+        - max_size: 最大连接数
+        - command_timeout: 命令超时时间（秒）
+        - max_queries: 每个连接最多执行查询数
+        - max_inactive_connection_lifetime: 非活跃连接最大生存时间（秒）
+        - env: 当前环境
+    """
+    try:
+        from src.database.pool_config import PoolConfig
+
+        config = PoolConfig.from_env()
+
+        return {
+            "min_size": config.min_size,
+            "max_size": config.max_size,
+            "command_timeout": config.command_timeout,
+            "max_queries": config.max_queries,
+            "max_inactive_connection_lifetime": config.max_inactive_connection_lifetime,
+            "env": os.getenv("ENV", "development"),
+        }
+    except Exception as e:
+        logger.error(f"获取连接池配置失败: {e}", exc_info=True)
+        raise raise_http_exception(
+            status_code=500,
+            message="获取连接池配置失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
+
+
+@router.get("/db-pool/health", summary="数据库连接池健康检查")
+async def db_pool_health_check() -> Dict[str, Any]:
+    """执行数据库连接池健康检查.
+
+    Returns:
+        健康检查结果，包括：
+        - healthy: 是否健康
+        - message: 状态消息
+        - size: 连接池大小（如果可用）
+        - idle_size: 空闲连接数（如果可用）
+        - usage_percent: 使用率（如果可用）
+    """
+    try:
+        from src.services.detection_service_domain import _db_service
+
+        if _db_service is None:
+            return {"healthy": False, "message": "数据库服务未初始化"}
+
+        # 执行健康检查
+        result = await _db_service.health_check()
+        return result
+    except Exception as e:
+        logger.error(f"健康检查失败: {e}", exc_info=True)
+        return {"healthy": False, "message": f"健康检查异常: {str(e)}"}
+
+
+@router.get("/metrics", summary="获取请求指标")
+async def get_metrics() -> Dict[str, Any]:
+    """获取请求指标（用于监控面板）.
+
+    Returns:
+        请求指标信息，包括：
+        - total_requests: 总请求数
+        - status_codes: 状态码分布
+        - domain_service_requests: 领域服务请求数
+        - avg_response_time: 平均响应时间（毫秒）
+    """
+    try:
+        # 计算平均响应时间
+        response_times = _request_metrics["response_times"]
+        avg_response_time = (
+            sum(response_times) / len(response_times) if response_times else 0.0
+        )
+
+        return {
+            "total_requests": _request_metrics["total_requests"],
+            "status_codes": _request_metrics["status_codes"],
+            "domain_service_requests": _request_metrics["domain_service_requests"],
+            "avg_response_time_ms": round(avg_response_time, 2),
+        }
+    except Exception as e:
+        logger.error(f"获取指标失败: {e}", exc_info=True)
+        raise raise_http_exception(
+            status_code=500,
+            message="获取指标失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )

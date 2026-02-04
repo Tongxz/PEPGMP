@@ -37,7 +37,9 @@ class _EarlyDummyYOLO:
         return [_EarlyDummyResult()]
 
     predict = __call__
-    train = lambda *a, **k: None
+
+    def train(self, *a, **k):
+        return None
 
 
 setattr(_dummy_ultralytics, "YOLO", _EarlyDummyYOLO)
@@ -191,3 +193,139 @@ def mock_ultralytics_yolo(monkeypatch):
         dummy_module = types.ModuleType("ultralytics")
         setattr(dummy_module, "YOLO", _DummyYOLO)
         sys.modules["ultralytics"] = dummy_module
+
+
+# ===== 数据库Mock Fixtures =====
+
+
+@pytest.fixture
+def mock_db_pool():
+    """Mock数据库连接池"""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from tests.unit.helpers import AsyncMockContext
+
+    pool = MagicMock()
+    conn = AsyncMock()
+
+    # Mock connection methods
+    conn.execute = AsyncMock(return_value="INSERT 0 1")
+    conn.fetch = AsyncMock(return_value=[])
+    conn.fetchrow = AsyncMock(return_value=None)
+    conn.fetchval = AsyncMock(return_value=None)
+
+    # Mock pool.acquire() to return an async context manager
+    pool.acquire = MagicMock(return_value=AsyncMockContext(conn))
+
+    # Store the connection for test assertions
+    pool._test_connection = conn
+
+    return pool
+
+
+@pytest.fixture
+def mock_db_connection():
+    """Mock数据库连接"""
+    from unittest.mock import AsyncMock
+
+    conn = AsyncMock()
+    conn.execute = AsyncMock(return_value="INSERT 0 1")
+    conn.fetch = AsyncMock(return_value=[])
+    conn.fetchrow = AsyncMock(return_value=None)
+    conn.fetchval = AsyncMock(return_value=None)
+
+    return conn
+
+
+@pytest.fixture
+def mock_redis_client():
+    """Mock Redis客户端"""
+    from unittest.mock import AsyncMock, MagicMock
+
+    redis = MagicMock()
+    redis.get = AsyncMock(return_value=None)
+    redis.set = AsyncMock(return_value=True)
+    redis.delete = AsyncMock(return_value=1)
+    redis.exists = AsyncMock(return_value=0)
+    redis.expire = AsyncMock(return_value=True)
+    redis.keys = AsyncMock(return_value=[])
+
+    return redis
+
+
+# ===== 仓储Mock Fixtures =====
+
+
+@pytest.fixture
+def mock_violation_repository():
+    """Mock违规仓储"""
+    from unittest.mock import AsyncMock, MagicMock
+
+    repo = MagicMock()
+    repo.save = AsyncMock()
+    repo.find_by_id = AsyncMock(return_value=None)
+    repo.find_by_filters = AsyncMock(return_value=[])
+    repo.find_paginated = AsyncMock(return_value=([], 0))
+    repo.update_status = AsyncMock()
+    repo.delete = AsyncMock()
+
+    return repo
+
+
+@pytest.fixture
+def mock_region_repository():
+    """Mock区域仓储"""
+    from unittest.mock import AsyncMock, MagicMock
+
+    repo = MagicMock()
+    repo.save = AsyncMock()
+    repo.find_by_id = AsyncMock(return_value=None)
+    repo.find_by_camera = AsyncMock(return_value=[])
+    repo.update = AsyncMock()
+    repo.delete = AsyncMock()
+
+    return repo
+
+
+@pytest.fixture
+def mock_detection_repository():
+    """Mock检测记录仓储"""
+    from unittest.mock import AsyncMock, MagicMock
+
+    repo = MagicMock()
+    repo.save = AsyncMock()
+    repo.find_by_id = AsyncMock(return_value=None)
+    repo.find_by_camera = AsyncMock(return_value=[])
+    repo.find_recent = AsyncMock(return_value=[])
+    repo.count_by_camera = AsyncMock(return_value=0)
+
+    return repo
+
+
+@pytest.fixture
+def mock_camera_repository():
+    """Mock摄像头仓储"""
+    from unittest.mock import AsyncMock, MagicMock
+
+    repo = MagicMock()
+    repo.find_by_id = AsyncMock(return_value=None)
+    repo.find_all = AsyncMock(return_value=[])
+    repo.find_active = AsyncMock(return_value=[])
+    repo.save = AsyncMock()
+    repo.update = AsyncMock()
+    repo.delete = AsyncMock()
+
+    return repo
+
+
+@pytest.fixture
+def mock_detection_config_repository():
+    """Mock检测配置仓储"""
+    from unittest.mock import AsyncMock, MagicMock
+
+    repo = MagicMock()
+    repo.get = AsyncMock(return_value=None)
+    repo.save = AsyncMock()
+    repo.update = AsyncMock()
+
+    return repo

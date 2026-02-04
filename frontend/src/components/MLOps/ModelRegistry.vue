@@ -262,8 +262,8 @@ import {
   useMessage,
 } from 'naive-ui'
 import { RefreshOutline } from '@vicons/ionicons5'
-import type { ModelInfo } from '@/api'
-import { deleteModel, listModels, updateModelStatus } from '@/api'
+import type { ModelInfo } from '@/api/mlops'
+import { deleteModel, listModels, updateModelStatus } from '@/api/mlops'
 
 const loading = ref(false)
 const savingStatus = ref(false)

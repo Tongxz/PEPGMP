@@ -12,6 +12,10 @@ except ImportError:
     get_detection_service_domain = None
 
 from src.services.database_service import DatabaseService, get_db_service
+from src.utils.pagination import PaginatedResponse, PaginationParams
+
+from ..schemas.error_schemas import ErrorCode
+from ..utils.error_helpers import raise_http_exception
 
 logger = logging.getLogger(__name__)
 
@@ -21,14 +25,22 @@ router = APIRouter(prefix="/api/v1/records", tags=["records"])
 def _ensure_domain_service():
     """确保领域服务可用，如果不可用则抛出HTTP异常."""
     if get_detection_service_domain is None:
-        raise HTTPException(status_code=503, detail="检测领域服务不可用，请联系系统管理员")
+        raise raise_http_exception(
+            status_code=503,
+            message="检测领域服务不可用，请联系系统管理员",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
     service = get_detection_service_domain()
     if service is None:
-        raise HTTPException(status_code=503, detail="检测领域服务未初始化，请联系系统管理员")
+        raise raise_http_exception(
+            status_code=503,
+            message="检测领域服务未初始化，请联系系统管理员",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
     return service
 
 
-@router.get("/violations")
+@router.get("/violations", response_model=PaginatedResponse[Dict[str, Any]])
 async def get_violations(
     camera_id: Optional[str] = Query(None, description="摄像头ID，不提供则查询所有"),
     status: Optional[str] = Query(
@@ -37,56 +49,68 @@ async def get_violations(
     violation_type: Optional[str] = Query(
         None, description="违规类型: no_hairnet, no_handwash, no_sanitize"
     ),
-    limit: int = Query(50, ge=1, le=1000, description="返回记录数量限制"),
-    offset: int = Query(0, ge=0, description="偏移量，用于分页"),
-) -> Dict[str, Any]:
-    """获取违规记录列表.
+    page: int = Query(1, ge=1, description="页码（从1开始）"),
+    page_size: int = Query(20, ge=1, le=100, description="每页大小"),
+) -> PaginatedResponse[Dict[str, Any]]:
+    """获取违规记录列表（分页）.
 
     Args:
         camera_id: 摄像头ID筛选
         status: 违规状态筛选
-        violation_type: 违规类型筛选（如果不指定，默认只返回 no_hairnet 类型）
-        limit: 返回记录数量
-        offset: 分页偏移量
+        violation_type: 违规类型筛选
+        page: 页码（从1开始）
+        page_size: 每页大小（1-100）
 
     Returns:
-        包含违规记录列表和总数的字典
+        分页响应，包含：
+        - items: 违规记录列表
+        - total: 总记录数
+        - page: 当前页
+        - page_size: 每页大小
+        - total_pages: 总页数
     """
     try:
         domain_service = _ensure_domain_service()
 
-        # 如果未指定违规类型，默认只返回当前系统检测的违规类型（no_hairnet）
-        # 这样可以过滤掉数据库中的旧数据（如 no_safety_helmet 等）
+        # 创建分页参数
+        pagination = PaginationParams(page=page, page_size=page_size)
+
+        # 如果未指定违规类型，默认查询no_hairnet
         if violation_type is None:
             violation_type = "no_hairnet"
 
+        # 调用领域服务获取违规记录
         result = await domain_service.get_violation_details(
             camera_id=camera_id,
             status=status,
             violation_type=violation_type,
-            limit=limit,
-            offset=offset,
+            limit=pagination.limit,
+            offset=pagination.offset,
         )
 
-        # 二次过滤：确保只返回当前系统支持的违规类型
+        # 提取数据
         violations = result.get("violations", [])
+        total = result.get("total", 0)
+
+        # 二次过滤：确保只返回当前系统支持的违规类型
         allowed_types = {"no_hairnet"}  # 当前系统只检测发网违规
         filtered_violations = [
             v for v in violations if v.get("violation_type") in allowed_types
         ]
 
-        # 对齐旧响应结构（domain 已返回 ISO 时间字符串）
-        return {
-            "violations": filtered_violations,
-            "total": len(filtered_violations),  # 使用过滤后的数量
-            "limit": limit,
-            "offset": offset,
-        }
+        # 返回分页响应
+        return PaginatedResponse.create(filtered_violations, total, pagination)
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"查询违规记录失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"查询违规记录失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="查询违规记录失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
 
 
 @router.get("/violations/{violation_id}")
@@ -132,12 +156,21 @@ async def get_violation_detail(
                     violation["updated_at"] = violation["updated_at"].isoformat()
             return violation
         else:
-            raise HTTPException(status_code=404, detail="违规记录不存在")
+            raise raise_http_exception(
+                status_code=404,
+                message="违规记录不存在",
+                error_code=ErrorCode.RESOURCE_NOT_FOUND,
+            )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"查询违规详情失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"查询违规详情失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="查询违规详情失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
 
 
 @router.put("/violations/{violation_id}/status")
@@ -169,16 +202,29 @@ async def update_violation_status(
         return result
     except ValueError as e:
         # 业务逻辑错误（如状态值无效），直接抛出HTTP异常
-        raise HTTPException(status_code=400, detail=str(e))
+        raise raise_http_exception(
+            status_code=400,
+            message=str(e),
+            error_code=ErrorCode.VALIDATION_ERROR,
+        )
     except NotImplementedError as e:
         # 领域服务不支持该操作
         logger.error(f"领域服务不支持更新违规状态: {e}", exc_info=True)
-        raise HTTPException(status_code=501, detail="更新违规状态功能暂未实现")
+        raise raise_http_exception(
+            status_code=501,
+            message="更新违规状态功能暂未实现",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"更新违规状态失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"更新违规状态失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="更新违规状态失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
 
 
 @router.get("/statistics/summary")
@@ -201,7 +247,12 @@ async def get_all_cameras_summary(
         raise
     except Exception as e:
         logger.error(f"查询统计摘要失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"查询统计摘要失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="查询统计摘要失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
 
 
 @router.get("/statistics/{camera_id}")
@@ -250,7 +301,12 @@ async def get_camera_statistics(
         raise
     except Exception as e:
         logger.error(f"查询统计数据失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"查询统计数据失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="查询统计数据失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
 
 
 @router.get("/detection-records/{camera_id}")
@@ -302,7 +358,12 @@ async def get_detection_records(
         raise
     except Exception as e:
         logger.error(f"查询检测记录失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"查询检测记录失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="查询检测记录失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
 
 
 @router.get("/health")

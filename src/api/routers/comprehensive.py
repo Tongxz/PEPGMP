@@ -1,11 +1,14 @@
 import logging
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 
 from src.api.dependencies import get_detection_app_service, get_optimized_pipeline
 from src.application.detection_application_service import DetectionApplicationService
 from src.core.optimized_detection_pipeline import OptimizedDetectionPipeline
+
+from ..schemas.error_schemas import ErrorCode
+from ..utils.error_helpers import raise_http_exception
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -40,10 +43,18 @@ async def detect_comprehensive(
         检测结果，包括人数、违规情况、质量分析等
     """
     if not file.filename:
-        raise HTTPException(status_code=400, detail="未提供文件名")
+        raise raise_http_exception(
+            status_code=400,
+            message="未提供文件名",
+            error_code=ErrorCode.VALIDATION_ERROR,
+        )
 
     if app_service is None:
-        raise HTTPException(status_code=500, detail="检测服务未初始化")
+        raise raise_http_exception(
+            status_code=500,
+            message="检测服务未初始化",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
 
     contents = await file.read()
 
@@ -69,7 +80,12 @@ async def detect_comprehensive(
 
     except Exception as e:
         logger.exception(f"综合检测失败: {e}")
-        raise HTTPException(status_code=500, detail=f"处理失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="处理失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )
 
 
 @router.post("/image", summary="单张图像检测")
@@ -96,10 +112,18 @@ async def detect_image(
         检测结果，包括人数、违规情况、质量分析等
     """
     if not file.filename:
-        raise HTTPException(status_code=400, detail="未提供文件名")
+        raise raise_http_exception(
+            status_code=400,
+            message="未提供文件名",
+            error_code=ErrorCode.VALIDATION_ERROR,
+        )
 
     if app_service is None:
-        raise HTTPException(status_code=500, detail="检测服务未初始化")
+        raise raise_http_exception(
+            status_code=500,
+            message="检测服务未初始化",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
 
     contents = await file.read()
 
@@ -123,7 +147,12 @@ async def detect_image(
 
     except Exception as e:
         logger.exception(f"图像检测失败: {e}")
-        raise HTTPException(status_code=500, detail=f"处理失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="处理失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )
 
 
 @router.post("/hairnet", summary="发网检测接口")
@@ -150,10 +179,18 @@ async def detect_hairnet(
         检测结果，重点返回发网检测信息
     """
     if not file.filename:
-        raise HTTPException(status_code=400, detail="未提供文件名")
+        raise raise_http_exception(
+            status_code=400,
+            message="未提供文件名",
+            error_code=ErrorCode.VALIDATION_ERROR,
+        )
 
     if app_service is None:
-        raise HTTPException(status_code=500, detail="检测服务未初始化")
+        raise raise_http_exception(
+            status_code=500,
+            message="检测服务未初始化",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
 
     contents = await file.read()
 
@@ -195,7 +232,12 @@ async def detect_hairnet(
 
     except Exception as e:
         logger.exception(f"发网检测失败: {e}")
-        raise HTTPException(status_code=500, detail=f"处理失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="处理失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )
 
 
 @router.get("/stats", summary="获取检测管道统计信息")
@@ -214,7 +256,11 @@ async def get_detection_stats(
         - ROI优化统计
     """
     if pipeline is None:
-        raise HTTPException(status_code=503, detail="检测管道未初始化")
+        raise raise_http_exception(
+            status_code=503,
+            message="检测管道未初始化",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
 
     try:
         stats = {
@@ -282,4 +328,9 @@ async def get_detection_stats(
 
     except Exception as e:
         logger.exception(f"获取统计信息失败: {e}")
-        raise HTTPException(status_code=500, detail=f"获取统计信息失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取统计信息失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )

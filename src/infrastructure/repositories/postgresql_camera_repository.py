@@ -118,7 +118,7 @@ class PostgreSQLCameraRepository(ICameraRepository):
                                             UPDATE cameras
                                             SET {column_name} = {default_value}
                                             WHERE {column_name} IS NULL
-                                            """
+                                            """  # nosec B608 - column_name from schema config
                                         )
                                 logger.info(f"已添加{column_name}列到cameras表")
                             except Exception as col_error:
@@ -400,7 +400,7 @@ class PostgreSQLCameraRepository(ICameraRepository):
                            region_id, metadata, stream_url, created_at, updated_at
                     FROM cameras
                     {where_clause}
-                    """,
+                    """,  # nosec B608 - where_clause is fixed 'WHERE id = $1' or 'WHERE id = $1::uuid'
                     camera_id,
                 )
 
@@ -487,27 +487,37 @@ class PostgreSQLCameraRepository(ICameraRepository):
         """
         try:
             await self._ensure_table_exists()
-            conn = await self._get_connection()
-            try:
+            # 使用上下文管理器自动管理连接
+            async with self.pool.acquire() as conn:
+                # 查询活跃摄像头：1) status为active/online/running，或 2) 最近1小时内有检测记录
+                # 注意：cameras.id可能是UUID类型，detection_records.camera_id是VARCHAR，需要类型转换
+                logger.info("执行活跃摄像头SQL查询...")
                 rows = await conn.fetch(
                     """
-                    SELECT id, name, location, status, camera_type, resolution, fps,
-                           region_id, metadata, created_at, updated_at
-                    FROM cameras
-                    WHERE status = 'active'
-                    ORDER BY name
+                    SELECT DISTINCT c.id, c.name, c.location, c.status, c.camera_type,
+                           c.resolution, c.fps, c.region_id, c.metadata,
+                           c.created_at, c.updated_at
+                    FROM cameras c
+                    LEFT JOIN detection_records dr ON c.id::text = dr.camera_id
+                        AND dr.timestamp > NOW() - INTERVAL '1 hour'
+                    WHERE c.status IN ('active', 'online', 'running')
+                       OR dr.id IS NOT NULL
+                    ORDER BY c.name
                     """
                 )
+                logger.info(f"SQL查询返回 {len(rows)} 行数据")
 
                 cameras = []
                 for row in rows:
+                    logger.debug(
+                        f"处理摄像头行: id={row['id']}, name={row['name']}, status={row['status']}"
+                    )
                     cameras.append(self._row_to_camera(row))
 
+                logger.info(f"查询到 {len(cameras)} 个活跃摄像头")
                 return cameras
-            finally:
-                await self.pool.release(conn)
         except Exception as e:
-            logger.error(f"查询活跃摄像头失败: {e}")
+            logger.error(f"查询活跃摄像头失败: {e}", exc_info=True)
             raise RepositoryError(f"查询活跃摄像头失败: {e}")
 
     async def count(self) -> int:

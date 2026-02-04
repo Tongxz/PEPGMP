@@ -3,7 +3,7 @@
 import logging
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi import APIRouter, Body, Query
 from pydantic import BaseModel, Field
 
 from src.config.unified_params import (
@@ -17,6 +17,9 @@ from src.infrastructure.repositories.postgresql_detection_config_repository impo
     PostgreSQLDetectionConfigRepository,
 )
 from src.services.database_service import get_db_service
+
+from ..schemas.error_schemas import ErrorCode
+from ..utils.error_helpers import raise_http_exception
 
 logger = logging.getLogger(__name__)
 
@@ -37,14 +40,14 @@ class HumanDetectionConfig(BaseModel):
 class HairnetDetectionConfig(BaseModel):
     """发网检测配置"""
 
-    confidence_threshold: float = Field(0.65, ge=0.3, le=0.9, description="置信度阈值")
-    total_score_threshold: float = Field(0.85, ge=0.5, le=1.0, description="总分数阈值")
+    confidence_threshold: float = Field(0.65, ge=0.1, le=0.9, description="置信度阈值")
+    total_score_threshold: float = Field(0.85, ge=0.3, le=1.0, description="总分数阈值")
 
 
 class BehaviorRecognitionConfig(BaseModel):
     """行为识别配置"""
 
-    confidence_threshold: float = Field(0.65, ge=0.3, le=0.9, description="置信度阈值")
+    confidence_threshold: float = Field(0.65, ge=0.1, le=0.9, description="置信度阈值")
     handwashing_stability_frames: int = Field(3, ge=1, le=10, description="洗手稳定性帧数")
     sanitizing_stability_frames: int = Field(3, ge=1, le=10, description="消毒稳定性帧数")
 
@@ -126,11 +129,16 @@ async def get_detection_config(
         )
     except Exception as e:
         logger.error(f"获取检测配置失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"获取检测配置失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取检测配置失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
 
 
 @router.put("", summary="更新检测配置")
-async def update_detection_config(
+async def update_detection_config(  # noqa: C901
     config: DetectionConfigRequest = Body(...),
     camera_id: Optional[str] = Query(None, description="摄像头ID（可选，用于按相机保存配置）"),
     apply_immediately: bool = Query(False, description="是否立即应用（需要重启检测服务）"),
@@ -366,4 +374,9 @@ async def update_detection_config(
         }
     except Exception as e:
         logger.error(f"更新检测配置失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"更新检测配置失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="更新检测配置失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )

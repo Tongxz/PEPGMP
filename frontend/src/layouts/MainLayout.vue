@@ -218,13 +218,70 @@ const currentTime = ref('')
 const isFullscreen = ref(false)
 const transitionName = ref('slide-right')
 
-// 主题配置
+// 主题配置 - Future Industrialism 配色
 const themeOverrides = {
   common: {
-    primaryColor: '#18a058',
-    primaryColorHover: '#36ad6a',
-    primaryColorPressed: '#0c7a43',
-    primaryColorSuppl: '#36ad6a'
+    // 专业版配色 - 理性、可信
+    primaryColor: '#1E9FFF',
+    primaryColorHover: '#4DB3FF',
+    primaryColorPressed: '#0A7FE5',
+    primaryColorSuppl: '#4DB3FF',
+
+    // 信息色
+    infoColor: '#2BC9C9',
+    infoColorHover: '#55D5D5',
+    infoColorPressed: '#1AB3B3',
+
+    // 成功色
+    successColor: '#52C41A',
+    successColorHover: '#73D13D',
+    successColorPressed: '#389E0D',
+
+    // 警告色
+    warningColor: '#FAAD14',
+    warningColorHover: '#FFC53D',
+    warningColorPressed: '#D48806',
+
+    // 错误色
+    errorColor: '#FF6B6B',
+    errorColorHover: '#FF8787',
+    errorColorPressed: '#FF4D4F',
+
+    // 背景色 - 浅色系
+    bodyColor: '#F7FAFC',
+    cardColor: '#FFFFFF',
+    modalColor: '#FFFFFF',
+    popoverColor: '#FFFFFF',
+    tableColor: '#FFFFFF',
+
+    // 文字颜色
+    textColorBase: '#1F2D3D',
+    textColor1: '#1F2D3D',
+    textColor2: '#6B778C',
+    textColor3: '#8C9BAB',
+
+    // 边框颜色
+    borderColor: '#E6EDF5',
+    dividerColor: '#E6EDF5',
+
+    // 圆角
+    borderRadius: '12px',
+    borderRadiusSmall: '8px',
+
+    // 字体
+    fontSize: '14px',
+    fontSizeMedium: '14px',
+    fontSizeLarge: '16px',
+    fontSizeHuge: '18px'
+  },
+  Button: {
+    borderRadiusMedium: '10px',
+    borderRadiusLarge: '12px',
+    fontWeightStrong: '500'
+  },
+  Card: {
+    borderRadius: '14px',
+    paddingMedium: '24px'
   }
 }
 

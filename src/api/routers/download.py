@@ -2,8 +2,11 @@ import logging
 import os
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import FileResponse
+
+from ..schemas.error_schemas import ErrorCode
+from ..utils.error_helpers import raise_http_exception
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -27,7 +30,11 @@ async def download_video(filename: str):
     # 检查文件是否存在
     if not os.path.exists(file_path):
         logger.warning(f"请求的视频文件不存在: {filename}")
-        raise HTTPException(status_code=404, detail="视频文件不存在")
+        raise raise_http_exception(
+            status_code=404,
+            message="视频文件不存在",
+            error_code=ErrorCode.RESOURCE_NOT_FOUND,
+        )
 
     # 检查文件是否在允许的目录内（安全检查）
     try:
@@ -36,10 +43,18 @@ async def download_video(filename: str):
 
         if not real_file_path.startswith(real_video_dir):
             logger.warning(f"尝试访问不安全的文件路径: {filename}")
-            raise HTTPException(status_code=403, detail="访问被拒绝")
+            raise raise_http_exception(
+                status_code=403,
+                message="访问被拒绝",
+                error_code=ErrorCode.AUTHORIZATION_FAILED,
+            )
     except Exception as e:
         logger.error(f"文件路径安全检查失败: {e}")
-        raise HTTPException(status_code=500, detail="文件访问错误")
+        raise raise_http_exception(
+            status_code=500,
+            message="文件访问错误",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
     # 获取文件信息
     file_size = os.path.getsize(file_path)
@@ -106,7 +121,11 @@ async def download_image(filename: str):
     # 检查文件是否存在
     if not os.path.exists(file_path):
         logger.warning(f"请求的图片文件不存在: {filename}")
-        raise HTTPException(status_code=404, detail="图片文件不存在")
+        raise raise_http_exception(
+            status_code=404,
+            message="图片文件不存在",
+            error_code=ErrorCode.RESOURCE_NOT_FOUND,
+        )
 
     # 检查文件是否在允许的目录内（安全检查）
     try:
@@ -121,10 +140,18 @@ async def download_image(filename: str):
 
         if not allowed:
             logger.warning(f"尝试访问不安全的文件路径: {filename}, 实际路径: {real_file_path}")
-            raise HTTPException(status_code=403, detail="访问被拒绝")
+            raise raise_http_exception(
+                status_code=403,
+                message="访问被拒绝",
+                error_code=ErrorCode.AUTHORIZATION_FAILED,
+            )
     except Exception as e:
         logger.error(f"文件路径安全检查失败: {e}")
-        raise HTTPException(status_code=500, detail="文件访问错误")
+        raise raise_http_exception(
+            status_code=500,
+            message="文件访问错误",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+        )
 
     # 获取文件信息
     file_size = os.path.getsize(file_path)
@@ -166,10 +193,18 @@ async def download_overlay(name: str = "overlay_debug"):
         "overlay_first_frame": os.path.join(logs_dir, "overlay_first_frame.jpg"),
     }
     if name not in allowed:
-        raise HTTPException(status_code=400, detail="invalid name")
+        raise raise_http_exception(
+            status_code=400,
+            message="invalid name",
+            error_code=ErrorCode.VALIDATION_ERROR,
+        )
     file_path = allowed[name]
     if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="overlay not found")
+        raise raise_http_exception(
+            status_code=404,
+            message="overlay not found",
+            error_code=ErrorCode.RESOURCE_NOT_FOUND,
+        )
     try:
         file_size = os.path.getsize(file_path)
     except Exception:

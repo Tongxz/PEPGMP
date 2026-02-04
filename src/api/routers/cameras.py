@@ -17,6 +17,9 @@ from src.api.redis_listener import CAMERA_STATS_CACHE
 from src.api.utils.rollout import should_use_domain
 from src.services.scheduler import get_scheduler
 
+from ..schemas.error_schemas import ErrorCode
+from ..utils.error_helpers import raise_http_exception
+
 try:
     from src.services.detection_service_domain import (
         DefaultCameraRepository,
@@ -160,12 +163,20 @@ async def list_cameras(
     """
     # 统一使用数据库（无回退）
     if get_camera_service is None:
-        raise HTTPException(status_code=503, detail="相机服务不可用：数据库连接未初始化")
+        raise raise_http_exception(
+            status_code=503,
+            message="相机服务不可用：数据库连接未初始化",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
 
     try:
         camera_service = await get_camera_service()  # type: ignore
         if not camera_service:
-            raise HTTPException(status_code=503, detail="相机服务不可用：无法创建服务实例")
+            raise raise_http_exception(
+                status_code=503,
+                message="相机服务不可用：无法创建服务实例",
+                error_code=ErrorCode.SERVICE_UNAVAILABLE,
+            )
 
         cameras = await camera_service.camera_repository.find_all()
         if active_only:
@@ -205,7 +216,12 @@ async def list_cameras(
         raise
     except Exception as e:
         logger.error(f"获取摄像头列表失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"获取摄像头列表失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="获取摄像头列表失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
 
 
 @router.post("/cameras")
@@ -224,23 +240,40 @@ async def create_camera(
     """
     # 统一使用数据库（无回退）
     if get_camera_service is None:
-        raise HTTPException(status_code=503, detail="相机服务不可用：数据库连接未初始化")
+        raise raise_http_exception(
+            status_code=503,
+            message="相机服务不可用：数据库连接未初始化",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
 
     try:
         camera_service = await get_camera_service()  # type: ignore
         if not camera_service:
-            raise HTTPException(status_code=503, detail="相机服务不可用：无法创建服务实例")
+            raise raise_http_exception(
+                status_code=503,
+                message="相机服务不可用：无法创建服务实例",
+                error_code=ErrorCode.SERVICE_UNAVAILABLE,
+            )
 
         result = await camera_service.create_camera(payload)
         return result
     except ValueError as e:
         # 业务逻辑错误（如ID已存在），直接抛出HTTP异常
-        raise HTTPException(status_code=409, detail=str(e))
+        raise raise_http_exception(
+            status_code=409,
+            message=str(e),
+            error_code=ErrorCode.RESOURCE_CONFLICT,
+        )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"创建摄像头失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"创建摄像头失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="创建摄像头失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
 
 
 @router.put("/cameras/{camera_id}")
@@ -261,23 +294,40 @@ async def update_camera(
     """
     # 统一使用数据库（无回退）
     if get_camera_service is None:
-        raise HTTPException(status_code=503, detail="相机服务不可用：数据库连接未初始化")
+        raise raise_http_exception(
+            status_code=503,
+            message="相机服务不可用：数据库连接未初始化",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
 
     try:
         camera_service = await get_camera_service()  # type: ignore
         if not camera_service:
-            raise HTTPException(status_code=503, detail="相机服务不可用：无法创建服务实例")
+            raise raise_http_exception(
+                status_code=503,
+                message="相机服务不可用：无法创建服务实例",
+                error_code=ErrorCode.SERVICE_UNAVAILABLE,
+            )
 
         result = await camera_service.update_camera(camera_id, payload)
         return result
     except ValueError as e:
         # 业务逻辑错误（如摄像头不存在），直接抛出HTTP异常
-        raise HTTPException(status_code=404, detail=str(e))
+        raise raise_http_exception(
+            status_code=404,
+            message=str(e),
+            error_code=ErrorCode.RESOURCE_NOT_FOUND,
+        )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"更新摄像头失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"更新摄像头失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="更新摄像头失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
 
 
 @router.delete("/cameras/{camera_id}")
@@ -296,23 +346,40 @@ async def delete_camera(
     """
     # 统一使用数据库（无回退）
     if get_camera_service is None:
-        raise HTTPException(status_code=503, detail="相机服务不可用：数据库连接未初始化")
+        raise raise_http_exception(
+            status_code=503,
+            message="相机服务不可用：数据库连接未初始化",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
 
     try:
         camera_service = await get_camera_service()  # type: ignore
         if not camera_service:
-            raise HTTPException(status_code=503, detail="相机服务不可用：无法创建服务实例")
+            raise raise_http_exception(
+                status_code=503,
+                message="相机服务不可用：无法创建服务实例",
+                error_code=ErrorCode.SERVICE_UNAVAILABLE,
+            )
 
         result = await camera_service.delete_camera(camera_id)
         return result
     except ValueError as e:
         # 业务逻辑错误（如摄像头不存在），直接抛出HTTP异常
-        raise HTTPException(status_code=404, detail=str(e))
+        raise raise_http_exception(
+            status_code=404,
+            message=str(e),
+            error_code=ErrorCode.RESOURCE_NOT_FOUND,
+        )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"删除摄像头失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"删除摄像头失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="删除摄像头失败",
+            error_code=ErrorCode.DATABASE_ERROR,
+            details=str(e),
+        )
 
 
 @router.get("/cameras/{camera_id}/preview")
@@ -327,16 +394,28 @@ async def preview_camera(camera_id: str = Path(...)) -> Response:  # noqa: C901
     """
     # 统一使用数据库（无回退）
     if get_camera_service is None:
-        raise HTTPException(status_code=503, detail="相机服务不可用：数据库连接未初始化")
+        raise raise_http_exception(
+            status_code=503,
+            message="相机服务不可用：数据库连接未初始化",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
 
     try:
         camera_service = await get_camera_service()  # type: ignore
         if not camera_service:
-            raise HTTPException(status_code=503, detail="相机服务不可用：无法创建服务实例")
+            raise raise_http_exception(
+                status_code=503,
+                message="相机服务不可用：无法创建服务实例",
+                error_code=ErrorCode.SERVICE_UNAVAILABLE,
+            )
 
         camera = await camera_service.camera_repository.find_by_id(camera_id)
         if not camera:
-            raise HTTPException(status_code=404, detail="Camera not found")
+            raise raise_http_exception(
+                status_code=404,
+                message="Camera not found",
+                error_code=ErrorCode.RESOURCE_NOT_FOUND,
+            )
 
         # 转换为字典格式
         cam = camera.to_dict()
@@ -350,7 +429,11 @@ async def preview_camera(camera_id: str = Path(...)) -> Response:  # noqa: C901
 
         source = str(cam.get("source", "")).strip()
         if source == "":
-            raise HTTPException(status_code=400, detail="Camera source is empty")
+            raise raise_http_exception(
+                status_code=400,
+                message="Camera source is empty",
+                error_code=ErrorCode.VALIDATION_ERROR,
+            )
 
         # 打开视频源
         cap = None
@@ -361,11 +444,19 @@ async def preview_camera(camera_id: str = Path(...)) -> Response:  # noqa: C901
         else:
             cap = cv2.VideoCapture(source)
         if not cap or not cap.isOpened():
-            raise HTTPException(status_code=502, detail="Failed to open camera source")
+            raise raise_http_exception(
+                status_code=502,
+                message="Failed to open camera source",
+                error_code=ErrorCode.EXTERNAL_SERVICE_ERROR,
+            )
         ok, frame = cap.read()
         cap.release()
         if not ok or frame is None:
-            raise HTTPException(status_code=502, detail="Failed to read frame")
+            raise raise_http_exception(
+                status_code=502,
+                message="Failed to read frame",
+                error_code=ErrorCode.EXTERNAL_SERVICE_ERROR,
+            )
         # 可选：按配置分辨率缩放
         res = str(cam.get("resolution", "")).lower()
         if "x" in res:
@@ -380,12 +471,21 @@ async def preview_camera(camera_id: str = Path(...)) -> Response:  # noqa: C901
                 pass  # nosec B110
         ok, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
         if not ok:
-            raise HTTPException(status_code=500, detail="JPEG encode failed")
+            raise raise_http_exception(
+                status_code=500,
+                message="JPEG encode failed",
+                error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            )
         return Response(content=buf.tobytes(), media_type="image/jpeg")
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Preview error: {e}")
+        raise raise_http_exception(
+            status_code=500,
+            message="Preview error",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )
 
 
 @router.post("/cameras/{camera_id}/start")
@@ -396,23 +496,40 @@ async def start_camera(
     """启动指定摄像头的检测进程."""
     # 统一使用数据库（无回退）
     if get_camera_control_service is None:
-        raise HTTPException(status_code=503, detail="相机控制服务不可用：数据库连接未初始化")
+        raise raise_http_exception(
+            status_code=503,
+            message="相机控制服务不可用：数据库连接未初始化",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
 
     try:
         control_service = await get_camera_control_service()  # type: ignore
         if not control_service:
-            raise HTTPException(status_code=503, detail="相机控制服务不可用：无法创建服务实例")
+            raise raise_http_exception(
+                status_code=503,
+                message="相机控制服务不可用：无法创建服务实例",
+                error_code=ErrorCode.SERVICE_UNAVAILABLE,
+            )
 
         result = await control_service.start_camera(camera_id)
         return result
     except ValueError as e:
         # 业务逻辑错误（如启动失败），直接抛出HTTP异常
-        raise HTTPException(status_code=400, detail=str(e))
+        raise raise_http_exception(
+            status_code=400,
+            message=str(e),
+            error_code=ErrorCode.VALIDATION_ERROR,
+        )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"启动摄像头失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"启动摄像头失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="启动摄像头失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )
 
 
 @router.post("/cameras/{camera_id}/stop")
@@ -423,23 +540,40 @@ async def stop_camera(
     """停止指定摄像头的检测进程."""
     # 统一使用数据库（无回退）
     if get_camera_control_service is None:
-        raise HTTPException(status_code=503, detail="相机控制服务不可用：数据库连接未初始化")
+        raise raise_http_exception(
+            status_code=503,
+            message="相机控制服务不可用：数据库连接未初始化",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
 
     try:
         control_service = await get_camera_control_service()  # type: ignore
         if not control_service:
-            raise HTTPException(status_code=503, detail="相机控制服务不可用：无法创建服务实例")
+            raise raise_http_exception(
+                status_code=503,
+                message="相机控制服务不可用：无法创建服务实例",
+                error_code=ErrorCode.SERVICE_UNAVAILABLE,
+            )
 
         result = control_service.stop_camera(camera_id)
         return result
     except ValueError as e:
         # 业务逻辑错误（如停止失败），直接抛出HTTP异常
-        raise HTTPException(status_code=400, detail=str(e))
+        raise raise_http_exception(
+            status_code=400,
+            message=str(e),
+            error_code=ErrorCode.VALIDATION_ERROR,
+        )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"停止摄像头失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"停止摄像头失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="停止摄像头失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )
 
 
 @router.post("/cameras/{camera_id}/restart")
@@ -450,23 +584,40 @@ async def restart_camera(
     """重启指定摄像头的检测进程."""
     # 统一使用数据库（无回退）
     if get_camera_control_service is None:
-        raise HTTPException(status_code=503, detail="相机控制服务不可用：数据库连接未初始化")
+        raise raise_http_exception(
+            status_code=503,
+            message="相机控制服务不可用：数据库连接未初始化",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
 
     try:
         control_service = await get_camera_control_service()  # type: ignore
         if not control_service:
-            raise HTTPException(status_code=503, detail="相机控制服务不可用：无法创建服务实例")
+            raise raise_http_exception(
+                status_code=503,
+                message="相机控制服务不可用：无法创建服务实例",
+                error_code=ErrorCode.SERVICE_UNAVAILABLE,
+            )
 
         result = await control_service.restart_camera(camera_id)
         return result
     except ValueError as e:
         # 业务逻辑错误（如重启失败），直接抛出HTTP异常
-        raise HTTPException(status_code=400, detail=str(e))
+        raise raise_http_exception(
+            status_code=400,
+            message=str(e),
+            error_code=ErrorCode.VALIDATION_ERROR,
+        )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"重启摄像头失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"重启摄像头失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="重启摄像头失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )
 
 
 @router.get("/cameras/{camera_id}/status")
@@ -484,7 +635,11 @@ async def status_camera(
                 return result
     except ValueError as e:
         # 业务逻辑错误，直接抛出HTTP异常
-        raise HTTPException(status_code=400, detail=str(e))
+        raise raise_http_exception(
+            status_code=400,
+            message=str(e),
+            error_code=ErrorCode.VALIDATION_ERROR,
+        )
     except Exception as e:
         logger.warning(f"摄像头控制服务状态查询失败，回退到调度器: {e}")
 
@@ -498,7 +653,7 @@ async def status_camera(
 
 
 @router.post("/cameras/batch-status")
-async def batch_camera_status(
+async def batch_camera_status(  # noqa: C901
     request_body: Dict[str, Any] = None,
     force_domain: bool | None = Query(None, description="测试用途，强制走领域分支"),
 ) -> Dict[str, Any]:
@@ -538,7 +693,11 @@ async def batch_camera_status(
                 return result
     except ValueError as e:
         # 业务逻辑错误，直接抛出HTTP异常
-        raise HTTPException(status_code=400, detail=str(e))
+        raise raise_http_exception(
+            status_code=400,
+            message=str(e),
+            error_code=ErrorCode.VALIDATION_ERROR,
+        )
     except Exception as e:
         logger.warning(f"摄像头控制服务批量状态查询失败，回退到调度器: {e}")
 
@@ -596,23 +755,40 @@ async def activate_camera(
     """
     # 统一使用数据库（无回退）
     if get_camera_control_service is None:
-        raise HTTPException(status_code=503, detail="相机控制服务不可用：数据库连接未初始化")
+        raise raise_http_exception(
+            status_code=503,
+            message="相机控制服务不可用：数据库连接未初始化",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
 
     try:
         control_service = await get_camera_control_service()  # type: ignore
         if not control_service:
-            raise HTTPException(status_code=503, detail="相机控制服务不可用：无法创建服务实例")
+            raise raise_http_exception(
+                status_code=503,
+                message="相机控制服务不可用：无法创建服务实例",
+                error_code=ErrorCode.SERVICE_UNAVAILABLE,
+            )
 
         result = await control_service.activate_camera(camera_id)
         return result
     except ValueError as e:
         # 业务逻辑错误（如摄像头不存在），直接抛出HTTP异常
-        raise HTTPException(status_code=404, detail=str(e))
+        raise raise_http_exception(
+            status_code=404,
+            message=str(e),
+            error_code=ErrorCode.RESOURCE_NOT_FOUND,
+        )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"激活摄像头失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"激活摄像头失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="激活摄像头失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )
 
 
 @router.post("/cameras/{camera_id}/deactivate")
@@ -623,23 +799,40 @@ async def deactivate_camera(
     """停用摄像头（禁止启动检测，如正在运行则先停止）."""
     # 统一使用数据库（无回退）
     if get_camera_control_service is None:
-        raise HTTPException(status_code=503, detail="相机控制服务不可用：数据库连接未初始化")
+        raise raise_http_exception(
+            status_code=503,
+            message="相机控制服务不可用：数据库连接未初始化",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
 
     try:
         control_service = await get_camera_control_service()  # type: ignore
         if not control_service:
-            raise HTTPException(status_code=503, detail="相机控制服务不可用：无法创建服务实例")
+            raise raise_http_exception(
+                status_code=503,
+                message="相机控制服务不可用：无法创建服务实例",
+                error_code=ErrorCode.SERVICE_UNAVAILABLE,
+            )
 
         result = await control_service.deactivate_camera(camera_id)
         return result
     except ValueError as e:
         # 业务逻辑错误（如摄像头不存在），直接抛出HTTP异常
-        raise HTTPException(status_code=404, detail=str(e))
+        raise raise_http_exception(
+            status_code=404,
+            message=str(e),
+            error_code=ErrorCode.RESOURCE_NOT_FOUND,
+        )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"停用摄像头失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"停用摄像头失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="停用摄像头失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )
 
 
 @router.put("/cameras/{camera_id}/auto-start")
@@ -660,25 +853,46 @@ async def toggle_auto_start(
     """
     # 统一使用数据库（无回退）
     if get_camera_control_service is None:
-        raise HTTPException(status_code=503, detail="相机控制服务不可用：数据库连接未初始化")
+        raise raise_http_exception(
+            status_code=503,
+            message="相机控制服务不可用：数据库连接未初始化",
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
 
     try:
         control_service = await get_camera_control_service()  # type: ignore
         if not control_service:
-            raise HTTPException(status_code=503, detail="相机控制服务不可用：无法创建服务实例")
+            raise raise_http_exception(
+                status_code=503,
+                message="相机控制服务不可用：无法创建服务实例",
+                error_code=ErrorCode.SERVICE_UNAVAILABLE,
+            )
 
         result = await control_service.toggle_auto_start(camera_id, auto_start)
         return result
     except ValueError as e:
         # 业务逻辑错误（如摄像头不存在或未激活），直接抛出HTTP异常
         if "不存在" in str(e):
-            raise HTTPException(status_code=404, detail=str(e))
-        raise HTTPException(status_code=400, detail=str(e))
+            raise raise_http_exception(
+                status_code=404,
+                message=str(e),
+                error_code=ErrorCode.RESOURCE_NOT_FOUND,
+            )
+        raise raise_http_exception(
+            status_code=400,
+            message=str(e),
+            error_code=ErrorCode.VALIDATION_ERROR,
+        )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"切换自动启动失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"切换自动启动失败: {str(e)}")
+        raise raise_http_exception(
+            status_code=500,
+            message="切换自动启动失败",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )
 
 
 @router.get("/cameras/{camera_id}/stats")
@@ -791,7 +1005,11 @@ async def get_camera_logs(
                 return result
     except ValueError as e:
         # 业务逻辑错误（如日志文件未配置），直接抛出HTTP异常
-        raise HTTPException(status_code=404, detail=str(e))
+        raise raise_http_exception(
+            status_code=404,
+            message=str(e),
+            error_code=ErrorCode.RESOURCE_NOT_FOUND,
+        )
     except Exception as e:
         logger.warning(f"摄像头控制服务读取日志失败，回退到直接读取: {e}")
 
@@ -802,7 +1020,11 @@ async def get_camera_logs(
     status = scheduler.status(camera_id)
 
     if not status.get("log"):
-        raise HTTPException(status_code=404, detail="Log file not configured")
+        raise raise_http_exception(
+            status_code=404,
+            message="Log file not configured",
+            error_code=ErrorCode.RESOURCE_NOT_FOUND,
+        )
 
     log_path = FilePath(status["log"])
     if not log_path.exists():
@@ -825,7 +1047,12 @@ async def get_camera_logs(
             "lines": [line.rstrip("\n") for line in recent_lines],
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to read log file: {e}")
+        raise raise_http_exception(
+            status_code=500,
+            message="Failed to read log file",
+            error_code=ErrorCode.INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )
 
 
 @router.post("/cameras/refresh")
@@ -859,3 +1086,90 @@ async def refresh_all_cameras(
         "message": "All camera statuses refreshed",
         "timestamp": datetime.now().isoformat(),
     }
+
+
+@router.post("/cameras/{camera_id}/test", summary="测试摄像头连接")
+async def test_camera(camera_id: str = Path(..., description="摄像头ID")):
+    """测试摄像头连接状态
+
+    尝试连接摄像头并读取一帧，验证RTSP流是否可用。
+
+    Returns:
+        - success: 连接成功
+        - message: 测试结果消息
+        - details: 详细信息（分辨率、FPS等）
+    """
+    try:
+        # 获取摄像头服务
+        camera_service = await get_camera_service()
+        if camera_service is None:
+            raise raise_http_exception(
+                status_code=503,
+                message="摄像头服务不可用",
+                error_code=ErrorCode.SERVICE_UNAVAILABLE,
+            )
+
+        # 直接从仓储获取摄像头信息
+        camera = await camera_service.camera_repository.find_by_id(camera_id)
+        if camera is None:
+            raise raise_http_exception(
+                status_code=404,
+                message=f"摄像头不存在: {camera_id}",
+                error_code=ErrorCode.RESOURCE_NOT_FOUND,
+            )
+
+        # 测试RTSP连接
+        rtsp_url = camera.rtsp_url
+        if not rtsp_url:
+            return {"success": False, "message": "摄像头未配置RTSP地址", "details": None}
+
+        logger.info(f"测试摄像头连接: {camera_id}, RTSP: {rtsp_url}")
+
+        # 尝试打开视频流
+        cap = cv2.VideoCapture(rtsp_url)
+
+        if not cap.isOpened():
+            return {
+                "success": False,
+                "message": "无法连接到摄像头RTSP流",
+                "details": {"rtsp_url": rtsp_url, "error": "连接失败，请检查RTSP地址和网络连接"},
+            }
+
+        # 尝试读取一帧
+        ret, frame = cap.read()
+
+        if not ret or frame is None:
+            cap.release()
+            return {
+                "success": False,
+                "message": "连接成功但无法读取视频帧",
+                "details": {"rtsp_url": rtsp_url, "error": "可能是摄像头未启动或视频流异常"},
+            }
+
+        # 获取视频流信息
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = int(cap.get(cv2.CAP_PROP_FPS))
+
+        cap.release()
+
+        return {
+            "success": True,
+            "message": "摄像头连接正常",
+            "details": {
+                "rtsp_url": rtsp_url,
+                "resolution": f"{width}x{height}",
+                "fps": fps if fps > 0 else "未知",
+                "frame_size": frame.shape if frame is not None else None,
+            },
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"测试摄像头失败: {e}", exc_info=True)
+        return {
+            "success": False,
+            "message": f"测试失败: {str(e)}",
+            "details": {"error": str(e)},
+        }

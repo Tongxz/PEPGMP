@@ -10,6 +10,9 @@ export interface AlertHistoryItem {
     notification_sent?: boolean
     notification_channels_used?: string[] | null
     timestamp: string
+    status?: 'pending' | 'confirmed' | 'false_positive' | 'resolved'
+    handled_at?: string
+    handled_by?: string
 }
 
 export interface AlertRuleItem {
@@ -77,6 +80,14 @@ export const alertsApi = {
 
     async getRuleDetail(ruleId: number) {
         const response = await http.get<AlertRuleItem>(`/alerts/rules/${ruleId}`)
+        return response.data
+    },
+
+    async updateAlertStatus(alertId: number, status: 'confirmed' | 'false_positive' | 'resolved', notes?: string) {
+        const response = await http.put(`/alerts/history/${alertId}/status`, {
+            status,
+            notes
+        })
         return response.data
     },
 }

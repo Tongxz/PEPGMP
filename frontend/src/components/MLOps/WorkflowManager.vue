@@ -17,8 +17,23 @@
       </n-space>
     </template>
 
+    <!-- 错误提示 -->
+    <n-alert
+      v-if="errorMessage"
+      type="error"
+      title="获取工作流列表失败"
+      :description="errorMessage"
+      closable
+      @close="errorMessage = null"
+      style="margin-bottom: 16px"
+    >
+      <template #icon>
+        <n-icon><AlertCircleOutline /></n-icon>
+      </template>
+    </n-alert>
+
     <!-- 工作流列表 -->
-    <n-empty v-if="workflows.length === 0" description="暂无工作流">
+    <n-empty v-if="!loading && !errorMessage && workflows.length === 0" description="暂无工作流">
       <template #extra>
         <n-button size="small" @click="showCreateDialog = true">创建第一个工作流</n-button>
       </template>
@@ -77,11 +92,8 @@
                     :key="index"
                     :title="step.name"
                     :status="getStepStatus(workflow, index)"
-                  >
-                    <template #description>
-                      <n-text depth="3" style="font-size: 11px;">{{ step.description }}</n-text>
-                    </template>
-                  </n-step>
+                    :description="step.description"
+                  />
                 </n-steps>
               </div>
 
@@ -195,7 +207,7 @@
                   <n-input-group>
                     <n-input-group-label>数据集名称</n-input-group-label>
                     <n-input
-                      :value="step.dataset_params?.dataset_name || ''"
+                      :value="(step as any).dataset_params?.dataset_name || ''"
                       @update:value="val => updateDatasetParam(step, 'dataset_name', val)"
                       placeholder="不填则自动生成"
                     />
@@ -205,7 +217,7 @@
                   <n-input-group>
                     <n-input-group-label>摄像头ID</n-input-group-label>
                     <n-input
-                      :value="step.dataset_params?.camera_ids || ''"
+                      :value="(step as any).dataset_params?.camera_ids || ''"
                       @update:value="val => updateDatasetParam(step, 'camera_ids', val)"
                       placeholder="多个摄像头用逗号分隔"
                     />
@@ -215,7 +227,7 @@
                   <n-input-group>
                     <n-input-group-label>最大记录</n-input-group-label>
                     <n-input-number
-                      :value="step.dataset_params?.max_records || 1000"
+                      :value="(step as any).dataset_params?.max_records || 1000"
                       @update:value="val => updateDatasetParam(step, 'max_records', val)"
                       :min="100"
                       :max="50000"
@@ -238,7 +250,7 @@
                     <n-input-group-label>包含正常样本</n-input-group-label>
                     <div style="padding: 4px 0;">
                       <n-switch
-                        :value="step.dataset_params?.include_normal_samples ?? false"
+                        :value="(step as any).dataset_params?.include_normal_samples ?? false"
                         @update:value="val => updateDatasetParam(step, 'include_normal_samples', val)"
                       />
                     </div>
@@ -280,8 +292,8 @@
                   <n-input-group>
                     <n-input-group-label>初始学习率 (lr0)</n-input-group-label>
                     <n-input-number
-                      :value="step.training_params?.lr0 || 0.01"
-                      @update:value="(val) => updateTrainingParam(step, 'lr0', val)"
+                      :value="(step as any).training_params?.lr0 || 0.01"
+                      @update:value="(val) => updateTrainingParam(step, 'lr0', val ?? 0.01)"
                       :min="0.0001"
                       :max="1"
                       :step="0.001"
@@ -294,8 +306,8 @@
                   <n-input-group>
                     <n-input-group-label>最终学习率 (lrf)</n-input-group-label>
                     <n-input-number
-                      :value="step.training_params?.lrf || 0.1"
-                      @update:value="(val) => updateTrainingParam(step, 'lrf', val)"
+                      :value="(step as any).training_params?.lrf || 0.1"
+                      @update:value="(val) => updateTrainingParam(step, 'lrf', val ?? 0.1)"
                       :min="0.01"
                       :max="1"
                       :step="0.01"
@@ -308,8 +320,8 @@
                   <n-input-group>
                     <n-input-group-label>批次大小</n-input-group-label>
                     <n-input-number
-                      :value="step.training_params?.batch_size || 16"
-                      @update:value="(val) => updateTrainingParam(step, 'batch_size', val)"
+                      :value="(step as any).training_params?.batch_size || 16"
+                      @update:value="(val) => updateTrainingParam(step, 'batch_size', val ?? 16)"
                       :min="1"
                       :max="128"
                       placeholder="16"
@@ -320,8 +332,8 @@
                   <n-input-group>
                     <n-input-group-label>设备</n-input-group-label>
                     <n-select
-                      :value="step.training_params?.device || 'auto'"
-                      @update:value="(val) => updateTrainingParam(step, 'device', val)"
+                      :value="(step as any).training_params?.device || 'auto'"
+                      @update:value="(val) => updateTrainingParam(step, 'device', val || 'auto')"
                       :options="deviceOptions"
                       placeholder="选择设备"
                     />
@@ -330,27 +342,27 @@
                 <n-gi>
                   <n-input-group>
                     <n-input-group-label>模型</n-input-group-label>
-                    <n-input :value="step.training_params?.model || ''" @update:value="(val) => updateTrainingParam(step, 'model', val)" placeholder="yolov8n.pt" />
+                    <n-input :value="(step as any).training_params?.model || ''" @update:value="(val) => updateTrainingParam(step, 'model', val)" placeholder="yolov8n.pt" />
                   </n-input-group>
                 </n-gi>
                 <n-gi>
                   <n-input-group>
                     <n-input-group-label>训练轮数</n-input-group-label>
-                    <n-input-number :value="step.training_params?.epochs || 50" @update:value="(val) => updateTrainingParam(step, 'epochs', val)" :min="1" :max="1000" />
+                    <n-input-number :value="(step as any).training_params?.epochs || 50" @update:value="(val) => updateTrainingParam(step, 'epochs', val ?? 50)" :min="1" :max="1000" />
                   </n-input-group>
                 </n-gi>
                 <n-gi>
                   <n-input-group>
                     <n-input-group-label>图像尺寸</n-input-group-label>
-                    <n-input-number :value="step.training_params?.image_size || 640" @update:value="(val) => updateTrainingParam(step, 'image_size', val)" :min="128" :max="2048" />
+                    <n-input-number :value="(step as any).training_params?.image_size || 640" @update:value="(val) => updateTrainingParam(step, 'image_size', val ?? 640)" :min="128" :max="2048" />
                   </n-input-group>
                 </n-gi>
                 <n-gi>
                   <n-input-group>
                     <n-input-group-label>动量 (momentum)</n-input-group-label>
                     <n-input-number
-                      :value="step.training_params?.momentum || 0.937"
-                      @update:value="(val) => updateTrainingParam(step, 'momentum', val)"
+                      :value="(step as any).training_params?.momentum || 0.937"
+                      @update:value="(val) => updateTrainingParam(step, 'momentum', val ?? 0.937)"
                       :min="0"
                       :max="1"
                       :step="0.001"
@@ -363,8 +375,8 @@
                   <n-input-group>
                     <n-input-group-label>权重衰减 (weight_decay)</n-input-group-label>
                     <n-input-number
-                      :value="step.training_params?.weight_decay || 0.0005"
-                      @update:value="(val) => updateTrainingParam(step, 'weight_decay', val)"
+                      :value="(step as any).training_params?.weight_decay || 0.0005"
+                      @update:value="(val) => updateTrainingParam(step, 'weight_decay', val ?? 0.0005)"
                       :min="0"
                       :max="0.01"
                       :step="0.0001"
@@ -377,8 +389,8 @@
                   <n-input-group>
                     <n-input-group-label>预热轮数 (warmup_epochs)</n-input-group-label>
                     <n-input-number
-                      :value="step.training_params?.warmup_epochs || 3"
-                      @update:value="(val) => updateTrainingParam(step, 'warmup_epochs', val)"
+                      :value="(step as any).training_params?.warmup_epochs || 3"
+                      @update:value="(val) => updateTrainingParam(step, 'warmup_epochs', val ?? 3)"
                       :min="0"
                       :max="10"
                       placeholder="3"
@@ -389,8 +401,8 @@
                   <n-input-group>
                     <n-input-group-label>早停耐心值 (patience)</n-input-group-label>
                     <n-input-number
-                      :value="step.training_params?.patience || 15"
-                      @update:value="(val) => updateTrainingParam(step, 'patience', val)"
+                      :value="(step as any).training_params?.patience || 15"
+                      @update:value="(val) => updateTrainingParam(step, 'patience', val ?? 15)"
                       :min="0"
                       :max="100"
                       placeholder="15"
@@ -401,8 +413,8 @@
                   <n-input-group>
                     <n-input-group-label>边界框损失权重 (box)</n-input-group-label>
                     <n-input-number
-                      :value="step.training_params?.box || 7.5"
-                      @update:value="(val) => updateTrainingParam(step, 'box', val)"
+                      :value="(step as any).training_params?.box || 7.5"
+                      @update:value="(val) => updateTrainingParam(step, 'box', val ?? 7.5)"
                       :min="0"
                       :max="20"
                       :step="0.1"
@@ -415,8 +427,8 @@
                   <n-input-group>
                     <n-input-group-label>分类损失权重 (cls)</n-input-group-label>
                     <n-input-number
-                      :value="step.training_params?.cls || 0.5"
-                      @update:value="(val) => updateTrainingParam(step, 'cls', val)"
+                      :value="(step as any).training_params?.cls || 0.5"
+                      @update:value="(val) => updateTrainingParam(step, 'cls', val ?? 0.5)"
                       :min="0"
                       :max="5"
                       :step="0.1"
@@ -429,8 +441,8 @@
                   <n-input-group>
                     <n-input-group-label>DFL损失权重 (dfl)</n-input-group-label>
                     <n-input-number
-                      :value="step.training_params?.dfl || 1.5"
-                      @update:value="(val) => updateTrainingParam(step, 'dfl', val)"
+                      :value="(step as any).training_params?.dfl || 1.5"
+                      @update:value="(val) => updateTrainingParam(step, 'dfl', val ?? 1.5)"
                       :min="0"
                       :max="5"
                       :step="0.1"
@@ -443,7 +455,7 @@
             </n-form-item>
           </n-card>
         </div>
-        <n-button @click="addStep" type="dashed" style="width: 100%; margin-top: 12px;">
+        <n-button @click="addStep" tertiary style="width: 100%; margin-top: 12px;">
           <template #icon>
             <n-icon><AddOutline /></n-icon>
           </template>
@@ -517,14 +529,7 @@
               :key="index"
               :title="step.name"
               :status="getStepStatus(selectedWorkflow, index)"
-            >
-              <template #description>
-                <n-text depth="3" style="font-size: 12px;">{{ step.description }}</n-text>
-                <n-tag :type="getStepTypeColor(step.type)" size="tiny" style="margin-left: 8px;">
-                  {{ getStepTypeText(step.type) }}
-                </n-tag>
-              </template>
-            </n-step>
+            />
           </n-steps>
         </n-card>
 
@@ -567,8 +572,8 @@
       <template #action>
         <n-space>
           <n-button @click="showDetailDialog = false">关闭</n-button>
-          <n-button type="primary" @click="runWorkflow(selectedWorkflow)">运行</n-button>
-          <n-button type="warning" @click="editWorkflow(selectedWorkflow)">编辑</n-button>
+          <n-button type="primary" @click="runWorkflow(selectedWorkflow!)" v-if="selectedWorkflow">运行</n-button>
+          <n-button type="warning" @click="editWorkflow(selectedWorkflow!)" v-if="selectedWorkflow">编辑</n-button>
         </n-space>
       </template>
     </n-modal>
@@ -772,7 +777,7 @@
                   <n-input-group>
                     <n-input-group-label>数据集名称</n-input-group-label>
                     <n-input
-                      :value="step.dataset_params?.dataset_name || ''"
+                      :value="(step as any).dataset_params?.dataset_name || ''"
                       @update:value="val => updateDatasetParam(step, 'dataset_name', val)"
                       placeholder="不填则自动生成"
                     />
@@ -782,7 +787,7 @@
                   <n-input-group>
                     <n-input-group-label>摄像头ID</n-input-group-label>
                     <n-input
-                      :value="step.dataset_params?.camera_ids || ''"
+                      :value="(step as any).dataset_params?.camera_ids || ''"
                       @update:value="val => updateDatasetParam(step, 'camera_ids', val)"
                       placeholder="多个摄像头用逗号分隔"
                     />
@@ -792,7 +797,7 @@
                   <n-input-group>
                     <n-input-group-label>最大记录</n-input-group-label>
                     <n-input-number
-                      :value="step.dataset_params?.max_records || 1000"
+                      :value="(step as any).dataset_params?.max_records || 1000"
                       @update:value="val => updateDatasetParam(step, 'max_records', val)"
                       :min="100"
                       :max="50000"
@@ -815,7 +820,7 @@
                     <n-input-group-label>包含正常样本</n-input-group-label>
                     <div style="padding: 4px 0;">
                       <n-switch
-                        :value="step.dataset_params?.include_normal_samples ?? false"
+                        :value="(step as any).dataset_params?.include_normal_samples ?? false"
                         @update:value="val => updateDatasetParam(step, 'include_normal_samples', val)"
                       />
                     </div>
@@ -856,8 +861,8 @@
                   <n-input-group>
                     <n-input-group-label>初始学习率 (lr0)</n-input-group-label>
                     <n-input-number
-                      :value="step.training_params?.lr0 || 0.01"
-                      @update:value="(val) => updateTrainingParam(step, 'lr0', val)"
+                      :value="(step as any).training_params?.lr0 || 0.01"
+                      @update:value="(val) => updateTrainingParam(step, 'lr0', val ?? 0.01)"
                       :min="0.0001"
                       :max="1"
                       :step="0.001"
@@ -870,8 +875,8 @@
                   <n-input-group>
                     <n-input-group-label>最终学习率 (lrf)</n-input-group-label>
                     <n-input-number
-                      :value="step.training_params?.lrf || 0.1"
-                      @update:value="(val) => updateTrainingParam(step, 'lrf', val)"
+                      :value="(step as any).training_params?.lrf || 0.1"
+                      @update:value="(val) => updateTrainingParam(step, 'lrf', val ?? 0.1)"
                       :min="0.01"
                       :max="1"
                       :step="0.01"
@@ -884,8 +889,8 @@
                   <n-input-group>
                     <n-input-group-label>批次大小</n-input-group-label>
                     <n-input-number
-                      :value="step.training_params?.batch_size || 16"
-                      @update:value="(val) => updateTrainingParam(step, 'batch_size', val)"
+                      :value="(step as any).training_params?.batch_size || 16"
+                      @update:value="(val) => updateTrainingParam(step, 'batch_size', val ?? 16)"
                       :min="1"
                       :max="128"
                       placeholder="16"
@@ -896,8 +901,8 @@
                   <n-input-group>
                     <n-input-group-label>设备</n-input-group-label>
                     <n-select
-                      :value="step.training_params?.device || 'auto'"
-                      @update:value="(val) => updateTrainingParam(step, 'device', val)"
+                      :value="(step as any).training_params?.device || 'auto'"
+                      @update:value="(val) => updateTrainingParam(step, 'device', val || 'auto')"
                       :options="deviceOptions"
                       placeholder="选择设备"
                     />
@@ -906,27 +911,27 @@
                 <n-gi>
                   <n-input-group>
                     <n-input-group-label>模型</n-input-group-label>
-                    <n-input :value="step.training_params?.model || ''" @update:value="(val) => updateTrainingParam(step, 'model', val)" placeholder="yolov8n.pt" />
+                    <n-input :value="(step as any).training_params?.model || ''" @update:value="(val) => updateTrainingParam(step, 'model', val)" placeholder="yolov8n.pt" />
                   </n-input-group>
                 </n-gi>
                 <n-gi>
                   <n-input-group>
                     <n-input-group-label>训练轮数</n-input-group-label>
-                    <n-input-number :value="step.training_params?.epochs || 50" @update:value="(val) => updateTrainingParam(step, 'epochs', val)" :min="1" :max="1000" />
+                    <n-input-number :value="(step as any).training_params?.epochs || 50" @update:value="(val) => updateTrainingParam(step, 'epochs', val ?? 50)" :min="1" :max="1000" />
                   </n-input-group>
                 </n-gi>
                 <n-gi>
                   <n-input-group>
                     <n-input-group-label>图像尺寸</n-input-group-label>
-                    <n-input-number :value="step.training_params?.image_size || 640" @update:value="(val) => updateTrainingParam(step, 'image_size', val)" :min="128" :max="2048" />
+                    <n-input-number :value="(step as any).training_params?.image_size || 640" @update:value="(val) => updateTrainingParam(step, 'image_size', val ?? 640)" :min="128" :max="2048" />
                   </n-input-group>
                 </n-gi>
                 <n-gi>
                   <n-input-group>
                     <n-input-group-label>动量 (momentum)</n-input-group-label>
                     <n-input-number
-                      :value="step.training_params?.momentum || 0.937"
-                      @update:value="(val) => updateTrainingParam(step, 'momentum', val)"
+                      :value="(step as any).training_params?.momentum || 0.937"
+                      @update:value="(val) => updateTrainingParam(step, 'momentum', val ?? 0.937)"
                       :min="0"
                       :max="1"
                       :step="0.001"
@@ -939,8 +944,8 @@
                   <n-input-group>
                     <n-input-group-label>权重衰减 (weight_decay)</n-input-group-label>
                     <n-input-number
-                      :value="step.training_params?.weight_decay || 0.0005"
-                      @update:value="(val) => updateTrainingParam(step, 'weight_decay', val)"
+                      :value="(step as any).training_params?.weight_decay || 0.0005"
+                      @update:value="(val) => updateTrainingParam(step, 'weight_decay', val ?? 0.0005)"
                       :min="0"
                       :max="0.01"
                       :step="0.0001"
@@ -953,8 +958,8 @@
                   <n-input-group>
                     <n-input-group-label>预热轮数 (warmup_epochs)</n-input-group-label>
                     <n-input-number
-                      :value="step.training_params?.warmup_epochs || 3"
-                      @update:value="(val) => updateTrainingParam(step, 'warmup_epochs', val)"
+                      :value="(step as any).training_params?.warmup_epochs || 3"
+                      @update:value="(val) => updateTrainingParam(step, 'warmup_epochs', val ?? 3)"
                       :min="0"
                       :max="10"
                       placeholder="3"
@@ -965,8 +970,8 @@
                   <n-input-group>
                     <n-input-group-label>早停耐心值 (patience)</n-input-group-label>
                     <n-input-number
-                      :value="step.training_params?.patience || 15"
-                      @update:value="(val) => updateTrainingParam(step, 'patience', val)"
+                      :value="(step as any).training_params?.patience || 15"
+                      @update:value="(val) => updateTrainingParam(step, 'patience', val ?? 15)"
                       :min="0"
                       :max="100"
                       placeholder="15"
@@ -977,8 +982,8 @@
                   <n-input-group>
                     <n-input-group-label>边界框损失权重 (box)</n-input-group-label>
                     <n-input-number
-                      :value="step.training_params?.box || 7.5"
-                      @update:value="(val) => updateTrainingParam(step, 'box', val)"
+                      :value="(step as any).training_params?.box || 7.5"
+                      @update:value="(val) => updateTrainingParam(step, 'box', val ?? 7.5)"
                       :min="0"
                       :max="20"
                       :step="0.1"
@@ -991,8 +996,8 @@
                   <n-input-group>
                     <n-input-group-label>分类损失权重 (cls)</n-input-group-label>
                     <n-input-number
-                      :value="step.training_params?.cls || 0.5"
-                      @update:value="(val) => updateTrainingParam(step, 'cls', val)"
+                      :value="(step as any).training_params?.cls || 0.5"
+                      @update:value="(val) => updateTrainingParam(step, 'cls', val ?? 0.5)"
                       :min="0"
                       :max="5"
                       :step="0.1"
@@ -1005,8 +1010,8 @@
                   <n-input-group>
                     <n-input-group-label>DFL损失权重 (dfl)</n-input-group-label>
                     <n-input-number
-                      :value="step.training_params?.dfl || 1.5"
-                      @update:value="(val) => updateTrainingParam(step, 'dfl', val)"
+                      :value="(step as any).training_params?.dfl || 1.5"
+                      @update:value="(val) => updateTrainingParam(step, 'dfl', val ?? 1.5)"
                       :min="0"
                       :max="5"
                       :step="0.1"
@@ -1022,7 +1027,7 @@
                 <n-gi>
                   <n-input-group>
                     <n-input-group-label>实例数</n-input-group-label>
-                    <n-input-number :value="step.deployment_params?.replicas || 1" @update:value="(val) => updateDeploymentParam(step, 'replicas', val)" :min="1" :max="10" />
+                    <n-input-number :value="(step as any).deployment_params?.replicas || 1" @update:value="(val) => updateDeploymentParam(step, 'replicas', val ?? 1)" :min="1" :max="10" />
                   </n-input-group>
                 </n-gi>
                 <n-gi>
@@ -1035,7 +1040,7 @@
             </n-form-item>
           </n-card>
         </div>
-        <n-button @click="addEditStep" type="dashed" style="width: 100%; margin-top: 12px;">
+        <n-button @click="addEditStep" tertiary style="width: 100%; margin-top: 12px;">
           <template #icon>
             <n-icon><AddOutline /></n-icon>
           </template>
@@ -1055,7 +1060,8 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { NCard, NButton, NSpace, NIcon, NEmpty, NList, NListItem, NTag, NDescriptions, NDescriptionsItem, NDivider, NText, NSteps, NStep, NModal, NForm, NFormItem, NSelect, NInput, NInputNumber, NInputGroup, NInputGroupLabel, NDatePicker, NSwitch, NAlert, NCollapse, NCollapseItem, NCode, NGrid, NGi, NStatistic, useMessage } from 'naive-ui'
-import { RefreshOutline, AddOutline } from '@vicons/ionicons5'
+import { RefreshOutline, AddOutline, AlertCircleOutline } from '@vicons/ionicons5'
+import { http } from '@/lib/http'
 
 interface WorkflowStep {
   name: string
@@ -1071,9 +1077,21 @@ interface WorkflowStep {
     end_time?: string
   }
   training_params?: {
-    learning_rate?: string
-    batch_size?: string
-    device?: string
+    learning_rate?: string | number
+    batch_size?: string | number
+    device?: string | number
+    epochs?: string | number
+    image_size?: string | number
+    momentum?: string | number
+    weight_decay?: string | number
+    warmup_epochs?: string | number
+    patience?: string | number
+    box?: string | number
+    cls?: string | number
+    dfl?: string | number
+    lr0?: string | number
+    lrf?: string | number
+    model?: string
   }
   deployment_params?: {
     replicas?: number
@@ -1121,6 +1139,7 @@ interface Workflow {
 const message = useMessage()
 const workflows = ref<Workflow[]>([])
 const loading = ref(false)
+const errorMessage = ref<string | null>(null)
 function copyToClipboard(text: string) {
   if (!text) return
   if (!navigator.clipboard) {
@@ -1281,7 +1300,7 @@ function updateTrainingParam(step: WorkflowStep, param: string, value: string | 
   if (!step.training_params) {
     step.training_params = {}
   }
-  step.training_params[param as keyof typeof step.training_params] = value
+  (step.training_params as any)[param] = value
   syncTrainingConfig(step)
 }
 
@@ -1308,8 +1327,8 @@ function syncTrainingConfig(step: WorkflowStep) {
     return
   }
   const config = parseConfig(step.config)
-  if (!config.training_params) {
-    config.training_params = {}
+  if (!(config as any).training_params) {
+    (config as any).training_params = {}
   }
   Object.assign(config.training_params, step.training_params)
   step.config = JSON.stringify(config, null, 2)
@@ -1320,7 +1339,7 @@ function updateDeploymentParam(step: WorkflowStep, param: string, value: string 
   if (!step.deployment_params) {
     step.deployment_params = {}
   }
-  step.deployment_params[param as keyof typeof step.deployment_params] = value
+  (step.deployment_params as any)[param] = value
 }
 
 function parseConfig(config: WorkflowStep['config']) {
@@ -1370,8 +1389,8 @@ function parseCameraIds(value: string | string[] | undefined): string[] | undefi
   return undefined
 }
 
-function datasetTimeRange(step: WorkflowStep) {
-  const params = step.dataset_params
+function datasetTimeRange(step: WorkflowStep): [number, number] | null {
+  const params = (step as any).dataset_params
   if (!params || !params.start_time || !params.end_time) {
     return null
   }
@@ -1496,7 +1515,7 @@ function normalizeStepsForSubmit(steps: WorkflowStep[]) {
 
     if (step.training_params) {
       const trainingPayload: Record<string, any> = {}
-      if (step.training_params.lr0 !== undefined) {
+      if ((step.training_params as any).lr0 !== undefined) {
         trainingPayload.lr0 = step.training_params.lr0
       }
       if (step.training_params.lrf !== undefined) {
@@ -1658,93 +1677,30 @@ function prepareStepForForm(step: any): WorkflowStep {
 // 获取工作流列表
 async function fetchWorkflows() {
   loading.value = true
+  errorMessage.value = null
   try {
-    // 调用实际API
-    const response = await fetch('/api/v1/mlops/workflows')
-    if (response.ok) {
-      workflows.value = await response.json()
-    } else {
-      console.error('获取工作流列表失败:', response.statusText)
-      // 如果API失败，使用模拟数据作为备用
-      workflows.value = [
-      {
-        id: '1',
-        name: '智能检测模型训练流水线',
-        type: 'training',
-        status: 'active',
-        trigger: 'schedule',
-        schedule: '0 2 * * *',
-        description: '每日自动训练智能检测模型',
-        steps: [
-          { name: '数据预处理', type: 'data_processing', description: '清洗和预处理检测数据', config: '{}' },
-          { name: '模型训练', type: 'model_training', description: '训练YOLOv8检测模型', config: '{}' },
-          { name: '模型评估', type: 'model_evaluation', description: '评估模型性能', config: '{}' },
-          { name: '模型部署', type: 'model_deployment', description: '部署到生产环境', config: '{}' }
-        ],
-        last_run: '2025-01-20T02:00:00Z',
-        next_run: '2025-01-21T02:00:00Z',
-        run_count: 15,
-        success_rate: 93.3,
-        avg_duration: 45,
-        created_at: '2025-01-01T10:00:00Z',
-        recent_runs: [
-          { id: '1', status: 'success', started_at: '2025-01-20T02:00:00Z', duration: 42 },
-          { id: '2', status: 'success', started_at: '2025-01-19T02:00:00Z', duration: 38 },
-          { id: '3', status: 'failed', started_at: '2025-01-18T02:00:00Z', duration: 15, error_message: '数据加载失败' }
-        ]
-      },
-      {
-        id: '2',
-        name: '模型性能评估流水线',
-        type: 'evaluation',
-        status: 'active',
-        trigger: 'webhook',
-        description: '当新模型部署时自动评估性能',
-        steps: [
-          { name: '数据验证', type: 'data_validation', description: '验证测试数据质量', config: '{}' },
-          { name: '模型评估', type: 'model_evaluation', description: '评估模型性能指标', config: '{}' },
-          { name: '报告生成', type: 'notification', description: '生成评估报告', config: '{}' }
-        ],
-        last_run: '2025-01-20T14:30:00Z',
-        next_run: undefined,
-        run_count: 8,
-        success_rate: 100,
-        avg_duration: 12,
-        created_at: '2025-01-10T15:00:00Z',
-        recent_runs: [
-          { id: '4', status: 'success', started_at: '2025-01-20T14:30:00Z', duration: 11 },
-          { id: '5', status: 'success', started_at: '2025-01-19T16:45:00Z', duration: 13 }
-        ]
-      },
-      {
-        id: '3',
-        name: '数据处理流水线',
-        type: 'data_processing',
-        status: 'inactive',
-        trigger: 'data_change',
-        description: '处理新上传的数据集',
-        steps: [
-          { name: '数据清洗', type: 'data_processing', description: '清洗原始数据', config: '{}' },
-          { name: '数据标注', type: 'data_processing', description: '自动标注数据', config: '{}' },
-          { name: '质量检查', type: 'data_validation', description: '检查数据质量', config: '{}' }
-        ],
-        last_run: '2025-01-15T09:00:00Z',
-        next_run: undefined,
-        run_count: 3,
-        success_rate: 66.7,
-        avg_duration: 25,
-        created_at: '2025-01-05T11:00:00Z',
-        recent_runs: [
-          { id: '6', status: 'failed', started_at: '2025-01-15T09:00:00Z', duration: 8, error_message: '存储空间不足' }
-        ]
-      }
-    ]
+    // 使用统一的http客户端
+    const response = await http.get('/mlops/workflows')
+    const data = response.data
+    workflows.value = Array.isArray(data) ? data : (data.workflows || data.items || [])
+    if (workflows.value.length === 0) {
+      message.info('暂无工作流，请先创建工作流')
     }
-  } catch (error) {
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.detail || error.message || '获取工作流列表失败'
     console.error('获取工作流列表失败:', error)
-    // 不使用模拟数据，避免用户尝试运行不存在的工作流
+    errorMessage.value = errorMsg
     workflows.value = []
-    message.error('获取工作流列表失败，请检查后端服务是否正常运行')
+    const statusCode = error.response?.status
+    if (statusCode === 404 || statusCode === 503) {
+      message.error('工作流服务不可用，请检查后端服务是否正常运行', {
+        duration: 5000
+      })
+    } else {
+      message.error(`无法获取工作流列表: ${errorMsg}`, {
+        duration: 5000
+      })
+    }
   } finally {
     loading.value = false
   }
@@ -1757,7 +1713,7 @@ function refreshWorkflows() {
 
 // 获取工作流状态类型
 function getWorkflowStatusType(status: string) {
-  const statusMap = {
+  const statusMap: Record<string, 'default' | 'success' | 'warning' | 'error' | 'info'> = {
     active: 'success',
     inactive: 'default',
     error: 'error'
@@ -1767,7 +1723,7 @@ function getWorkflowStatusType(status: string) {
 
 // 获取工作流状态文本
 function getWorkflowStatusText(status: string) {
-  const statusMap = {
+  const statusMap: Record<string, string> = {
     active: '运行中',
     inactive: '已停用',
     error: '错误'
@@ -1777,7 +1733,7 @@ function getWorkflowStatusText(status: string) {
 
 // 获取工作流类型文本
 function getWorkflowTypeText(type: string) {
-  const typeMap = {
+  const typeMap: Record<string, string> = {
     training: '训练工作流',
     evaluation: '评估工作流',
     deployment: '部署工作流',
@@ -1788,7 +1744,7 @@ function getWorkflowTypeText(type: string) {
 
 // 获取触发器文本
 function getTriggerText(trigger: string) {
-  const triggerMap = {
+  const triggerMap: Record<string, string> = {
     manual: '手动触发',
     schedule: '定时触发',
     webhook: 'Webhook触发',
@@ -1816,7 +1772,7 @@ function getStepStatus(workflow: Workflow, index: number) {
 
 // 获取运行状态类型
 function getRunStatusType(status: string) {
-  const statusMap = {
+  const statusMap: Record<string, 'default' | 'success' | 'warning' | 'error' | 'info'> = {
     success: 'success',
     failed: 'error',
     running: 'warning',
@@ -1827,7 +1783,7 @@ function getRunStatusType(status: string) {
 
 // 获取运行状态文本
 function getRunStatusText(status: string) {
-  const statusMap = {
+  const statusMap: Record<string, string> = {
     success: '成功',
     failed: '失败',
     running: '运行中',
@@ -1875,9 +1831,16 @@ function editWorkflow(workflow: Workflow) {
 async function runWorkflow(workflow: Workflow) {
   console.log('运行工作流:', workflow)
   try {
-    // 检查工作流ID是否有效（避免运行模拟数据）
-    if (!workflow.id || workflow.id === '1' || workflow.id.startsWith('mock_')) {
-      message.warning('无法运行此工作流，请刷新列表获取最新数据')
+    // 检查工作流ID是否有效
+    if (!workflow.id) {
+      message.error('工作流ID无效，无法运行。请刷新列表获取最新数据。')
+      await refreshWorkflows()
+      return
+    }
+
+    // 检查工作流是否来自真实API（避免运行测试数据）
+    if (workflow.id.startsWith('mock_') || workflow.id === 'test_workflow') {
+      message.error('无法运行测试工作流，请使用真实的工作流数据。请刷新列表获取最新数据。')
       await refreshWorkflows()
       return
     }
@@ -2104,7 +2067,7 @@ async function submitWorkflow() {
 
 // 获取工作流类型颜色
 function getWorkflowTypeColor(type: string) {
-  const typeMap = {
+  const typeMap: Record<string, 'default' | 'success' | 'warning' | 'error' | 'info'> = {
     training: 'success',
     evaluation: 'info',
     deployment: 'warning',
@@ -2115,7 +2078,7 @@ function getWorkflowTypeColor(type: string) {
 
 // 获取步骤类型颜色
 function getStepTypeColor(type: string) {
-  const typeMap = {
+  const typeMap: Record<string, 'default' | 'success' | 'warning' | 'error' | 'info'> = {
     data_processing: 'info',
     dataset_generation: 'success',
     model_training: 'success',
@@ -2131,7 +2094,7 @@ function getStepTypeColor(type: string) {
 
 // 获取步骤类型文本
 function getStepTypeText(type: string): string {
-  const typeMap = {
+  const typeMap: Record<string, string> = {
     data_processing: '数据处理',
     dataset_generation: '数据集生成',
     model_training: '模型训练',

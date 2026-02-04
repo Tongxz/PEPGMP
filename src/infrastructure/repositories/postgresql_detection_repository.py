@@ -188,10 +188,9 @@ class PostgreSQLDetectionRepository(IDetectionRepository):
 
     async def _ensure_table_exists(self):
         """确保表存在（使用连接池）"""
-        conn = None
-        try:
-            conn = await self._get_connection()
-
+        # 使用async with自动管理连接，确保连接从哪个pool获取就释放到哪个pool
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
             create_table_sql = """
             CREATE TABLE IF NOT EXISTS detection_records (
                 id VARCHAR(255) PRIMARY KEY,
@@ -261,9 +260,6 @@ class PostgreSQLDetectionRepository(IDetectionRepository):
                 logger.warning(f"检查/添加 confidence 字段时出错: {e}")
 
             logger.debug("检测记录表已确保存在")
-        finally:
-            if conn:
-                await self._release_connection(conn)
 
     async def save(self, record: DomainDetectionRecord) -> str:
         """
@@ -275,225 +271,231 @@ class PostgreSQLDetectionRepository(IDetectionRepository):
         Returns:
             str: 保存的记录ID
         """
-        conn = None
         try:
             await self._ensure_table_exists()
-            conn = await self._get_connection()
-
-            # 检查 id 字段类型，以适配不同的表结构
-            id_type = await conn.fetchval(
+            # 使用async with自动管理连接，确保连接从哪个pool获取就释放到哪个pool
+            pool = await self._get_pool()
+            async with pool.acquire() as conn:
+                # 检查 id 字段类型，以适配不同的表结构
+                id_type = await conn.fetchval(
+                    """
+                    SELECT data_type
+                    FROM information_schema.columns
+                    WHERE table_name = 'detection_records'
+                    AND column_name = 'id'
                 """
-                SELECT data_type
-                FROM information_schema.columns
-                WHERE table_name = 'detection_records'
-                AND column_name = 'id'
-            """
-            )
+                )
 
-            # 转换对象列表为字典格式（用于JSON序列化）
-            objects_dict = []
-            for obj in record.objects:
-                if hasattr(obj, "to_dict"):
-                    objects_dict.append(obj.to_dict())
-                elif isinstance(obj, dict):
-                    objects_dict.append(obj)
+                # 转换对象列表为字典格式（用于JSON序列化）
+                objects_dict = []
+                for obj in record.objects:
+                    if hasattr(obj, "to_dict"):
+                        objects_dict.append(obj.to_dict())
+                    elif isinstance(obj, dict):
+                        objects_dict.append(obj)
+                    else:
+                        # 尝试转换为字典
+                        objects_dict.append(
+                            {
+                                "class_id": getattr(obj, "class_id", 0),
+                                "class_name": getattr(obj, "class_name", "unknown"),
+                                "confidence": float(getattr(obj, "confidence", 0.0))
+                                if hasattr(obj, "confidence")
+                                else 0.0,
+                                "bbox": getattr(obj, "bbox", [0, 0, 0, 0]),
+                                "track_id": getattr(obj, "track_id", None),
+                                "metadata": getattr(obj, "metadata", {}),
+                            }
+                        )
+
+                # 从objects计算统计数据（兼容旧表结构）
+                person_count = sum(
+                    1 for obj in objects_dict if obj.get("class_name") == "person"
+                )
+                handwash_events = sum(
+                    1
+                    for obj in objects_dict
+                    if obj.get("class_name") in ["handwashing", "handwash"]
+                )
+                sanitize_events = sum(
+                    1
+                    for obj in objects_dict
+                    if obj.get("class_name") in ["sanitizing", "sanitize"]
+                )
+                hairnet_violations = sum(
+                    1 for obj in objects_dict if obj.get("class_name") == "no_hairnet"
+                )
+
+                if id_type == "bigint" or id_type == "integer":
+                    # 旧表结构：id 是 bigint（自增），不指定 id，让数据库自动生成
+                    # 同时写入统计字段以兼容旧查询
+                    insert_sql = """
+                    INSERT INTO detection_records
+                    (camera_id, objects, timestamp, confidence, processing_time, frame_id, region_id, metadata,
+                     person_count, handwash_events, sanitize_events, hairnet_violations)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                    RETURNING id
+                    """
+
+                    # 转换 confidence 为 float（支持 Confidence 对象或 float）
+                    confidence_value = (
+                        float(record.confidence.value)
+                        if hasattr(record.confidence, "value")
+                        else float(record.confidence)
+                    )
+
+                    # 转换 timestamp 为 datetime（支持 Timestamp 对象或 datetime）
+                    timestamp_value = (
+                        record.timestamp.value
+                        if hasattr(record.timestamp, "value")
+                        else record.timestamp
+                    )
+
+                    # 移除时区信息以匹配数据库 TIMESTAMP WITHOUT TIME ZONE
+                    # 数据库表定义为 WITHOUT TIME ZONE，无法接受带时区的datetime
+                    if timestamp_value.tzinfo is not None:
+                        # 先转换为UTC，再移除时区信息（确保时间值正确）
+                        from datetime import timezone as tz
+
+                        timestamp_value = timestamp_value.astimezone(tz.utc).replace(
+                            tzinfo=None
+                        )
+
+                    # 转换 metadata 为可序列化的字典（处理枚举类型）
+                    metadata_dict = (
+                        self._serialize_metadata(record.metadata)
+                        if record.metadata
+                        else None
+                    )
+
+                    # 确保 metadata_dict 可以序列化
+                    metadata_json = None
+                    if metadata_dict:
+                        try:
+                            metadata_json = json.dumps(metadata_dict)
+                        except (TypeError, ValueError) as e:
+                            logger.warning(f"metadata 序列化失败，尝试重新序列化: {e}")
+                            # 如果序列化失败，尝试更彻底的序列化
+                            metadata_dict = self._serialize_metadata(record.metadata)
+                            metadata_json = json.dumps(metadata_dict, default=str)
+
+                    # 转换 frame_id 为字符串（数据库定义为 VARCHAR(100)）
+                    frame_id_value = (
+                        str(record.frame_id) if record.frame_id is not None else None
+                    )
+
+                    record_id = await conn.fetchval(
+                        insert_sql,
+                        record.camera_id,
+                        json.dumps(objects_dict),
+                        timestamp_value,
+                        confidence_value,
+                        record.processing_time,
+                        frame_id_value,  # 使用转换后的字符串值
+                        record.region_id,
+                        metadata_json,
+                        person_count,
+                        handwash_events,
+                        sanitize_events,
+                        hairnet_violations,
+                    )
+
+                    # 返回字符串格式的ID
+                    saved_id = str(record_id)
+                    logger.debug(f"检测记录已保存（自增ID）: {saved_id}")
+                    return saved_id
                 else:
-                    # 尝试转换为字典
-                    objects_dict.append(
-                        {
-                            "class_id": getattr(obj, "class_id", 0),
-                            "class_name": getattr(obj, "class_name", "unknown"),
-                            "confidence": float(getattr(obj, "confidence", 0.0))
-                            if hasattr(obj, "confidence")
-                            else 0.0,
-                            "bbox": getattr(obj, "bbox", [0, 0, 0, 0]),
-                            "track_id": getattr(obj, "track_id", None),
-                            "metadata": getattr(obj, "metadata", {}),
-                        }
+                    # 新表结构：id 是 VARCHAR，使用字符串ID
+                    # 同时写入统计字段以兼容旧查询
+                    insert_sql = """
+                    INSERT INTO detection_records
+                    (id, camera_id, objects, timestamp, confidence, processing_time, frame_id, region_id, metadata,
+                     person_count, handwash_events, sanitize_events, hairnet_violations)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                    ON CONFLICT (id) DO UPDATE SET
+                        objects = EXCLUDED.objects,
+                        timestamp = EXCLUDED.timestamp,
+                        confidence = EXCLUDED.confidence,
+                        processing_time = EXCLUDED.processing_time,
+                        frame_id = EXCLUDED.frame_id,
+                        region_id = EXCLUDED.region_id,
+                        metadata = EXCLUDED.metadata,
+                        person_count = EXCLUDED.person_count,
+                        handwash_events = EXCLUDED.handwash_events,
+                        sanitize_events = EXCLUDED.sanitize_events,
+                        hairnet_violations = EXCLUDED.hairnet_violations
+                    """
+
+                    # 转换 confidence 为 float（支持 Confidence 对象或 float）
+                    confidence_value = (
+                        float(record.confidence.value)
+                        if hasattr(record.confidence, "value")
+                        else float(record.confidence)
                     )
 
-            # 从objects计算统计数据（兼容旧表结构）
-            person_count = sum(
-                1 for obj in objects_dict if obj.get("class_name") == "person"
-            )
-            handwash_events = sum(
-                1
-                for obj in objects_dict
-                if obj.get("class_name") in ["handwashing", "handwash"]
-            )
-            sanitize_events = sum(
-                1
-                for obj in objects_dict
-                if obj.get("class_name") in ["sanitizing", "sanitize"]
-            )
-            hairnet_violations = sum(
-                1 for obj in objects_dict if obj.get("class_name") == "no_hairnet"
-            )
-
-            if id_type == "bigint" or id_type == "integer":
-                # 旧表结构：id 是 bigint（自增），不指定 id，让数据库自动生成
-                # 同时写入统计字段以兼容旧查询
-                insert_sql = """
-                INSERT INTO detection_records
-                (camera_id, objects, timestamp, confidence, processing_time, frame_id, region_id, metadata,
-                 person_count, handwash_events, sanitize_events, hairnet_violations)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-                RETURNING id
-                """
-
-                # 转换 confidence 为 float（支持 Confidence 对象或 float）
-                confidence_value = (
-                    float(record.confidence.value)
-                    if hasattr(record.confidence, "value")
-                    else float(record.confidence)
-                )
-
-                # 转换 timestamp 为 datetime（支持 Timestamp 对象或 datetime）
-                timestamp_value = (
-                    record.timestamp.value
-                    if hasattr(record.timestamp, "value")
-                    else record.timestamp
-                )
-
-                # 移除时区信息以匹配数据库 TIMESTAMP WITHOUT TIME ZONE
-                # 数据库表定义为 WITHOUT TIME ZONE，无法接受带时区的datetime
-                if timestamp_value.tzinfo is not None:
-                    # 先转换为UTC，再移除时区信息（确保时间值正确）
-                    from datetime import timezone as tz
-
-                    timestamp_value = timestamp_value.astimezone(tz.utc).replace(
-                        tzinfo=None
+                    # 转换 timestamp 为 datetime（支持 Timestamp 对象或 datetime）
+                    timestamp_value = (
+                        record.timestamp.value
+                        if hasattr(record.timestamp, "value")
+                        else record.timestamp
                     )
 
-                # 转换 metadata 为可序列化的字典（处理枚举类型）
-                metadata_dict = (
-                    self._serialize_metadata(record.metadata)
-                    if record.metadata
-                    else None
-                )
+                    # 移除时区信息以匹配数据库 TIMESTAMP WITHOUT TIME ZONE
+                    # 数据库表定义为 WITHOUT TIME ZONE，无法接受带时区的datetime
+                    if timestamp_value.tzinfo is not None:
+                        # 先转换为UTC，再移除时区信息（确保时间值正确）
+                        from datetime import timezone as tz
 
-                # 确保 metadata_dict 可以序列化
-                metadata_json = None
-                if metadata_dict:
-                    try:
-                        metadata_json = json.dumps(metadata_dict)
-                    except (TypeError, ValueError) as e:
-                        logger.warning(f"metadata 序列化失败，尝试重新序列化: {e}")
-                        # 如果序列化失败，尝试更彻底的序列化
-                        metadata_dict = self._serialize_metadata(record.metadata)
-                        metadata_json = json.dumps(metadata_dict, default=str)
+                        timestamp_value = timestamp_value.astimezone(tz.utc).replace(
+                            tzinfo=None
+                        )
 
-                record_id = await conn.fetchval(
-                    insert_sql,
-                    record.camera_id,
-                    json.dumps(objects_dict),
-                    timestamp_value,
-                    confidence_value,
-                    record.processing_time,
-                    record.frame_id,
-                    record.region_id,
-                    metadata_json,
-                    person_count,
-                    handwash_events,
-                    sanitize_events,
-                    hairnet_violations,
-                )
-
-                # 返回字符串格式的ID
-                saved_id = str(record_id)
-                logger.debug(f"检测记录已保存（自增ID）: {saved_id}")
-                return saved_id
-            else:
-                # 新表结构：id 是 VARCHAR，使用字符串ID
-                # 同时写入统计字段以兼容旧查询
-                insert_sql = """
-                INSERT INTO detection_records
-                (id, camera_id, objects, timestamp, confidence, processing_time, frame_id, region_id, metadata,
-                 person_count, handwash_events, sanitize_events, hairnet_violations)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-                ON CONFLICT (id) DO UPDATE SET
-                    objects = EXCLUDED.objects,
-                    timestamp = EXCLUDED.timestamp,
-                    confidence = EXCLUDED.confidence,
-                    processing_time = EXCLUDED.processing_time,
-                    frame_id = EXCLUDED.frame_id,
-                    region_id = EXCLUDED.region_id,
-                    metadata = EXCLUDED.metadata,
-                    person_count = EXCLUDED.person_count,
-                    handwash_events = EXCLUDED.handwash_events,
-                    sanitize_events = EXCLUDED.sanitize_events,
-                    hairnet_violations = EXCLUDED.hairnet_violations
-                """
-
-                # 转换 confidence 为 float（支持 Confidence 对象或 float）
-                confidence_value = (
-                    float(record.confidence.value)
-                    if hasattr(record.confidence, "value")
-                    else float(record.confidence)
-                )
-
-                # 转换 timestamp 为 datetime（支持 Timestamp 对象或 datetime）
-                timestamp_value = (
-                    record.timestamp.value
-                    if hasattr(record.timestamp, "value")
-                    else record.timestamp
-                )
-
-                # 移除时区信息以匹配数据库 TIMESTAMP WITHOUT TIME ZONE
-                # 数据库表定义为 WITHOUT TIME ZONE，无法接受带时区的datetime
-                if timestamp_value.tzinfo is not None:
-                    # 先转换为UTC，再移除时区信息（确保时间值正确）
-                    from datetime import timezone as tz
-
-                    timestamp_value = timestamp_value.astimezone(tz.utc).replace(
-                        tzinfo=None
+                    # 转换 metadata 为可序列化的字典（处理枚举类型）
+                    metadata_dict = (
+                        self._serialize_metadata(record.metadata)
+                        if record.metadata
+                        else None
                     )
 
-                # 转换 metadata 为可序列化的字典（处理枚举类型）
-                metadata_dict = (
-                    self._serialize_metadata(record.metadata)
-                    if record.metadata
-                    else None
-                )
+                    # 确保 metadata_dict 可以序列化
+                    metadata_json = None
+                    if metadata_dict:
+                        try:
+                            metadata_json = json.dumps(metadata_dict)
+                        except (TypeError, ValueError) as e:
+                            logger.warning(f"metadata 序列化失败，尝试重新序列化: {e}")
+                            # 如果序列化失败，尝试更彻底的序列化
+                            metadata_dict = self._serialize_metadata(record.metadata)
+                            metadata_json = json.dumps(metadata_dict, default=str)
 
-                # 确保 metadata_dict 可以序列化
-                metadata_json = None
-                if metadata_dict:
-                    try:
-                        metadata_json = json.dumps(metadata_dict)
-                    except (TypeError, ValueError) as e:
-                        logger.warning(f"metadata 序列化失败，尝试重新序列化: {e}")
-                        # 如果序列化失败，尝试更彻底的序列化
-                        metadata_dict = self._serialize_metadata(record.metadata)
-                        metadata_json = json.dumps(metadata_dict, default=str)
+                    # 转换 frame_id 为字符串（数据库定义为 VARCHAR(100)）
+                    frame_id_value = (
+                        str(record.frame_id) if record.frame_id is not None else None
+                    )
 
-                await conn.execute(
-                    insert_sql,
-                    str(record.id),
-                    record.camera_id,
-                    json.dumps(objects_dict),
-                    timestamp_value,
-                    confidence_value,
-                    record.processing_time,
-                    record.frame_id,
-                    record.region_id,
-                    metadata_json,
-                    person_count,
-                    handwash_events,
-                    sanitize_events,
-                    hairnet_violations,
-                )
+                    await conn.execute(
+                        insert_sql,
+                        str(record.id),
+                        record.camera_id,
+                        json.dumps(objects_dict),
+                        timestamp_value,
+                        confidence_value,
+                        record.processing_time,
+                        frame_id_value,  # 使用转换后的字符串值
+                        record.region_id,
+                        metadata_json,
+                        person_count,
+                        handwash_events,
+                        sanitize_events,
+                        hairnet_violations,
+                    )
 
-                logger.debug(f"检测记录已保存（字符串ID）: {record.id}")
-                return str(record.id)
+                    logger.debug(f"检测记录已保存（字符串ID）: {record.id}")
+                    return str(record.id)
 
         except Exception as e:
             logger.error(f"保存检测记录失败: {e}")
             raise RepositoryError(f"保存检测记录失败: {e}")
-        finally:
-            # 确保连接被释放回连接池
-            if conn:
-                await self._release_connection(conn)
 
     async def find_by_id(self, record_id: str) -> Optional[DomainDetectionRecord]:
         """
@@ -506,32 +508,33 @@ class PostgreSQLDetectionRepository(IDetectionRepository):
             Optional[DomainDetectionRecord]: 检测记录，如果不存在则返回None
         """
         try:
-            conn = await self._get_connection()
+            # 使用async with自动管理连接，确保连接从哪个pool获取就释放到哪个pool
+            pool = await self._get_pool()
+            async with pool.acquire() as conn:
+                try:
+                    select_sql = """
+                    SELECT id, camera_id, objects, timestamp, confidence, processing_time,
+                           frame_id, region_id, metadata
+                    FROM detection_records
+                    WHERE id = $1
+                    """
+                    row = await conn.fetchrow(select_sql, record_id)
+                except Exception:
+                    # 兼容无 objects 等旧结构
+                    compat_sql = """
+                    SELECT id, camera_id, timestamp, processing_time,
+                           frame_number as frame_id,
+                           NULL::VARCHAR as region_id,
+                           NULL::JSONB as metadata
+                    FROM detection_records
+                    WHERE id = $1
+                    """
+                    row = await conn.fetchrow(compat_sql, record_id)
 
-            try:
-                select_sql = """
-                SELECT id, camera_id, objects, timestamp, confidence, processing_time,
-                       frame_id, region_id, metadata
-                FROM detection_records
-                WHERE id = $1
-                """
-                row = await conn.fetchrow(select_sql, record_id)
-            except Exception:
-                # 兼容无 objects 等旧结构
-                compat_sql = """
-                SELECT id, camera_id, timestamp, processing_time,
-                       frame_number as frame_id,
-                       NULL::VARCHAR as region_id,
-                       NULL::JSONB as metadata
-                FROM detection_records
-                WHERE id = $1
-                """
-                row = await conn.fetchrow(compat_sql, record_id)
+                if row is None:
+                    return None
 
-            if row is None:
-                return None
-
-            return self._row_to_record(row)
+                return self._row_to_record(row)
 
         except Exception as e:
             logger.error(f"查找检测记录失败: {e}")
@@ -552,43 +555,42 @@ class PostgreSQLDetectionRepository(IDetectionRepository):
             List[DomainDetectionRecord]: 检测记录列表
         """
         try:
-            conn = await self._get_connection()
-            rows = None
+            # 使用async with自动管理连接，确保连接从哪个pool获取就释放到哪个pool
+            pool = await self._get_pool()
+            async with pool.acquire() as conn:
+                rows = None
 
-            try:
-                select_sql = """
-                SELECT id, camera_id, objects, timestamp, confidence, processing_time,
-                       frame_id, region_id, metadata
-                FROM detection_records
-                WHERE camera_id = $1
-                ORDER BY timestamp DESC
-                LIMIT $2 OFFSET $3
-                """
-                rows = await conn.fetch(select_sql, camera_id, limit, offset)
-            except Exception:
-                # 如果查询失败，尝试兼容模式
                 try:
-                    compat_sql = """
-                    SELECT id, camera_id, timestamp, processing_time,
-                           frame_number as frame_id,
-                           NULL::VARCHAR as region_id,
-                           NULL::JSONB as metadata
+                    select_sql = """
+                    SELECT id, camera_id, objects, timestamp, confidence, processing_time,
+                           frame_id, region_id, metadata
                     FROM detection_records
                     WHERE camera_id = $1
                     ORDER BY timestamp DESC
                     LIMIT $2 OFFSET $3
                     """
-                    rows = await conn.fetch(compat_sql, camera_id, limit, offset)
-                except Exception as e:
-                    logger.error(f"兼容模式查询也失败: {e}")
-                    rows = []
-            finally:
-                # 确保连接被释放，避免连接泄漏
-                await self._release_connection(conn)
+                    rows = await conn.fetch(select_sql, camera_id, limit, offset)
+                except Exception:
+                    # 如果查询失败，尝试兼容模式
+                    try:
+                        compat_sql = """
+                        SELECT id, camera_id, timestamp, processing_time,
+                               frame_number as frame_id,
+                               NULL::VARCHAR as region_id,
+                               NULL::JSONB as metadata
+                        FROM detection_records
+                        WHERE camera_id = $1
+                        ORDER BY timestamp DESC
+                        LIMIT $2 OFFSET $3
+                        """
+                        rows = await conn.fetch(compat_sql, camera_id, limit, offset)
+                    except Exception as e:
+                        logger.error(f"兼容模式查询也失败: {e}")
+                        rows = []
 
-            if rows is None:
-                rows = []
-            return [self._row_to_record(row) for row in rows]
+                if rows is None:
+                    rows = []
+                return [self._row_to_record(row) for row in rows]
 
         except Exception as e:
             logger.error(f"查找检测记录失败: {e}")
@@ -634,77 +636,81 @@ class PostgreSQLDetectionRepository(IDetectionRepository):
                 # 如果已经是naive，假设是UTC时间
                 pass
 
-            conn = await self._get_connection()
-            rows = None
+            # 使用async with自动管理连接，确保连接从哪个pool获取就释放到哪个pool
+            pool = await self._get_pool()
+            async with pool.acquire() as conn:
+                rows = None
 
-            try:
-                if camera_id:
-                    select_sql = """
-                    SELECT id, camera_id, objects, timestamp, confidence, processing_time,
-                           frame_id, region_id, metadata
-                    FROM detection_records
-                    WHERE timestamp BETWEEN $1 AND $2 AND camera_id = $3
-                    ORDER BY timestamp DESC
-                    LIMIT $4 OFFSET $5
-                    """
-                    rows = await conn.fetch(
-                        select_sql, start_time, end_time, camera_id, limit, offset
-                    )
-                else:
-                    select_sql = """
-                    SELECT id, camera_id, objects, timestamp, confidence, processing_time,
-                           frame_id, region_id, metadata
-                    FROM detection_records
-                    WHERE timestamp BETWEEN $1 AND $2
-                    ORDER BY timestamp DESC
-                    LIMIT $3 OFFSET $4
-                    """
-                    rows = await conn.fetch(
-                        select_sql, start_time, end_time, limit, offset
-                    )
-            except Exception:
-                # 如果查询失败，尝试兼容模式
                 try:
                     if camera_id:
-                        compat_sql = """
-                        SELECT id, camera_id, timestamp, processing_time,
-                               frame_number as frame_id,
-                               NULL::VARCHAR as region_id,
-                               NULL::JSONB as metadata
+                        select_sql = """
+                        SELECT id, camera_id, objects, timestamp, confidence, processing_time,
+                               frame_id, region_id, metadata
                         FROM detection_records
                         WHERE timestamp BETWEEN $1 AND $2 AND camera_id = $3
                         ORDER BY timestamp DESC
                         LIMIT $4 OFFSET $5
                         """
                         rows = await conn.fetch(
-                            compat_sql, start_time, end_time, camera_id, limit, offset
+                            select_sql, start_time, end_time, camera_id, limit, offset
                         )
                     else:
-                        compat_sql = """
-                        SELECT id, camera_id, timestamp, processing_time,
-                               frame_number as frame_id,
-                               NULL::VARCHAR as region_id,
-                               NULL::JSONB as metadata
+                        select_sql = """
+                        SELECT id, camera_id, objects, timestamp, confidence, processing_time,
+                               frame_id, region_id, metadata
                         FROM detection_records
                         WHERE timestamp BETWEEN $1 AND $2
                         ORDER BY timestamp DESC
                         LIMIT $3 OFFSET $4
                         """
                         rows = await conn.fetch(
-                            compat_sql, start_time, end_time, limit, offset
+                            select_sql, start_time, end_time, limit, offset
                         )
-                except Exception as e:
-                    logger.error(f"兼容模式查询也失败: {e}")
-                    rows = []
-            finally:
-                # 确保连接被释放，避免连接泄漏
-                await self._release_connection(conn)
+                except Exception:
+                    # 如果查询失败，尝试兼容模式
+                    try:
+                        if camera_id:
+                            compat_sql = """
+                            SELECT id, camera_id, timestamp, processing_time,
+                                   frame_number as frame_id,
+                                   NULL::VARCHAR as region_id,
+                                   NULL::JSONB as metadata
+                            FROM detection_records
+                            WHERE timestamp BETWEEN $1 AND $2 AND camera_id = $3
+                            ORDER BY timestamp DESC
+                            LIMIT $4 OFFSET $5
+                            """
+                            rows = await conn.fetch(
+                                compat_sql,
+                                start_time,
+                                end_time,
+                                camera_id,
+                                limit,
+                                offset,
+                            )
+                        else:
+                            compat_sql = """
+                            SELECT id, camera_id, timestamp, processing_time,
+                                   frame_number as frame_id,
+                                   NULL::VARCHAR as region_id,
+                                   NULL::JSONB as metadata
+                            FROM detection_records
+                            WHERE timestamp BETWEEN $1 AND $2
+                            ORDER BY timestamp DESC
+                            LIMIT $3 OFFSET $4
+                            """
+                            rows = await conn.fetch(
+                                compat_sql, start_time, end_time, limit, offset
+                            )
+                    except Exception as e:
+                        logger.error(f"兼容模式查询也失败: {e}")
+                        rows = []
 
-            # 转换记录并返回
-            if rows is None:
-                rows = []
-            records = [self._row_to_record(row) for row in rows]
-            return records
+                # 转换记录并返回
+                if rows is None:
+                    rows = []
+                records = [self._row_to_record(row) for row in rows]
+                return records
 
         except Exception as e:
             logger.error(f"查找检测记录失败: {e}")
@@ -730,41 +736,43 @@ class PostgreSQLDetectionRepository(IDetectionRepository):
             List[DomainDetectionRecord]: 检测记录列表
         """
         try:
-            conn = await self._get_connection()
-            rows = None
+            # 使用async with自动管理连接，确保连接从哪个pool获取就释放到哪个pool
+            pool = await self._get_pool()
+            async with pool.acquire() as conn:
+                rows = None
 
-            try:
-                if camera_id:
-                    select_sql = """
-                    SELECT id, camera_id, objects, timestamp, confidence, processing_time,
-                           frame_id, region_id, metadata
-                    FROM detection_records
-                    WHERE confidence BETWEEN $1 AND $2 AND camera_id = $3
-                    ORDER BY timestamp DESC
-                    LIMIT $4
-                    """
-                    rows = await conn.fetch(
-                        select_sql, min_confidence, max_confidence, camera_id, limit
-                    )
-                else:
-                    select_sql = """
-                    SELECT id, camera_id, objects, timestamp, confidence, processing_time,
-                           frame_id, region_id, metadata
-                    FROM detection_records
-                    WHERE confidence BETWEEN $1 AND $2
-                    ORDER BY timestamp DESC
-                    LIMIT $3
-                    """
-                    rows = await conn.fetch(
-                        select_sql, min_confidence, max_confidence, limit
-                    )
-            finally:
-                # 确保连接被释放，避免连接泄漏
-                await self._release_connection(conn)
+                try:
+                    if camera_id:
+                        select_sql = """
+                        SELECT id, camera_id, objects, timestamp, confidence, processing_time,
+                               frame_id, region_id, metadata
+                        FROM detection_records
+                        WHERE confidence BETWEEN $1 AND $2 AND camera_id = $3
+                        ORDER BY timestamp DESC
+                        LIMIT $4
+                        """
+                        rows = await conn.fetch(
+                            select_sql, min_confidence, max_confidence, camera_id, limit
+                        )
+                    else:
+                        select_sql = """
+                        SELECT id, camera_id, objects, timestamp, confidence, processing_time,
+                               frame_id, region_id, metadata
+                        FROM detection_records
+                        WHERE confidence BETWEEN $1 AND $2
+                        ORDER BY timestamp DESC
+                        LIMIT $3
+                        """
+                        rows = await conn.fetch(
+                            select_sql, min_confidence, max_confidence, limit
+                        )
+                except Exception as e:
+                    logger.error(f"查询失败: {e}")
+                    rows = []
 
-            if rows is None:
-                rows = []
-            return [self._row_to_record(row) for row in rows]
+                if rows is None:
+                    rows = []
+                return [self._row_to_record(row) for row in rows]
 
         except Exception as e:
             logger.error(f"查找检测记录失败: {e}")
@@ -781,17 +789,14 @@ class PostgreSQLDetectionRepository(IDetectionRepository):
             int: 记录数量
         """
         try:
-            conn = await self._get_connection()
-
-            try:
+            # 使用async with自动管理连接，确保连接从哪个pool获取就释放到哪个pool
+            pool = await self._get_pool()
+            async with pool.acquire() as conn:
                 count_sql = (
                     "SELECT COUNT(*) FROM detection_records WHERE camera_id = $1"
                 )
                 result = await conn.fetchval(count_sql, camera_id)
                 return result or 0
-            finally:
-                # 确保连接被释放，避免连接泄漏
-                await self._release_connection(conn)
 
         except Exception as e:
             logger.error(f"统计检测记录失败: {e}")

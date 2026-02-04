@@ -9,6 +9,7 @@ Human Behavior Detection System Main Entry Point
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -17,17 +18,19 @@ src_path = Path(__file__).parent / "src"
 sys.path.insert(0, str(src_path))
 
 try:
+    import logging
     import time
 
-    from utils.logger import setup_project_logger
+    from utils.logger import get_log_level_from_env, setup_project_logger
 except ImportError:
     # This is a workaround for running scripts directly from the repository root.
     # It adds the 'src' directory to the Python path.
     src_path = Path(__file__).resolve().parent.parent / "src"
     sys.path.insert(0, str(src_path))
+    import logging
     import time
 
-    from utils.logger import setup_project_logger
+    from utils.logger import get_log_level_from_env, setup_project_logger
 
 # GPU加速优化已移除，设备选择由 ModelConfig.select_device() 处理
 # gpu_status 变量已不再使用，设备选择逻辑在 select_device() 函数中
@@ -155,17 +158,22 @@ def create_argument_parser():
 
 def setup_logging_and_gpu(args):
     """设置日志和GPU配置"""
+    # 使用环境感知的日志级别
+    env_log_level = get_log_level_from_env()
+
     logger = setup_project_logger()
     if args.debug:
-        logger.setLevel("DEBUG")
+        logger.setLevel(logging.DEBUG)
     else:
-        logger.setLevel(args.log_level)
+        # 使用命令行参数或环境感知的级别
+        logger.setLevel(args.log_level if hasattr(args, "log_level") else env_log_level)
 
     # 提升根日志级别，确保子模块日志可见
     try:
-        import logging as _logging
-
-        _logging.getLogger().setLevel(logger.level)
+        logging.getLogger().setLevel(logger.level)
+        logger.info(
+            f"应用启动 - 日志级别: {logging.getLevelName(logger.level)} (ENV={os.getenv('ENV', 'development')})"
+        )
     except Exception:
         pass
 
