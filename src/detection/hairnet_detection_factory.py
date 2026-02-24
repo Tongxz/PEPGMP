@@ -8,18 +8,11 @@
 
 import logging
 import os
-import sys
 from typing import Any, Dict
 
-# 添加项目根目录到 Python 路径
-project_root = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-)
-sys.path.append(project_root)
-
-# 尝试导入 YOLOv8 发网检测器
+# 使用相对导入从同包导入
 try:
-    from src.detection.yolo_hairnet_detector import YOLOHairnetDetector
+    from .yolo_hairnet_detector import YOLOHairnetDetector
 
     YOLO_DETECTOR_AVAILABLE = True
 except ImportError as e:

@@ -80,8 +80,8 @@ class ErrorResponse(BaseModel):
 
     error: ErrorDetail = Field(..., description="错误详情")
 
-    class Config:
-        json_schema_extra = {
+    model_config = {
+        "json_schema_extra": {
             "example": {
                 "error": {
                     "code": "RESOURCE_NOT_FOUND",
@@ -93,6 +93,7 @@ class ErrorResponse(BaseModel):
                 }
             }
         }
+    }
 
 
 def get_error_type_from_status_code(status_code: int) -> ErrorType:

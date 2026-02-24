@@ -89,6 +89,9 @@ async def redis_stats_listener():
                             logger.warning(
                                 f"Could not parse message data: {message['data']}. Error: {e}"
                             )
+        except asyncio.CancelledError:
+            # Allow task cancellation to propagate for clean shutdown.
+            raise
         except RedisConnectionError as e:
             logger.error(f"Redis connection failed: {e}. Retrying in 5 seconds...")
             CAMERA_STATS_CACHE.clear()  # Clear cache on disconnect

@@ -7,17 +7,12 @@ YOLOv8 发网检测器实现
 """
 
 import logging
-import os
-import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import cv2
 import numpy as np
-
-# 添加项目根目录到Python路径
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # 导入必要的模块
 try:
@@ -26,15 +21,12 @@ except ImportError:
     logging.error("未安装 ultralytics 库，请使用 'pip install ultralytics' 安装")
     raise
 
-# 导入统一参数配置
+# 导入统一参数配置（使用相对导入）
 try:
-    from src.config.unified_params import get_unified_params
+    from ..config.unified_params import get_unified_params
 except ImportError:
-    # 兼容性处理
-    sys.path.append(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    )
-    from src.config.unified_params import get_unified_params
+    logging.error("无法导入统一参数配置模块")
+    raise
 
 logger = logging.getLogger(__name__)
 

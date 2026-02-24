@@ -57,10 +57,9 @@ class PaginationParams(BaseModel):
         """
         return self.page_size
 
-    class Config:
-        """Pydantic配置."""
-
-        frozen = False  # 允许修改
+    model_config = {
+        "frozen": False  # 允许修改
+    }
 
 
 class PaginatedResponse(BaseModel, Generic[T]):
@@ -121,11 +120,10 @@ class PaginatedResponse(BaseModel, Generic[T]):
             total_pages=total_pages,
         )
 
-    class Config:
-        """Pydantic配置."""
-
+    model_config = {
         # 支持泛型
-        arbitrary_types_allowed = True
+        "arbitrary_types_allowed": True
+    }
 
 
 # 辅助函数
