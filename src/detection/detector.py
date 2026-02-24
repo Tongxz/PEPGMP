@@ -410,16 +410,77 @@ class HumanDetector(BaseDetector):
         批量检测多张图像
 
         Args:
-            images: 图像列表
+            images: 图像列表 (BGR格式)
 
         Returns:
             每张图像的检测结果列表
         """
-        results = []
-        for image in images:
-            detections = self.detect(image)
-            results.append(detections)
-        return results
+        if self.model is None:
+            error_msg = "YOLO模型未正确加载，无法进行人体检测"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+
+        if not images:
+            return []
+
+        try:
+            logger.info(
+                f"开始YOLO批量检测，图像数量: {len(images)}, 置信度阈值: {self.confidence_threshold}, IoU阈值: {self.iou_threshold}"
+            )
+
+            # 批量推理
+            batch_results = self.model(
+                images, conf=self.confidence_threshold, iou=self.iou_threshold
+            )
+
+            all_detections = []
+            total_boxes = 0
+            filtered_boxes = 0
+
+            for result in batch_results:
+                detections = []
+                boxes = result.boxes
+                if boxes is not None:
+                    total_boxes += len(boxes)
+                    for box in boxes:
+                        # 只检测人体 (class_id = 0)
+                        if int(box.cls[0]) == 0:
+                            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                            confidence = float(box.conf[0].cpu().numpy())
+
+                            # 计算检测框属性
+                            width = x2 - x1
+                            height = y2 - y1
+                            area = width * height
+                            aspect_ratio = max(width, height) / min(width, height)
+
+                            # 应用后处理过滤
+                            if (
+                                area >= self.min_box_area
+                                and aspect_ratio <= self.max_box_ratio
+                                and width > self.min_width
+                                and height > self.min_height
+                            ):
+                                detection = {
+                                    "bbox": [int(x1), int(y1), int(x2), int(y2)],
+                                    "confidence": confidence,
+                                    "class_id": 0,
+                                    "class_name": "person",
+                                }
+                                detections.append(detection)
+                            else:
+                                filtered_boxes += 1
+                all_detections.append(detections)
+
+            logger.info(
+                f"YOLO批量检测完成: 图像数={len(images)}, 原始检测框={total_boxes}, 过滤后={sum(len(d) for d in all_detections)}, 被过滤={filtered_boxes}"
+            )
+            return all_detections
+
+        except Exception as e:
+            error_msg = f"YOLO批量检测过程中发生错误: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            raise RuntimeError(error_msg) from e
 
     def set_confidence_threshold(self, threshold: float):
         """设置置信度阈值"""
