@@ -11,39 +11,19 @@ except ImportError:
 
 import math
 
-try:
-    from src.utils.math_utils import (
-        angle_between_points,
-        bbox_area,
-        bbox_center,
-        bbox_iou,
-        clamp,
-        euclidean_distance,
-        manhattan_distance,
-        moving_average,
-        normalize_angle,
-        point_in_polygon,
-        smooth_value,
-    )
-except ImportError:
-    # 如果直接运行测试文件
-    import os
-    import sys
-
-    sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
-    from src.utils.math_utils import (
-        angle_between_points,
-        bbox_area,
-        bbox_center,
-        bbox_iou,
-        clamp,
-        euclidean_distance,
-        manhattan_distance,
-        moving_average,
-        normalize_angle,
-        point_in_polygon,
-        smooth_value,
-    )
+from src.utils.math_utils import (
+    angle_between_points,
+    bbox_area,
+    bbox_center,
+    bbox_iou,
+    clamp,
+    euclidean_distance,
+    manhattan_distance,
+    moving_average,
+    normalize_angle,
+    point_in_polygon,
+    smooth_value,
+)
 
 
 class TestDistanceFunctions:

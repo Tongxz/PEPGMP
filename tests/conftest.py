@@ -45,9 +45,6 @@ class _EarlyDummyYOLO:
 setattr(_dummy_ultralytics, "YOLO", _EarlyDummyYOLO)
 sys.modules.setdefault("ultralytics", _dummy_ultralytics)
 
-# 添加项目根目录到Python路径
-sys.path.append(str(Path(__file__).parent.parent))
-
 
 def get_fixtures_dir() -> Path:
     """获取测试数据目录"""

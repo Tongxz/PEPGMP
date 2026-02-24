@@ -15,11 +15,6 @@ def get_fixtures_dir():
     """获取测试数据目录"""
     return Path(__file__).parent.parent / "fixtures"
 
-
-# 添加项目路径
-sys.path.append(str(Path(__file__).parent))
-sys.path.append(str(Path(__file__).parent / "src"))
-
 from src.detection.detector import HumanDetector
 from src.detection.hairnet_detector import HairnetDetector
 
