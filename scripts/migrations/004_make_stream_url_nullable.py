@@ -4,13 +4,11 @@
 原因：
 - stream_url 列当前是 NOT NULL，但代码中创建摄像头时可能不提供此值
 - source 信息存储在 metadata 中，stream_url 可以作为可选项
+
+使用方法:
+    python -m scripts.migrations.004_make_stream_url_nullable
 """
 import asyncio
-import sys
-from pathlib import Path
-
-project_root = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(project_root))
 
 from src.services.database_service import get_db_service
 

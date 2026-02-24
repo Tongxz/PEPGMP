@@ -1,17 +1,9 @@
 import argparse
 import json
-import os
-import sys
 from pathlib import Path
 from typing import List, Tuple
 
 import cv2
-
-# 确保可导入 src/*
-ROOT = Path(__file__).resolve().parents[1]
-# 为了支持 `from src.core.region import RegionManager`，需要把“项目根目录”加入 sys.path
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
 
 
 def load_regions(config_path: str) -> List[dict]:

@@ -2,7 +2,7 @@
 """从数据库导出区域数据到JSON配置文件（用于备份）.
 
 使用方法:
-    python scripts/export_regions_to_json.py [--json-path config/regions.json] [--database-url ...]
+    python -m scripts.export_regions_to_json [--json-path config/regions.json] [--database-url ...]
 """
 
 import argparse
@@ -10,14 +10,8 @@ import asyncio
 import json
 import logging
 import os
-import sys
-from pathlib import Path
 
 import asyncpg
-
-# 添加项目根目录到路径
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
 
 logging.basicConfig(
     level=logging.INFO,

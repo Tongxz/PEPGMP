@@ -4,13 +4,11 @@
 原因：
 - 代码期望使用字符串类型的摄像头ID（如 'v1', 'camera1'）
 - 但数据库表使用 UUID 类型，导致类型不匹配错误
+
+使用方法:
+    python -m scripts.migrations.003_convert_camera_id_to_varchar
 """
 import asyncio
-import sys
-from pathlib import Path
-
-project_root = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(project_root))
 
 from src.services.database_service import get_db_service
 

@@ -2,18 +2,16 @@
 """
 区域数据审计脚本
 用于检查regions表的polygon字段数据完整性
+
+使用方法:
+    python -m scripts.migrations.audit_region_data
 """
 
 import asyncio
 import logging
-import os
-import sys
 from typing import Dict
 
 import asyncpg
-
-# 添加项目根目录到Python路径
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"

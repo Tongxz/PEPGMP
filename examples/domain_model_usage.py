@@ -1,18 +1,15 @@
 """
 领域模型使用示例
 演示如何使用领域驱动设计重构后的系统
+
+使用方法:
+    python -m examples.domain_model_usage
 """
 
 import asyncio
 
 # 设置日志
 import logging
-import sys
-from pathlib import Path
-
-# 添加项目根目录到Python路径
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
 
 # 导入领域模型
 from src.domain.entities.camera import Camera, CameraStatus, CameraType

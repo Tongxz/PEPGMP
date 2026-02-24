@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
-"""诊断在线摄像头为0的问题"""
+"""诊断在线摄像头为0的问题
+
+使用方式：
+    python -m scripts.diagnose_active_cameras
+"""
 
 import asyncio
 import os
-import sys
-from pathlib import Path
 
-# 添加项目路径（脚本需在项目根下执行以便导入）
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+from datetime import datetime, timedelta, timezone
 
-from datetime import datetime, timedelta, timezone  # noqa: E402
-
-import asyncpg  # noqa: E402
+import asyncpg
 
 
 async def diagnose_cameras():

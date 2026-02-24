@@ -4,13 +4,11 @@
 设计变更：
 - id: UUID PRIMARY KEY (自动生成，唯一标识)
 - name: VARCHAR(100) (用户自定义，有辨识度)
+
+使用方法:
+    python -m scripts.migrations.005_revert_camera_id_to_uuid
 """
 import asyncio
-import sys
-from pathlib import Path
-
-project_root = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(project_root))
 
 from src.services.database_service import get_db_service
 

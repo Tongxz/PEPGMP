@@ -2,7 +2,7 @@
 """从unified_params.yaml迁移检测参数到数据库.
 
 使用方法:
-    python scripts/migrations/002_migrate_unified_params_to_db.py [--dry-run]
+    python -m scripts.migrations.002_migrate_unified_params_to_db [--dry-run]
 """
 
 import argparse
@@ -10,16 +10,11 @@ import asyncio
 import json
 import logging
 import os
-import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
 import asyncpg
 import yaml
-
-# 添加项目根目录到路径
-project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root))
 
 logging.basicConfig(
     level=logging.INFO,

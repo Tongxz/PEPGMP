@@ -2,29 +2,25 @@
 """
 智能检测功能测试脚本
 测试新实现的智能检测系统、Redis集成和MLOps功能
+
+使用方法:
+    python -m tools.test_intelligent_features
 """
 
 import asyncio
 import json
 import logging
-import os
-import sys
 import time
-from pathlib import Path
 
 import cv2
 import redis
 import requests
 from websockets import connect
 
-# 添加项目根目录到Python路径
-project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root))
-
-from src.core.optimized_detection_pipeline import (  # noqa: E402
+from src.core.optimized_detection_pipeline import (
     OptimizedDetectionPipeline,
 )
-from src.detection.intelligent_detection_system import (  # noqa: E402
+from src.detection.intelligent_detection_system import (
     DetectionConfig,
     IntelligentDetectionSystem,
 )
