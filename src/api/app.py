@@ -102,6 +102,7 @@ try:
         security,
         statistics,
         system,
+        tasks,
         video_stream,
         websocket,
     )
@@ -134,6 +135,7 @@ except ImportError:
         security,
         statistics,
         system,
+        tasks,
         video_stream,
         websocket,
     )
@@ -377,6 +379,7 @@ app.include_router(error_monitoring.router, prefix="/api/v1", tags=["Error Monit
 app.include_router(alerts.router, prefix="/api/v1", tags=["Alerts"])
 app.include_router(security.router, prefix="/api/v1", tags=["Security Management"])
 app.include_router(records.router, tags=["Records"])
+app.include_router(tasks.router, prefix="/api/v1", tags=["Tasks"])
 app.include_router(video_stream.router, prefix="/api/v1", tags=["Video Stream"])
 # 配置管理路由
 app.include_router(config.router, prefix="/api/v1/config", tags=["Config"])
