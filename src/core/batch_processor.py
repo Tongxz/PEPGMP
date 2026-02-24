@@ -158,9 +158,30 @@ class BatchScheduler:
         """超时触发批处理"""
         await asyncio.sleep(self.max_wait_time)
 
+        # 检查是否需要处理批次
         async with self.lock:
-            if self.pending_items and len(self.pending_items) >= self.min_batch_size:
-                await self._process_batch(detector, **kwargs)
+            if not self.pending_items or len(self.pending_items) < self.min_batch_size:
+                return
+        
+        # 调用_process_batch，它会自己处理锁逻辑
+        await self._process_batch(detector, **kwargs)
+
+    def _extract_batch(self):
+        """在锁内提取批次数据"""
+        if not self.pending_items:
+            return None, None
+
+        batch = self.pending_items[:]
+        self.pending_items.clear()
+
+        if self._timeout_task is not None:
+            self._timeout_task.cancel()
+            self._timeout_task = None
+
+        # 提取数据和Future
+        items = [item for item, _ in batch]
+        futures = [future for _, future in batch]
+        return items, futures
 
     async def _process_batch(self, detector: BatchableDetector, **kwargs):
         """处理批次"""
@@ -168,17 +189,10 @@ class BatchScheduler:
         async with self.lock:
             if not self.pending_items:
                 return
+            items, futures = self._extract_batch()
 
-            batch = self.pending_items[:]
-            self.pending_items.clear()
-
-            if self._timeout_task is not None:
-                self._timeout_task.cancel()
-                self._timeout_task = None
-
-        # 提取数据和Future
-        items = [item for item, _ in batch]
-        futures = [future for _, future in batch]
+        if not items:
+            return
 
         # 批量推理
         try:
@@ -197,9 +211,13 @@ class BatchScheduler:
 
     async def flush(self, detector: BatchableDetector, **kwargs):
         """立即处理所有待处理项"""
+        # 检查是否有待处理项
         async with self.lock:
-            if self.pending_items:
-                await self._process_batch(detector, **kwargs)
+            if not self.pending_items:
+                return
+        
+        # 调用_process_batch，它会自己处理锁逻辑
+        await self._process_batch(detector, **kwargs)
 
 
 class BatchPerformanceMonitor:

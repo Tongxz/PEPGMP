@@ -78,8 +78,30 @@ class BatchDetectionPipeline(OptimizedDetectionPipeline):
         if not self.enable_batch_processing or not self._supports_batch_detection():
             return self._detect_frames_sequentially(frames, camera_ids, **kwargs)
 
-        # 批量处理
-        results = self._detect_frames_batch(frames, camera_ids, **kwargs)
+        # 如果帧数小于等于最大批大小，直接处理
+        if len(frames) <= self.max_batch_size:
+            results = self._detect_frames_batch(frames, camera_ids, **kwargs)
+        else:
+            # 分批处理
+            results = []
+            num_frames = len(frames)
+            
+            for i in range(0, num_frames, self.max_batch_size):
+                batch_end = min(i + self.max_batch_size, num_frames)
+                batch_frames = frames[i:batch_end]
+                
+                # 分批camera_ids
+                batch_camera_ids = None
+                if camera_ids:
+                    batch_camera_ids = camera_ids[i:batch_end]
+                
+                # 处理批次
+                batch_results = self._detect_frames_batch(
+                    batch_frames, batch_camera_ids, **kwargs
+                )
+                results.extend(batch_results)
+                
+                logger.debug(f"检测分批: {batch_end}/{num_frames} 帧")
 
         # 记录性能
         total_time = time.time() - start_time
@@ -128,6 +150,7 @@ class BatchDetectionPipeline(OptimizedDetectionPipeline):
         2. 跨帧批量发网检测
         3. 批量行为检测
         """
+        start_time = time.time()
         processing_times = {"total": 0.0}
 
         # 阶段1: 批量人体检测
@@ -143,12 +166,14 @@ class BatchDetectionPipeline(OptimizedDetectionPipeline):
         # 阶段2: 批量发网检测
         hairnet_start = time.time()
         enable_hairnet = kwargs.get("enable_hairnet", True)
-        all_hairnet_results = []
-
+        
         if enable_hairnet:
             all_hairnet_results = self._batch_detect_hairnet(
                 frames, all_person_detections
             )
+        else:
+            # 返回与帧数相同长度的空列表列表
+            all_hairnet_results = [[] for _ in frames]
 
         processing_times["hairnet_detection"] = time.time() - hairnet_start
 
@@ -160,15 +185,15 @@ class BatchDetectionPipeline(OptimizedDetectionPipeline):
         behavior_start = time.time()
         enable_handwash = kwargs.get("enable_handwash", True)
         enable_sanitize = kwargs.get("enable_sanitize", True)
-        all_handwash_results = []
-        all_sanitize_results = []
-
+        
         if enable_handwash or enable_sanitize:
-            handwash_results, sanitize_results = self._batch_detect_behavior(
+            all_handwash_results, all_sanitize_results = self._batch_detect_behavior(
                 frames, all_person_detections, enable_handwash, enable_sanitize
             )
-            all_handwash_results = handwash_results
-            all_sanitize_results = sanitize_results
+        else:
+            # 返回与帧数相同长度的空列表列表
+            all_handwash_results = [[] for _ in frames]
+            all_sanitize_results = [[] for _ in frames]
 
         processing_times["behavior_detection"] = time.time() - behavior_start
 
@@ -212,7 +237,7 @@ class BatchDetectionPipeline(OptimizedDetectionPipeline):
             results.append(result)
 
         processing_times["assembly"] = time.time() - assembly_start
-        processing_times["total"] = time.time() - (time.time() - processing_times["total"])
+        processing_times["total"] = time.time() - start_time
 
         return results
 
@@ -231,9 +256,23 @@ class BatchDetectionPipeline(OptimizedDetectionPipeline):
             return [self._detect_persons(frame) for frame in frames]
 
         try:
-            # 批量检测
-            results = self.human_detector.detect_batch(frames)
-            return results
+            # 如果帧数小于等于最大批大小，直接批量检测
+            if len(frames) <= self.max_batch_size:
+                results = self.human_detector.detect_batch(frames)
+                return results
+            
+            # 分批处理
+            all_results = []
+            num_frames = len(frames)
+            
+            for i in range(0, num_frames, self.max_batch_size):
+                batch_frames = frames[i:i + self.max_batch_size]
+                batch_results = self.human_detector.detect_batch(batch_frames)
+                all_results.extend(batch_results)
+                
+                logger.debug(f"人体检测分批: {i+len(batch_frames)}/{num_frames} 帧")
+            
+            return all_results
         except Exception as e:
             logger.error(f"批量人体检测失败，回退到逐帧检测: {e}")
             return [self._detect_persons(frame) for frame in frames]

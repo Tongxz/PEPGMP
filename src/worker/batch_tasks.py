@@ -144,7 +144,8 @@ def process_video_batch(
         # 处理视频
         frame_buffer = []
         frame_indices = []
-        results = []
+        all_results = []
+        all_frame_indices = []
         processed_frames = 0
 
         frame_idx = 0
@@ -166,7 +167,8 @@ def process_video_batch(
             if len(frame_buffer) >= batch_size:
                 # 批量检测
                 batch_results = pipeline.detect_batch(frame_buffer)
-                results.extend(batch_results)
+                all_results.extend(batch_results)
+                all_frame_indices.extend(frame_indices)
 
                 # 清空缓冲区
                 frame_buffer.clear()
@@ -190,17 +192,18 @@ def process_video_batch(
         # 处理剩余帧
         if frame_buffer:
             batch_results = pipeline.detect_batch(frame_buffer)
-            results.extend(batch_results)
+            all_results.extend(batch_results)
+            all_frame_indices.extend(frame_indices)
             processed_frames = frame_idx
 
         # 关闭视频
         cap.release()
 
         # 汇总结果
-        total_detections = sum(len(r.person_detections) for r in results)
+        total_detections = sum(len(r.person_detections) for r in all_results)
         total_hairnet_violations = sum(
             1
-            for r in results
+            for r in all_results
             for h in r.hairnet_results
             if not h.get("has_hairnet", True)
         )
@@ -228,11 +231,11 @@ def process_video_batch(
             },
             "results": [
                 {
-                    "frame_idx": frame_indices[i],
+                    "frame_idx": all_frame_indices[i],
                     "person_count": len(r.person_detections),
                 }
-                for i, r in enumerate(results)
-                if i < len(frame_indices)
+                for i, r in enumerate(all_results)
+                if i < len(all_frame_indices)
             ],
         }
 
