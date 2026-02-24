@@ -16,6 +16,8 @@ from .task_schemas import (
     WorkflowParameters,
     DatasetConfig,
     TrainingConfig,
+    TaskType,
+    TaskStatus,
 )
 
 __all__ = [
@@ -33,4 +35,6 @@ __all__ = [
     "WorkflowParameters",
     "DatasetConfig",
     "TrainingConfig",
+    "TaskType",
+    "TaskStatus",
 ]
