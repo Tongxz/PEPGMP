@@ -78,8 +78,6 @@ class BatchDetectionPipeline(OptimizedDetectionPipeline):
         if not frames:
             return []
 
-        start_time = time.time()
-
         # 如果禁用批处理，逐帧处理
         if not self.enable_batch_processing or not self._supports_batch_detection():
             return self._detect_frames_sequentially(frames, camera_ids, **kwargs)
@@ -91,7 +89,15 @@ class BatchDetectionPipeline(OptimizedDetectionPipeline):
 
         # 如果帧数小于等于批大小，直接处理
         if len(frames) <= effective_batch_size:
-            results = self._detect_frames_batch(frames, camera_ids, batch_size=effective_batch_size, **kwargs)
+            batch_start_time = time.time()
+            results = self._detect_frames_batch(
+                frames, camera_ids, batch_size=effective_batch_size, **kwargs
+            )
+            batch_time = time.time() - batch_start_time
+            batch_len = len(frames)
+            self.batch_monitor.record_batch(
+                batch_len, batch_time, batch_time / max(batch_len, 1)
+            )
         else:
             # 分批处理
             results = []
@@ -107,17 +113,19 @@ class BatchDetectionPipeline(OptimizedDetectionPipeline):
                     batch_camera_ids = camera_ids[i:batch_end]
                 
                 # 处理批次
+                batch_start_time = time.time()
                 batch_results = self._detect_frames_batch(
                     batch_frames, batch_camera_ids, batch_size=effective_batch_size, **kwargs
+                )
+                batch_time = time.time() - batch_start_time
+                batch_len = len(batch_frames)
+                # 记录真实批次性能，避免将整次请求误记为单批导致统计失真
+                self.batch_monitor.record_batch(
+                    batch_len, batch_time, batch_time / max(batch_len, 1)
                 )
                 results.extend(batch_results)
                 
                 logger.debug(f"检测分批: {batch_end}/{num_frames} 帧")
-
-        # 记录性能
-        total_time = time.time() - start_time
-        per_frame_time = total_time / len(frames)
-        self.batch_monitor.record_batch(len(frames), total_time, per_frame_time)
 
         return results
 
@@ -255,6 +263,9 @@ class BatchDetectionPipeline(OptimizedDetectionPipeline):
 
         processing_times["assembly"] = time.time() - assembly_start
         processing_times["total"] = time.time() - start_time
+        # 批次级时间统计写入结果，便于后续调试和性能分析
+        for result in results:
+            result.processing_stats = processing_times.copy()
 
         return results
 

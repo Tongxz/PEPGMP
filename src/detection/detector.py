@@ -11,6 +11,7 @@ from ultralytics import YOLO
 
 # 导入统一参数配置
 from src.config.unified_params import get_unified_params
+from src.core.batch_processor import BatchableDetector
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ class BaseDetector(ABC):
         return label.strip()
 
 
-class HumanDetector(BaseDetector):
+class HumanDetector(BaseDetector, BatchableDetector):
     """人体检测器
 
     基于YOLOv8的人体检测模块，支持实时检测和批量处理
@@ -408,12 +409,19 @@ class HumanDetector(BaseDetector):
             logger.error(error_msg, exc_info=True)
             raise RuntimeError(error_msg) from e
 
-    def detect_batch(self, images: List[np.ndarray]) -> List[List[Dict]]:
+    def detect_batch(
+        self,
+        images: List[np.ndarray],
+        batch_size: Optional[int] = None,
+        **kwargs,
+    ) -> List[List[Dict]]:
         """
         批量检测多张图像
 
         Args:
             images: 图像列表 (BGR格式)
+            batch_size: 批大小（兼容BatchableDetector接口，当前实现由模型自行决定）
+            **kwargs: 兼容接口的扩展参数（当前未使用）
 
         Returns:
             每张图像的检测结果列表

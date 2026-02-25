@@ -115,6 +115,7 @@ def process_video_batch(
         处理结果
     """
     logger.info(f"开始批量处理视频: {video_path}, 批大小: {batch_size}")
+    cap = None  # 在finally中统一释放，避免异常路径的句柄泄漏
 
     try:
         # 验证视频文件
@@ -196,9 +197,6 @@ def process_video_batch(
             all_frame_indices.extend(frame_indices)
             processed_frames = frame_idx
 
-        # 关闭视频
-        cap.release()
-
         # 汇总结果
         total_detections = sum(len(r.person_detections) for r in all_results)
         total_hairnet_violations = sum(
@@ -250,6 +248,9 @@ def process_video_batch(
             "error": str(e),
             "processed_at": datetime.now().isoformat(),
         }
+    finally:
+        if cap is not None:
+            cap.release()
 
 
 @celery_app.task(name="src.worker.batch_tasks.batch_process_videos", bind=True)

@@ -66,6 +66,8 @@ class DetectionResult:
     hand_regions: Optional[List[Dict]] = None
     annotated_image: Optional[np.ndarray] = None
     frame_cache_key: Optional[str] = None
+    # 可选的调试/性能统计（例如批次级各阶段耗时）
+    processing_stats: Optional[Dict[str, float]] = None
 
 
 @dataclass
