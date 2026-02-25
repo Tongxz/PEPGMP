@@ -1,0 +1,30 @@
+# Promtail 配置文件
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # 扫描PEPGMP应用日志
+  - job_name: pepgmp_app
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: pepgmp
+          app: pepgmp-api
+          __path__: /var/log/pepgmp/*.log
+    
+  # 扫描系统日志（可选）
+  - job_name: system
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: system
+          __path__: /var/log/host/*.log

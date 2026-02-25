@@ -34,6 +34,8 @@ volumes:
     driver: local
   alertmanager_data:
     driver: local
+  loki_data:
+    driver: local
   mlflow_prod_data:
     driver: local
   dvc_prod_cache:
@@ -269,6 +271,49 @@ services:
       - frontend
     depends_on:
       - prometheus
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==================== Loki 日志聚合（可选） ====================
+  loki:
+    image: grafana/loki:latest
+    container_name: pepgmp-loki-prod
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki_data:/loki
+      - ./monitoring/loki-config.yaml:/etc/loki/local-config.yaml:ro
+    ports:
+      - "3100:3100"
+    networks:
+      - frontend
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==================== Promtail 日志收集器（可选） ====================
+  promtail:
+    image: grafana/promtail:latest
+    container_name: pepgmp-promtail-prod
+    command: -config.file=/etc/promtail/config.yml
+    volumes:
+      - ./logs:/var/log/pepgmp:ro
+      - /var/log:/var/log/host:ro
+      - ./monitoring/promtail-config.yaml:/etc/promtail/config.yml:ro
+    networks:
+      - frontend
+    depends_on:
+      - loki
     restart: unless-stopped
     profiles:
       - monitoring
