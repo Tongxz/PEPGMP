@@ -82,7 +82,7 @@ def benchmark_batch_processing(
     """
     start_time = time.time()
 
-    results = pipeline.detect_batch(frames)
+    results = pipeline.detect_batch(frames, batch_size=batch_size)
 
     total_time = time.time() - start_time
 
@@ -245,7 +245,7 @@ def test_batch_size_sensitivity():
 
         for run in range(3):
             start_time = time.time()
-            batch_pipeline.detect_batch(frames)
+            batch_pipeline.detect_batch(frames, batch_size=batch_size)
             elapsed = time.time() - start_time
 
             avg_time = elapsed / num_frames

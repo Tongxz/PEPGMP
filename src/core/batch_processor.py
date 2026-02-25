@@ -159,16 +159,20 @@ class BatchScheduler:
         """超时触发批处理"""
         await asyncio.sleep(self.max_wait_time)
 
-        # 检查是否需要处理批次
+        # 直接在锁内处理批次，避免竞争条件
         async with self.lock:
             if not self.pending_items:
                 return
+            
+            # 提取批次数据
+            items, futures = self._extract_batch()
         
-        # 调用_process_batch，它会自己处理锁逻辑
-        await self._process_batch(detector, **kwargs)
+        # 处理批次（不在锁内，避免死锁）
+        if items and futures:
+            await self._process_extracted_batch(items, futures, detector, **kwargs)
 
     def _extract_batch(self):
-        """在锁内提取批次数据"""
+        """提取批次数据（必须在锁内调用）"""
         if not self.pending_items:
             return None, None
 
@@ -192,7 +196,12 @@ class BatchScheduler:
                 return
             items, futures = self._extract_batch()
 
-        if not items:
+        # 处理已提取的批次
+        await self._process_extracted_batch(items, futures, detector, **kwargs)
+
+    async def _process_extracted_batch(self, items, futures, detector: BatchableDetector, **kwargs):
+        """处理已提取的批次（不在锁内）"""
+        if not items or not futures:
             return
 
         # 批量推理
@@ -229,13 +238,15 @@ class BatchScheduler:
 
     async def flush(self, detector: BatchableDetector, **kwargs):
         """立即处理所有待处理项"""
-        # 检查是否有待处理项
+        # 提取所有待处理项（在锁内）
         async with self.lock:
             if not self.pending_items:
                 return
+            items, futures = self._extract_batch()
         
-        # 调用_process_batch，它会自己处理锁逻辑
-        await self._process_batch(detector, **kwargs)
+        # 处理批次（不在锁内）
+        if items and futures:
+            await self._process_extracted_batch(items, futures, detector, **kwargs)
 
 
 class BatchPerformanceMonitor:

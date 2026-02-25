@@ -166,7 +166,7 @@ def process_video_batch(
             # 批处理
             if len(frame_buffer) >= batch_size:
                 # 批量检测
-                batch_results = pipeline.detect_batch(frame_buffer)
+                batch_results = pipeline.detect_batch(frame_buffer, batch_size=batch_size)
                 all_results.extend(batch_results)
                 all_frame_indices.extend(frame_indices)
 
@@ -191,7 +191,7 @@ def process_video_batch(
 
         # 处理剩余帧
         if frame_buffer:
-            batch_results = pipeline.detect_batch(frame_buffer)
+            batch_results = pipeline.detect_batch(frame_buffer, batch_size=batch_size)
             all_results.extend(batch_results)
             all_frame_indices.extend(frame_indices)
             processed_frames = frame_idx
@@ -365,8 +365,13 @@ def detect_frames_batch(
         # 获取检测管道
         pipeline = get_detection_pipeline()
 
+        # 从配置获取批大小
+        batch_size = 16
+        if config and "batch_size" in config:
+            batch_size = config["batch_size"]
+
         # 批量检测
-        results = pipeline.detect_batch(frames, camera_ids=camera_ids)
+        results = pipeline.detect_batch(frames, camera_ids=camera_ids, batch_size=batch_size)
 
         # 序列化结果
         serialized_results = []
@@ -459,7 +464,7 @@ def process_video_segment_batch(
 
             # 批处理
             if len(frame_buffer) >= batch_size:
-                batch_results = pipeline.detect_batch(frame_buffer)
+                batch_results = pipeline.detect_batch(frame_buffer, batch_size=batch_size)
                 results.extend(batch_results)
 
                 # 清空缓冲区
@@ -470,7 +475,7 @@ def process_video_segment_batch(
 
         # 处理剩余帧
         if frame_buffer:
-            batch_results = pipeline.detect_batch(frame_buffer)
+            batch_results = pipeline.detect_batch(frame_buffer, batch_size=batch_size)
             results.extend(batch_results)
 
         # 关闭视频

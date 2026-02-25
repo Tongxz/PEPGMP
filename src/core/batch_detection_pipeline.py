@@ -60,6 +60,7 @@ class BatchDetectionPipeline(OptimizedDetectionPipeline):
         self,
         frames: List[np.ndarray],
         camera_ids: Optional[List[str]] = None,
+        batch_size: Optional[int] = None,
         **kwargs,
     ) -> List[DetectionResult]:
         """
@@ -68,6 +69,7 @@ class BatchDetectionPipeline(OptimizedDetectionPipeline):
         Args:
             frames: 帧列表
             camera_ids: 摄像头ID列表（可选）
+            batch_size: 批大小（可选，默认使用self.max_batch_size）
             **kwargs: 其他参数
 
         Returns:
@@ -82,16 +84,21 @@ class BatchDetectionPipeline(OptimizedDetectionPipeline):
         if not self.enable_batch_processing or not self._supports_batch_detection():
             return self._detect_frames_sequentially(frames, camera_ids, **kwargs)
 
-        # 如果帧数小于等于最大批大小，直接处理
-        if len(frames) <= self.max_batch_size:
-            results = self._detect_frames_batch(frames, camera_ids, **kwargs)
+        # 确定批大小
+        effective_batch_size = batch_size if batch_size is not None else self.max_batch_size
+        if effective_batch_size <= 0:
+            effective_batch_size = self.max_batch_size
+
+        # 如果帧数小于等于批大小，直接处理
+        if len(frames) <= effective_batch_size:
+            results = self._detect_frames_batch(frames, camera_ids, batch_size=effective_batch_size, **kwargs)
         else:
             # 分批处理
             results = []
             num_frames = len(frames)
             
-            for i in range(0, num_frames, self.max_batch_size):
-                batch_end = min(i + self.max_batch_size, num_frames)
+            for i in range(0, num_frames, effective_batch_size):
+                batch_end = min(i + effective_batch_size, num_frames)
                 batch_frames = frames[i:batch_end]
                 
                 # 分批camera_ids
@@ -101,7 +108,7 @@ class BatchDetectionPipeline(OptimizedDetectionPipeline):
                 
                 # 处理批次
                 batch_results = self._detect_frames_batch(
-                    batch_frames, batch_camera_ids, **kwargs
+                    batch_frames, batch_camera_ids, batch_size=effective_batch_size, **kwargs
                 )
                 results.extend(batch_results)
                 
@@ -144,6 +151,7 @@ class BatchDetectionPipeline(OptimizedDetectionPipeline):
         self,
         frames: List[np.ndarray],
         camera_ids: Optional[List[str]] = None,
+        batch_size: Optional[int] = None,
         **kwargs,
     ) -> List[DetectionResult]:
         """
@@ -157,9 +165,14 @@ class BatchDetectionPipeline(OptimizedDetectionPipeline):
         start_time = time.time()
         processing_times = {"total": 0.0}
 
+        # 确定批大小
+        effective_batch_size = batch_size if batch_size is not None else self.max_batch_size
+        if effective_batch_size <= 0:
+            effective_batch_size = self.max_batch_size
+
         # 阶段1: 批量人体检测
         person_start = time.time()
-        all_person_detections = self._batch_detect_persons(frames)
+        all_person_detections = self._batch_detect_persons(frames, batch_size=effective_batch_size)
         processing_times["person_detection"] = time.time() - person_start
 
         logger.info(
@@ -245,12 +258,13 @@ class BatchDetectionPipeline(OptimizedDetectionPipeline):
 
         return results
 
-    def _batch_detect_persons(self, frames: List[np.ndarray]) -> List[List[Dict]]:
+    def _batch_detect_persons(self, frames: List[np.ndarray], batch_size: Optional[int] = None) -> List[List[Dict]]:
         """
         批量人体检测
 
         Args:
             frames: 帧列表
+            batch_size: 批大小（可选，默认使用self.max_batch_size）
 
         Returns:
             每帧的人体检测结果列表
@@ -259,9 +273,14 @@ class BatchDetectionPipeline(OptimizedDetectionPipeline):
             # 回退到逐帧检测
             return [self._detect_persons(frame) for frame in frames]
 
+        # 确定批大小
+        effective_batch_size = batch_size if batch_size is not None else self.max_batch_size
+        if effective_batch_size <= 0:
+            effective_batch_size = self.max_batch_size
+
         try:
-            # 如果帧数小于等于最大批大小，直接批量检测
-            if len(frames) <= self.max_batch_size:
+            # 如果帧数小于等于批大小，直接批量检测
+            if len(frames) <= effective_batch_size:
                 results = self.human_detector.detect_batch(frames)
                 return self._normalize_batch_results(results, len(frames))
             
@@ -269,8 +288,8 @@ class BatchDetectionPipeline(OptimizedDetectionPipeline):
             all_results = []
             num_frames = len(frames)
             
-            for i in range(0, num_frames, self.max_batch_size):
-                batch_frames = frames[i:i + self.max_batch_size]
+            for i in range(0, num_frames, effective_batch_size):
+                batch_frames = frames[i:i + effective_batch_size]
                 batch_results = self.human_detector.detect_batch(batch_frames)
                 all_results.extend(
                     self._normalize_batch_results(batch_results, len(batch_frames))
