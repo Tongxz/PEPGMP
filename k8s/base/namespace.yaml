@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pepgmp-prod
+  labels:
+    name: pepgmp-prod
+    environment: production

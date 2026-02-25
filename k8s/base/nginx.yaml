@@ -1,0 +1,203 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: pepgmp-prod
+data:
+  nginx.conf: |
+    events {
+        worker_connections 1024;
+    }
+
+    http {
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+
+        log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" '
+                        '"$http_user_agent" "$http_x_forwarded_for"';
+
+        access_log /var/log/nginx/access.log main;
+        error_log /var/log/nginx/error.log warn;
+
+        sendfile on;
+        keepalive_timeout 65;
+
+        # 限制上传文件大小（防止恶意大文件上传）
+        client_max_body_size 10M;
+
+        # Gzip 压缩优化
+        gzip on;
+        gzip_min_length 1k;
+        gzip_comp_level 6;
+        gzip_types
+            text/plain
+            text/css
+            text/xml
+            text/javascript
+            application/javascript
+            application/x-javascript
+            application/json
+            application/xml
+            application/xml+rss;
+        gzip_vary on;
+        gzip_proxied any;
+
+        upstream api_backend {
+            server api-service:8000;
+        }
+
+        # Scheme B: Single Nginx architecture - no frontend upstream needed
+        # Static files are served directly from volume mount ./frontend/dist
+
+        server {
+            listen 80;
+            server_name _;
+
+            # Static file root directory (mounted from host directory)
+            root /usr/share/nginx/html;
+            index index.html;
+
+            # 安全头
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header X-XSS-Protection "1; mode=block" always;
+
+            # API proxy
+            location /api/ {
+                proxy_pass http://api_backend/api/;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+
+                proxy_connect_timeout 60s;
+                proxy_send_timeout 60s;
+                proxy_read_timeout 60s;
+            }
+
+            location /api/v1/monitoring/health {
+                proxy_pass http://api_backend/api/v1/monitoring/health;
+                access_log off;
+            }
+
+            # index.html 禁用缓存（关键！防止浏览器缓存导致白屏）
+            location = /index.html {
+                add_header Cache-Control "no-cache, no-store, must-revalidate";
+                add_header Pragma "no-cache";
+                add_header Expires 0;
+                try_files $uri /index.html;
+            }
+
+            # 静态资源（带 hash）使用强缓存
+            location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+                expires 1y;
+                add_header Cache-Control "public, immutable";
+            }
+
+            # Frontend static files (supports Vue Router history mode)
+            location / {
+                try_files $uri $uri/ /index.html;
+            }
+
+            # Health check endpoint
+            location /health {
+                access_log off;
+                return 200 "healthy\n";
+                add_header Content-Type text/plain;
+            }
+
+            # Error pages
+            error_page 404 /index.html;
+            error_page 500 502 503 504 /50x.html;
+            location = /50x.html {
+                root /usr/share/nginx/html;
+            }
+        }
+    }
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  namespace: pepgmp-prod
+  labels:
+    app: nginx
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      initContainers:
+      - name: frontend-init
+        image: pepgmp-frontend:latest
+        command: ["sh", "-c", "cp -r /usr/share/nginx/html/* /target/ && chown -R 101:101 /target"]
+        volumeMounts:
+        - name: frontend-static
+          mountPath: /target
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: frontend-static
+          mountPath: /usr/share/nginx/html
+          readOnly: true
+        - name: nginx-config-volume
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 80
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+      volumes:
+      - name: frontend-static
+        emptyDir: {}
+      - name: nginx-config-volume
+        configMap:
+          name: nginx-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+  namespace: pepgmp-prod
+spec:
+  selector:
+    app: nginx
+  ports:
+  - port: 80
+    targetPort: 80
+  type: LoadBalancer

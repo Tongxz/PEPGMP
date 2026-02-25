@@ -1,0 +1,133 @@
+# 监控堆栈（Prometheus + Grafana）
+# 如需启用，取消注释并配置相应配置
+
+# --- Prometheus ConfigMap ---
+# apiVersion: v1
+# kind: ConfigMap
+# metadata:
+#   name: prometheus-config
+#   namespace: pepgmp-prod
+# data:
+#   prometheus.yml: |
+#     global:
+#       scrape_interval: 15s
+#       evaluation_interval: 15s
+#     scrape_configs:
+#     - job_name: 'pepgmp-api'
+#       static_configs:
+#       - targets: ['api-service:8000']
+
+# --- Prometheus Deployment ---
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: prometheus
+#   namespace: pepgmp-prod
+# spec:
+#   replicas: 1
+#   selector:
+#     matchLabels:
+#       app: prometheus
+#   template:
+#     metadata:
+#       labels:
+#         app: prometheus
+#     spec:
+#       containers:
+#       - name: prometheus
+#         image: prom/prometheus:latest
+#         args:
+#         - '--config.file=/etc/prometheus/prometheus.yml'
+#         - '--storage.tsdb.path=/prometheus'
+#         - '--storage.tsdb.retention.time=30d'
+#         ports:
+#         - containerPort: 9090
+#         volumeMounts:
+#         - name: prometheus-config-volume
+#           mountPath: /etc/prometheus
+#         - name: prometheus-storage
+#           mountPath: /prometheus
+#         resources:
+#           requests:
+#             memory: "512Mi"
+#             cpu: "250m"
+#           limits:
+#             memory: "1Gi"
+#             cpu: "500m"
+#       volumes:
+#       - name: prometheus-config-volume
+#         configMap:
+#           name: prometheus-config
+#       - name: prometheus-storage
+#         persistentVolumeClaim:
+#           claimName: prometheus-pvc
+
+# --- Prometheus Service ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: prometheus-service
+#   namespace: pepgmp-prod
+# spec:
+#   selector:
+#     app: prometheus
+#   ports:
+#   - port: 9090
+#     targetPort: 9090
+#   type: ClusterIP
+
+# --- Grafana Deployment ---
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: grafana
+#   namespace: pepgmp-prod
+# spec:
+#   replicas: 1
+#   selector:
+#     matchLabels:
+#       app: grafana
+#   template:
+#     metadata:
+#       labels:
+#         app: grafana
+#     spec:
+#       containers:
+#       - name: grafana
+#         image: grafana/grafana:latest
+#         env:
+#         - name: GF_SECURITY_ADMIN_PASSWORD
+#           valueFrom:
+#             secretKeyRef:
+#               name: pepgmp-secrets
+#               key: GRAFANA_ADMIN_PASSWORD
+#         ports:
+#         - containerPort: 3000
+#         volumeMounts:
+#         - name: grafana-storage
+#           mountPath: /var/lib/grafana
+#         resources:
+#           requests:
+#             memory: "512Mi"
+#             cpu: "250m"
+#           limits:
+#             memory: "1Gi"
+#             cpu: "500m"
+#       volumes:
+#       - name: grafana-storage
+#         persistentVolumeClaim:
+#           claimName: grafana-pvc
+
+# --- Grafana Service ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: grafana-service
+#   namespace: pepgmp-prod
+# spec:
+#   selector:
+#     app: grafana
+#   ports:
+#   - port: 3000
+#     targetPort: 3000
+#   type: ClusterIP
