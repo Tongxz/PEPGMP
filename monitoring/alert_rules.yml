@@ -1,0 +1,65 @@
+# Prometheus告警规则 for PEPGMP
+groups:
+  - name: pepgmp_api_alerts
+    rules:
+      # 错误率告警：当API错误率超过5%时触发
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m])) 
+          / 
+          sum(rate(http_requests_total[5m])) * 100 > 5
+        for: 2m
+        labels:
+          severity: critical
+          service: api
+        annotations:
+          summary: "高错误率检测到 ({{ $value }}%)"
+          description: "API错误率超过5%，当前值 {{ $value }}%"
+
+      # 高延迟告警：当P95延迟超过1秒时触发
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1
+        for: 3m
+        labels:
+          severity: warning
+          service: api
+        annotations:
+          summary: "高延迟检测到 ({{ $value }}秒)"
+          description: "API P95延迟超过1秒，当前值 {{ $value }}秒"
+
+      # 服务宕机告警：当up指标为0时触发
+      - alert: ServiceDown
+        expr: up{job="pepgmp-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: api
+        annotations:
+          summary: "服务 {{ $labels.instance }} 宕机"
+          description: "API服务 {{ $labels.instance }} 已经宕机超过1分钟"
+
+      # 高内存使用告警
+      - alert: HighMemoryUsage
+        expr: |
+          (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) 
+          / node_memory_MemTotal_bytes * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "高内存使用率 ({{ $value }}%)"
+          description: "系统内存使用率超过80%，当前值 {{ $value }}%"
+
+      # 高CPU使用告警
+      - alert: HighCPUUsage
+        expr: |
+          100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 70
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "高CPU使用率 ({{ $value }}%)"
+          description: "系统CPU使用率超过70%，当前值 {{ $value }}%"
