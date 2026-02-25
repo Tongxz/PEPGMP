@@ -263,7 +263,7 @@ class BatchDetectionPipeline(OptimizedDetectionPipeline):
             # 如果帧数小于等于最大批大小，直接批量检测
             if len(frames) <= self.max_batch_size:
                 results = self.human_detector.detect_batch(frames)
-                return results
+                return self._normalize_batch_results(results, len(frames))
             
             # 分批处理
             all_results = []
@@ -272,14 +272,41 @@ class BatchDetectionPipeline(OptimizedDetectionPipeline):
             for i in range(0, num_frames, self.max_batch_size):
                 batch_frames = frames[i:i + self.max_batch_size]
                 batch_results = self.human_detector.detect_batch(batch_frames)
-                all_results.extend(batch_results)
+                all_results.extend(
+                    self._normalize_batch_results(batch_results, len(batch_frames))
+                )
                 
                 logger.debug(f"人体检测分批: {i+len(batch_frames)}/{num_frames} 帧")
             
-            return all_results
+            return self._normalize_batch_results(all_results, len(frames))
         except Exception as e:
             logger.error(f"批量人体检测失败，回退到逐帧检测: {e}")
             return [self._detect_persons(frame) for frame in frames]
+
+    @staticmethod
+    def _normalize_batch_results(
+        results: Optional[List[List[Dict]]], expected_len: int
+    ) -> List[List[Dict]]:
+        """确保批处理结果长度与输入一致."""
+        if results is None:
+            results = []
+
+        actual_len = len(results)
+        if actual_len == expected_len:
+            return results
+
+        logger.warning(
+            "批处理结果长度不匹配: actual=%s expected=%s, 将进行填充/截断",
+            actual_len,
+            expected_len,
+        )
+
+        if actual_len < expected_len:
+            results = results + ([[]] * (expected_len - actual_len))
+        else:
+            results = results[:expected_len]
+
+        return results
 
     def _batch_detect_hairnet(
         self,
