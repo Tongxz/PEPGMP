@@ -1,0 +1,30 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: pepgmp-prod
+
+resources:
+  - ../../base
+
+# 镜像覆盖（在CI/CD流水线中动态设置）
+images:
+  - name: pepgmp-backend
+    newName: ghcr.io/tongxz/pepgmp
+    newTag: latest
+  - name: pepgmp-frontend
+    newName: ghcr.io/tongxz/pepgmp-frontend
+    newTag: latest
+
+# 环境特定配置
+configMapGenerator:
+- name: pepgmp-config
+  behavior: merge
+  literals:
+    - ENVIRONMENT=production
+    - LOG_LEVEL=INFO
+
+secretGenerator:
+- name: pepgmp-secrets
+  behavior: merge
+  envs:
+  - .env.production.secrets  # 从文件加载密钥（不提交到Git）
