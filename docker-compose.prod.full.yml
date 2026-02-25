@@ -253,7 +253,7 @@ services:
 
   # ==================== MLflow 服务（MLOps可选） ====================
   mlflow:
-    image: ${DOCKER_REGISTRY:-192.168.30.83:5433}/mlflow:latest
+    image: ${IMAGE_REGISTRY:-192.168.30.83:5433/}mlflow:latest
     container_name: pepgmp-mlflow-prod
     environment:
       - MLFLOW_BACKEND_STORE_URI=postgresql://${POSTGRES_USER:-pepgmp_prod}:${DATABASE_PASSWORD}@database:5432/${POSTGRES_DB:-pepgmp_production}
@@ -288,7 +288,7 @@ services:
 
   # ==================== DVC 数据版本控制（MLOps可选） ====================
   dvc:
-    image: ${DOCKER_REGISTRY:-192.168.30.83:5433}/dvc:latest
+    image: ${IMAGE_REGISTRY:-192.168.30.83:5433/}dvc:latest
     container_name: pepgmp-dvc-prod
     environment:
       - DVC_CACHE_DIR=/dvc/cache

@@ -6,10 +6,19 @@
 
 set -e
 
+# --- 加载统一配置 ---
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/lib/deploy_config.sh" ]; then
+    source "$SCRIPT_DIR/lib/deploy_config.sh"
+else
+    echo "[ERROR] 配置文件不存在: $SCRIPT_DIR/lib/deploy_config.sh"
+    exit 1
+fi
+
 # --- 配置部分 ---
-REGISTRY="11.25.125.115:5433"          # Registry地址（HTTP）
-IMAGE_NAME_BACKEND="pepgmp-backend"
-IMAGE_NAME_FRONTEND="pepgmp-frontend"
+REGISTRY="$REGISTRY_URL"               # Registry地址（HTTP）
+IMAGE_NAME_BACKEND="$BACKEND_IMAGE_NAME"
+IMAGE_NAME_FRONTEND="$FRONTEND_IMAGE_NAME"
 PRODUCTION_IP="${1}"
 PRODUCTION_USER="${2:-ubuntu}"
 DEPLOY_DIR="${3:-/home/ubuntu/projects/PEPGMP}"

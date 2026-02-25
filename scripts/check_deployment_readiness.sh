@@ -8,6 +8,12 @@
 
 set -e
 
+# 加载统一部署配置（用于 Registry 检查）
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/lib/deploy_config.sh" ]; then
+    source "$SCRIPT_DIR/lib/deploy_config.sh"
+fi
+
 # 颜色定义
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -167,7 +173,7 @@ echo ""
 echo -e "${GREEN}[4/5]${NC} 检查Registry配置..."
 echo ""
 
-REGISTRY_URL="11.25.125.115:5433"
+REGISTRY_URL="${REGISTRY_URL:-11.25.125.115:5433}"
 
 # 测试Registry连接
 if curl -sf "http://${REGISTRY_URL}/v2/_catalog" &> /dev/null; then

@@ -91,6 +91,9 @@ if [ "$NON_INTERACTIVE" = false ]; then
     read -p "CORS Origins [*]: " CORS_ORIGINS
     CORS_ORIGINS=${CORS_ORIGINS:-*}
 
+    read -p "Image Registry prefix (leave empty for local images) []: " IMAGE_REGISTRY_INPUT
+    IMAGE_REGISTRY=${IMAGE_REGISTRY_INPUT}
+
     read -p "Image Tag [latest]: " IMAGE_TAG_INPUT
     IMAGE_TAG=${IMAGE_TAG_INPUT:-latest}
 else
@@ -98,11 +101,13 @@ else
     API_PORT=8000
     ADMIN_USERNAME=admin
     CORS_ORIGINS=*
+    IMAGE_REGISTRY=
     IMAGE_TAG=latest
     echo "Non-interactive mode: using default values"
     echo "  API Port: ${API_PORT}"
     echo "  Admin Username: ${ADMIN_USERNAME}"
     echo "  CORS Origins: ${CORS_ORIGINS}"
+    echo "  Image Registry: ${IMAGE_REGISTRY:-<local only>}"
     echo "  Image Tag: ${IMAGE_TAG}"
 fi
 echo ""
@@ -137,6 +142,7 @@ cat > .env.production << EOF
 ENVIRONMENT=production
 API_PORT=${API_PORT}
 LOG_LEVEL=INFO
+IMAGE_REGISTRY=${IMAGE_REGISTRY}
 IMAGE_TAG=${IMAGE_TAG}
 
 # ==================== Host User Configuration ====================

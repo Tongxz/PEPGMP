@@ -31,8 +31,26 @@ DEFAULT_VERSION_TAG=$(date +%Y%m%d)
 VERSION_TAG="${VERSION_TAG:-$DEFAULT_VERSION_TAG}"
 
 # ==================== Registry 配置 / Registry Configuration ====================
-# 私有 Registry 地址（可通过环境变量覆盖）
-REGISTRY_URL="${REGISTRY_URL:-11.25.125.115:5433}"
+# 统一 Registry 来源优先级:
+# 1) IMAGE_REGISTRY 环境变量
+# 2) .env.production 里的 IMAGE_REGISTRY
+# 3) REGISTRY_URL 环境变量
+# 4) 默认值
+IMAGE_REGISTRY_RAW="${IMAGE_REGISTRY:-}"
+if [ -z "$IMAGE_REGISTRY_RAW" ] && [ -f ".env.production" ]; then
+    IMAGE_REGISTRY_RAW="$(grep -E '^IMAGE_REGISTRY=' .env.production | tail -n 1 | cut -d '=' -f2-)"
+fi
+
+if [ -n "$IMAGE_REGISTRY_RAW" ]; then
+    REGISTRY_URL="${IMAGE_REGISTRY_RAW#http://}"
+    REGISTRY_URL="${REGISTRY_URL#https://}"
+    REGISTRY_URL="${REGISTRY_URL%/}"
+else
+    REGISTRY_URL="${REGISTRY_URL:-11.25.125.115:5433}"
+fi
+
+# Compose 推荐使用带尾部 / 的 IMAGE_REGISTRY
+IMAGE_REGISTRY="${REGISTRY_URL}/"
 
 # Registry 中的完整镜像路径
 REGISTRY_BACKEND_IMAGE="${REGISTRY_URL}/${BACKEND_IMAGE_NAME}"
@@ -209,5 +227,6 @@ export BACKEND_DOCKERFILE
 export FRONTEND_DOCKERFILE
 export VERSION_TAG
 export REGISTRY_URL
+export IMAGE_REGISTRY
 export DEPLOY_DIR
 export CURRENT_OS
