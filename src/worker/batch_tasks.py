@@ -352,10 +352,12 @@ def detect_frames_batch(
         frames = []
         camera_ids = []
 
-        for frame_data in frames_data:
+        for idx, frame_data in enumerate(frames_data):
             # 从base64或字节还原numpy数组（这里简化处理）
             frame = np.frombuffer(frame_data["frame"], dtype=np.uint8)
             frame = cv2.imdecode(frame, cv2.IMREAD_COLOR)
+            if frame is None:
+                raise ValueError(f"无法解码帧数据: index={idx}")
             frames.append(frame)
 
             camera_ids.append(frame_data.get("camera_id", "default"))

@@ -368,6 +368,9 @@ class HumanDetector(BaseDetector):
                             width = x2 - x1
                             height = y2 - y1
                             area = width * height
+                            if width <= 0 or height <= 0:
+                                filtered_boxes += 1
+                                continue
                             aspect_ratio = max(width, height) / min(width, height)
 
                             logger.debug(

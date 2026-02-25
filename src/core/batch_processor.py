@@ -146,11 +146,12 @@ class BatchScheduler:
                     self._timeout_task.cancel()
                 # 立即处理
                 asyncio.create_task(self._process_batch(detector, **kwargs))
-            elif len(self.pending_items) >= self.min_batch_size:
-                # 设置超时处理
-                self._timeout_task = asyncio.create_task(
-                    self._timeout_process(detector, **kwargs)
-                )
+            else:
+                # 设置超时处理（避免小批次永远不被处理）
+                if self._timeout_task is None:
+                    self._timeout_task = asyncio.create_task(
+                        self._timeout_process(detector, **kwargs)
+                    )
 
         return await future
 
@@ -160,7 +161,7 @@ class BatchScheduler:
 
         # 检查是否需要处理批次
         async with self.lock:
-            if not self.pending_items or len(self.pending_items) < self.min_batch_size:
+            if not self.pending_items:
                 return
         
         # 调用_process_batch，它会自己处理锁逻辑
@@ -196,12 +197,29 @@ class BatchScheduler:
 
         # 批量推理
         try:
-            results = detector.detect_batch(items, **kwargs)
+            if len(items) < self.min_batch_size and hasattr(detector, "detect"):
+                results = [detector.detect(item, **kwargs) for item in items]
+            else:
+                results = detector.detect_batch(items, **kwargs)
+            if results is None:
+                results = []
 
-            # 设置Future结果
-            for i, (future, result) in enumerate(zip(futures, results)):
+            if len(results) != len(futures):
+                logger.error(
+                    "批处理结果数量不匹配: results=%s futures=%s",
+                    len(results),
+                    len(futures),
+                )
+
+            # 设置Future结果（多余结果忽略，不足填空）
+            for future, result in zip(futures, results):
                 if not future.done():
                     future.set_result(result)
+
+            if len(results) < len(futures):
+                for future in futures[len(results):]:
+                    if not future.done():
+                        future.set_result([])
         except Exception as e:
             logger.error(f"批处理失败: {e}")
             # 设置所有Future为失败

@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from celery.result import AsyncResult
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from starlette.concurrency import run_in_threadpool
 
 from src.api.schemas.tasks import (
     BatchTaskCreateRequest,
@@ -489,9 +490,9 @@ async def health_check_task() -> Dict[str, Any]:
         # 调用通用创建接口
         task_response = await create_task(task_request)
         
-        # 等待任务完成（同步执行）
+        # 等待任务完成（避免阻塞事件循环）
         async_result = AsyncResult(task_response.task_id, app=celery_app)
-        result = async_result.get(timeout=10)
+        result = await run_in_threadpool(async_result.get, timeout=10)
         
         return {
             "task_id": task_response.task_id,

@@ -34,12 +34,16 @@ class BatchDetectionPipeline(OptimizedDetectionPipeline):
 
     def __init__(self, *args, **kwargs):
         """初始化批量检测管道"""
+        enable_batch_processing = kwargs.pop("enable_batch_processing", True)
+        max_batch_size = kwargs.pop("max_batch_size", 16)
+        max_wait_time = kwargs.pop("max_wait_time", 0.05)
+
         super().__init__(*args, **kwargs)
 
         # 批处理配置
-        self.enable_batch_processing = kwargs.get("enable_batch_processing", True)
-        self.max_batch_size = kwargs.get("max_batch_size", 16)
-        self.max_wait_time = kwargs.get("max_wait_time", 0.05)  # 50ms
+        self.enable_batch_processing = enable_batch_processing
+        self.max_batch_size = max_batch_size
+        self.max_wait_time = max_wait_time  # 50ms
 
         # 性能监控
         self.batch_monitor = BatchPerformanceMonitor()
