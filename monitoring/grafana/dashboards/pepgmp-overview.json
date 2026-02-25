@@ -1,0 +1,25 @@
+{
+  "dashboard": {
+    "title": "PEPGMP 系统概览",
+    "description": "PEPGMP人体行为检测系统监控仪表板",
+    "tags": ["pepgmp", "monitoring", "detection"],
+    "style": "dark",
+    "timezone": "browser",
+    "panels": [],
+    "templating": {
+      "list": []
+    },
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "refresh": "10s",
+    "schemaVersion": 36,
+    "version": 0,
+    "uid": "pepgmp-overview"
+  },
+  "folderTitle": "PEPGMP",
+  "message": "PEPGMP监控仪表板",
+  "overwrite": true
+}

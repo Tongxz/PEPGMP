@@ -1,0 +1,12 @@
+# Grafana仪表板配置
+apiVersion: 1
+
+providers:
+  - name: 'PEPGMP Dashboards'
+    orgId: 1
+    folder: 'PEPGMP'
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
